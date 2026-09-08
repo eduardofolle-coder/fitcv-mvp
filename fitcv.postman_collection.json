@@ -1,0 +1,570 @@
+{
+  "info": {
+    "name": "FITCV MVP v0.2",
+    "description": "Complete API testing collection for FITCV job automation platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('token', jsonData.accessToken);",
+                  "    pm.environment.set('userId', jsonData.user.id);",
+                  "    console.log('✅ Token saved for subsequent requests');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"TestPass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('token', jsonData.accessToken);",
+                  "    console.log('✅ Login successful');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"TestPass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "refresh"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "CV Operations",
+      "item": [
+        {
+          "name": "Upload CV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cvContent\": \"Juan Pérez\\n8 years experience as Data Analyst\\n\\nEducation:\\n- BS Computer Science, Universidad de Chile\\n- Data Science Certification, Coursera\\n\\nSkills:\\n- Python (expert)\\n- SQL (expert)\\n- AWS (intermediate)\\n- Tableau (intermediate)\\n- ETL pipelines\\n- Statistics\\n- Machine Learning basics\\n\\nExperience:\\n- Senior Data Analyst at Amazon (2020-2025)\\n  * Led analytics team\\n  * Built ETL pipelines\\n  * Developed dashboards\\n  * Mentored junior analysts\\n\\n- Data Analyst at Google (2018-2020)\\n  * Analyzed user behavior\\n  * Created reports\\n  * Optimized queries\\n\\n- Junior Data Analyst at Microsoft (2017-2018)\\n  * First role in analytics\\n  * Built dashboards\\n  * Learned SQL\",\n  \"fullName\": \"Juan Pérez\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cv/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cv", "upload"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/cv/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cv", "profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Suggest Roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.length > 0) {",
+                  "        pm.environment.set('roleId', jsonData.data[0].id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cv/suggest-roles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cv", "suggest-roles"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/cv/roles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cv", "roles"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Select Roles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\"{{roleId}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cv/select-roles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cv", "select-roles"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Job Offers",
+      "item": [
+        {
+          "name": "List Offers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.length > 0) {",
+                  "        pm.environment.set('offerId', jsonData.data[0].id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/offers?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "offers"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Filter by Level (L4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/offers?level=L4",
+              "host": ["{{base_url}}"],
+              "path": ["api", "offers"],
+              "query": [
+                {
+                  "key": "level",
+                  "value": "L4"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Offer Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/offers/{{offerId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "offers", "{{offerId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/offers/stats/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "offers", "stats", "summary"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Postulations",
+      "item": [
+        {
+          "name": "Create Postulation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('postulationId', jsonData.data.postulationId);",
+                  "    console.log('✅ Postulation created');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"offerId\": \"{{offerId}}\",\n  \"estado\": \"Por revisar\",\n  \"prioridad\": \"Alta\",\n  \"notes\": \"Great fit for my experience\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/postulations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "postulations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Postulations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/postulations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "postulations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Postulation Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/postulations/{{postulationId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "postulations", "{{postulationId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Adapted CV",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    console.log('✅ CV Generated - ATS Score: ' + jsonData.data.atsScore);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/postulations/{{postulationId}}/generate-cv",
+              "host": ["{{base_url}}"],
+              "path": ["api", "postulations", "{{postulationId}}", "generate-cv"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Download CV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/postulations/{{postulationId}}/cv",
+              "host": ["{{base_url}}"],
+              "path": ["api", "postulations", "{{postulationId}}", "cv"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Postulation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"Aplicado\",\n  \"prioridad\": \"Media\",\n  \"notes\": \"Application submitted\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/postulations/{{postulationId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "postulations", "{{postulationId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Postulation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/postulations/{{postulationId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "postulations", "{{postulationId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "offerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "postulationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "roleId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
