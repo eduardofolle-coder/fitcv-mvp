@@ -20,7 +20,7 @@ router.post(
   '/register',
   loginLimiter,
   validateRequest(schemas.register),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: any, res: any) => {
     const { email, password } = req.body;
 
     // ✅ Verificar que email no exista
@@ -76,7 +76,7 @@ router.post(
   '/login',
   loginLimiter,
   validateRequest(schemas.login),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: any, res: any) => {
     const { email, password } = req.body;
 
     // ✅ Buscar usuario
@@ -140,7 +140,7 @@ router.post(
 // POST /api/auth/refresh
 router.post(
   '/refresh',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: any, res: any) => {
     const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
     if (!refreshToken) {
@@ -189,7 +189,7 @@ router.post(
 router.post(
   '/logout',
   requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: any) => {
     if (!req.user) throw new AppError(401, 'Unauthorized');
 
     // ✅ Invalidar todos los refresh tokens

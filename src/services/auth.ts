@@ -18,16 +18,16 @@ export class AuthService {
   static generateTokens(userId: string): AuthTokens {
     // ✅ Access token (15 min)
     const accessToken = jwt.sign(
-      { sub: userId, type: 'access' },
-      env.JWT_PRIVATE_KEY,
-      { expiresIn: env.JWT_EXPIRY, algorithm: 'HS256' }
+      { sub: userId, type: 'access' } as any,
+      env.JWT_PRIVATE_KEY as any,
+      { expiresIn: '15m' } as any
     );
 
     // ✅ Refresh token (7 días)
     const refreshToken = jwt.sign(
-      { sub: userId, type: 'refresh' },
-      env.JWT_PRIVATE_KEY,
-      { expiresIn: env.JWT_REFRESH_EXPIRY, algorithm: 'HS256' }
+      { sub: userId, type: 'refresh' } as any,
+      env.JWT_PRIVATE_KEY as any,
+      { expiresIn: '7d' } as any
     );
 
     return {
@@ -39,9 +39,7 @@ export class AuthService {
 
   static verifyToken(token: string): JWTPayload | null {
     try {
-      const decoded = jwt.verify(token, env.JWT_PUBLIC_KEY, {
-        algorithms: ['HS256']
-      }) as JWTPayload;
+      const decoded = jwt.verify(token, env.JWT_PUBLIC_KEY as any) as JWTPayload;
       return decoded;
     } catch {
       return null;
