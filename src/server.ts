@@ -5,12 +5,17 @@ import cookieParser from 'cookie-parser';
 import { env } from './env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
+import cvRoutes from './routes/cv.js';
+import postulationsRoutes from './routes/postulations.js';
+import offersRoutes from './routes/offers.js';
 import { initializeSchema } from './db/schema.js';
+import { seedMockOffers } from './db/mockOffers.js';
 
 const app = express();
 
 // ✅ Initialize database
 initializeSchema();
+seedMockOffers();
 
 // ✅ Security headers
 app.use(helmet());
@@ -36,6 +41,9 @@ app.get('/health', (req, res) => {
 
 // ✅ Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/cv', cvRoutes);
+app.use('/api/postulations', postulationsRoutes);
+app.use('/api/offers', offersRoutes);
 
 // ✅ 404 handler
 app.use((req, res) => {
