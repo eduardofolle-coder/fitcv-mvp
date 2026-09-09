@@ -89,15 +89,19 @@ class InMemoryDB {
       this.tables[tableName] = [];
     }
 
-    const columnsMatch = sql.match(/\((.*?)\)\s*VALUES/i);
+    const columnsMatch = sql.match(/\(([\s\S]*?)\)\s*VALUES/i);
     const columns = columnsMatch ? columnsMatch[1].split(',').map(c => c.trim()) : [];
+
+    console.log(`[DB] INSERT into ${tableName}: columns=${columns.join(', ')}, params=${params.length}`);
 
     const row: DbRow = {};
     columns.forEach((col, i) => {
       row[col] = params[i];
+      console.log(`[DB] Set ${col} = ${params[i]}`);
     });
 
     this.tables[tableName].push(row);
+    console.log(`[DB] Inserted row, total rows in ${tableName}: ${this.tables[tableName].length}`);
     return [];
   }
 
@@ -109,28 +113,72 @@ class InMemoryDB {
     const tableName = tableMatch[1].toLowerCase();
     let rows = [...(this.tables[tableName] || [])];
 
+    console.log(`[DB] SELECT from ${tableName}: found ${rows.length} rows`);
+
+    // ✅ Handle COUNT(*) aggregation
+    if (query.includes('count(*)')) {
+      console.log(`[DB] COUNT(*) aggregation`);
+
+      // Apply WHERE filters first
+      if (query.includes('where')) {
+        const whereIndex = query.indexOf('where');
+        const whereClause = sql.substring(whereIndex + 5).split(/GROUP|LIMIT|OFFSET|ORDER/i)[0];
+        const condMatches = whereClause.matchAll(/(\w+)\s*=\s*\?/gi);
+        let paramIdx = 0;
+
+        for (const match of condMatches) {
+          const col = match[1];
+          const value = params[paramIdx++];
+          rows = rows.filter(row => row[col] === value);
+        }
+      }
+
+      return [{ count: rows.length }];
+    }
+
     // ✅ Simple WHERE clause parsing
     if (query.includes('where')) {
       const whereIndex = query.indexOf('where');
-      const whereClause = sql.substring(whereIndex + 5);
+      const whereClause = sql.substring(whereIndex + 5).split(/GROUP|LIMIT|OFFSET|ORDER/i)[0];
 
-      // Parse simple WHERE conditions
-      if (whereClause.includes('=')) {
+      // Parse WHERE conditions with simple regex
+      const condMatches = whereClause.matchAll(/(\w+)\s*=\s*\?/gi);
+      let paramIdx = 0;
+
+      for (const match of condMatches) {
+        const col = match[1];
+        const value = params[paramIdx++];
+
+        console.log(`[DB] WHERE ${col} = ${value}`);
+
         rows = rows.filter(row => {
-          // Simple equality check for first condition
-          const conditions = whereClause.split('and').map(c => c.trim());
-          return conditions.every(condition => {
-            const parts = condition.split('=').map(p => p.trim());
-            if (parts.length !== 2) return true;
-
-            const [col, placeholder] = parts;
-            const paramIndex = [...sql.matchAll(/\?/g)].findIndex(m => m.index! > whereIndex);
-            if (paramIndex < 0) return true;
-
-            const value = params[paramIndex];
-            return row[col] === value;
-          });
+          const rowValue = row[col];
+          const match = rowValue === value;
+          console.log(`[DB] Row ${col}=${rowValue}, match=${match}`);
+          return match;
         });
+      }
+    }
+
+    console.log(`[DB] After filtering: ${rows.length} rows`);
+
+    // ✅ Handle GROUP BY
+    if (query.includes('group by')) {
+      const groupMatch = sql.match(/GROUP BY (\w+)/i);
+      if (groupMatch) {
+        const groupCol = groupMatch[1].toLowerCase();
+        const grouped: { [key: string]: DbRow[] } = {};
+
+        rows.forEach(row => {
+          const key = String(row[groupCol]);
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(row);
+        });
+
+        rows = Object.entries(grouped).map(([key, group]) => ({
+          [groupCol]: key,
+          count: group.length
+        }));
       }
     }
 

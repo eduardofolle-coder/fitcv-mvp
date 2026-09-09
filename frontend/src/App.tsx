@@ -1,41 +1,46 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuth } from './hooks/useAuth'
-import Layout from './components/Layout'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import DashboardPage from './pages/DashboardPage'
-import UploadCVPage from './pages/UploadCVPage'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useAuthStore } from './store/authStore'
+import { useEffect } from 'react'
+import { LoginPage, RegisterPage, UploadCVPage, DashboardPage } from './pages'
+import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
-  const { token, loading } = useAuth()
+  const loadFromStorage = useAuthStore(s => s.loadFromStorage)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando...</p>
-        </div>
-      </div>
-    )
-  }
+  useEffect(() => {
+    loadFromStorage()
+  }, [loadFromStorage])
 
   return (
-    <Routes>
-      {!token ? (
-        <>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="*" element={<Navigate to="/login" />} />
-        </>
-      ) : (
-        <Route element={<Layout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/upload-cv" element={<UploadCVPage />} />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Route>
-      )}
-    </Routes>
+    <BrowserRouter>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+
+        {/* Protected Routes */}
+        <Route
+          path="/upload-cv"
+          element={
+            <ProtectedRoute>
+              <UploadCVPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
