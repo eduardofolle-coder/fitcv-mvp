@@ -1,0 +1,11 @@
+{
+  "environments": {
+    "production": {
+      "services": {
+        "fitcv-mvp": {
+          "region": "us-east-1"
+        }
+      }
+    }
+  }
+}
