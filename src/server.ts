@@ -13,6 +13,7 @@ import { seedMockOffers } from './db/mockOffers.js';
 
 const app = express();
 
+// ✅ Database initialization on deployment
 // ✅ Initialize database
 initializeSchema();
 seedMockOffers();
