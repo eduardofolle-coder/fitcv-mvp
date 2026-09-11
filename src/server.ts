@@ -18,10 +18,7 @@ const app = express();
 initializeSchema();
 seedMockOffers();
 
-// ✅ Security headers
-app.use(helmet());
-
-// ✅ CORS configuration
+// ✅ CORS configuration (must be before helmet)
 app.use(cors({
   origin: env.ALLOWED_ORIGINS,
   credentials: true,
@@ -29,6 +26,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   maxAge: 86400
 }));
+
+// ✅ Security headers
+app.use(helmet());
 
 // ✅ Body parsing
 app.use(express.json({limit: '10mb'}));
