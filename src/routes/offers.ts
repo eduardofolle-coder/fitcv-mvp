@@ -23,6 +23,7 @@ router.get(
     } = req.query;
 
     // ✅ MVP: Use seed data directly (bypass DB for reliability)
+    // Seed offers count: 5 (Amazon, Cornershop, Despegar, NotCo, Banco Estado)
     let offers = [...SEED_OFFERS];
 
     // ✅ Apply filters
