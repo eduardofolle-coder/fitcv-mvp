@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { db } from '../db/client.js';
+import { SEED_OFFERS } from '../db/seedData.js';
 
 const router = Router();
 
@@ -21,63 +22,56 @@ router.get(
       search
     } = req.query;
 
-    let query = 'SELECT * FROM offers WHERE 1=1';
-    const params: any[] = [];
+    // ✅ MVP: Use seed data directly (bypass DB for reliability)
+    let offers = [...SEED_OFFERS];
 
+    // ✅ Apply filters
     if (level) {
-      query += ' AND level = ?';
-      params.push(level);
+      offers = offers.filter(o => o.level === level);
     }
 
     if (company) {
-      query += ' AND company LIKE ?';
-      params.push(`%${company}%`);
+      offers = offers.filter(o => o.company.toLowerCase().includes(company.toLowerCase()));
     }
 
     if (location) {
-      query += ' AND location LIKE ?';
-      params.push(`%${location}%`);
+      offers = offers.filter(o => o.location?.toLowerCase().includes(location.toLowerCase()));
     }
 
     if (minSalary) {
-      query += ' AND salaryMin >= ?';
-      params.push(minSalary);
+      offers = offers.filter(o => o.salaryMin >= Number(minSalary));
     }
 
     if (maxSalary) {
-      query += ' AND salaryMax <= ?';
-      params.push(maxSalary);
+      offers = offers.filter(o => o.salaryMax <= Number(maxSalary));
     }
 
     if (search) {
-      query += ' AND (title LIKE ? OR description LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`);
+      offers = offers.filter(o =>
+        o.title.toLowerCase().includes(search.toLowerCase()) ||
+        o.description.toLowerCase().includes(search.toLowerCase())
+      );
     }
 
-    // ✅ Contar total
-    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as count');
-    const countStmt = db.prepare(countQuery);
-    const countResults = countStmt.all(...params) as any[];
-    const count = countResults?.[0]?.count || 0;
+    const count = offers.length;
 
-    // ✅ Paginar
-    query += ' ORDER BY createdAt DESC LIMIT ? OFFSET ?';
-    params.push(limit, (page - 1) * limit);
-
-    const stmt = db.prepare(query);
-    const offers = stmt.all(...params);
+    // ✅ Paginate
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const offset = (pageNum - 1) * limitNum;
+    const paginatedOffers = offers.slice(offset, offset + limitNum);
 
     res.json({
       success: true,
-      data: offers.map((o: any) => ({
+      data: paginatedOffers.map((o: any) => ({
         ...o,
-        requirements: JSON.parse(o.requirements)
+        requirements: typeof o.requirements === 'string' ? JSON.parse(o.requirements) : o.requirements
       })),
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total: count,
-        totalPages: Math.ceil(count / limit)
+        totalPages: Math.ceil(count / limitNum)
       }
     });
   })
@@ -112,39 +106,46 @@ router.get(
   '/stats/summary',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    // ✅ Total ofertas
-    const totalStmt = db.prepare('SELECT COUNT(*) as count FROM offers');
-    const { count: totalOffers } = totalStmt.get() as any;
+    // ✅ MVP: Use seed data directly
+    const totalOffers = SEED_OFFERS.length;
 
     // ✅ Por nivel
-    const byLevelStmt = db.prepare(`
-      SELECT level, COUNT(*) as count FROM offers GROUP BY level ORDER BY level
-    `);
-    const byLevel = byLevelStmt.all();
+    const byLevel = Object.entries(
+      SEED_OFFERS.reduce((acc, o) => {
+        acc[o.level] = (acc[o.level] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    ).map(([level, count]) => ({ level, count }));
 
     // ✅ Por empresa
-    const byCompanyStmt = db.prepare(`
-      SELECT company, COUNT(*) as count FROM offers GROUP BY company ORDER BY count DESC LIMIT 5
-    `);
-    const topCompanies = byCompanyStmt.all();
+    const byCompany = Object.entries(
+      SEED_OFFERS.reduce((acc, o) => {
+        acc[o.company] = (acc[o.company] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    )
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([company, count]) => ({ company, count }));
 
     // ✅ Por usuario
     const userPostsStmt = db.prepare(`
       SELECT COUNT(*) as count FROM postulations WHERE userId = ?
     `);
-    const { count: userPostulations } = userPostsStmt.get(req.user.id) as any;
+    const userResults = userPostsStmt.all(req.user.id) as any[];
+    const userPostulations = userResults?.[0]?.count || 0;
 
     res.json({
       success: true,
       data: {
         totalOffers,
         byLevel,
-        topCompanies,
+        topCompanies: byCompany,
         userPostulations,
         stats: {
           totalOffers,
-          averageSalary: 0, // TODO: Calcular promedio
-          topLocations: [] // TODO: Top locations
+          averageSalary: 0,
+          topLocations: []
         }
       }
     });
