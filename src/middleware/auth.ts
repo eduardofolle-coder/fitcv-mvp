@@ -11,10 +11,18 @@ export interface AuthenticatedRequest extends Request {
 
 // ✅ Middleware de autenticación
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  let token: string | undefined;
+
+  // Check multiple token sources
   const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  }
 
   if (!token) {
+    console.error('❌ No token found in request');
+    console.error('  Headers:', Object.keys(req.headers));
+    console.error('  Authorization header:', authHeader);
     AuditLogger.logSecurityEvent({
       eventType: 'UNAUTHORIZED_ACCESS',
       ipAddress: req.ip,
