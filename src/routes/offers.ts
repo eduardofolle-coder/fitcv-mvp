@@ -57,8 +57,8 @@ router.get(
     // ✅ Contar total
     const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as count');
     const countStmt = db.prepare(countQuery);
-    const countResult = countStmt.get(...params) as any;
-    const count = countResult?.count || 0;
+    const countResults = countStmt.all(...params) as any[];
+    const count = countResults?.[0]?.count || 0;
 
     // ✅ Paginar
     query += ' ORDER BY createdAt DESC LIMIT ? OFFSET ?';
