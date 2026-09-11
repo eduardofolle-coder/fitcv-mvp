@@ -18,16 +18,16 @@ export class AuthService {
   static generateTokens(userId: string): AuthTokens {
     // ✅ Access token (15 min)
     const accessToken = jwt.sign(
-      { sub: userId, type: 'access' } as any,
-      env.JWT_PRIVATE_KEY as any,
-      { expiresIn: '15m' } as any
+      { sub: userId, type: 'access' },
+      env.JWT_PRIVATE_KEY,
+      { expiresIn: '15m', algorithm: 'HS256' }
     );
 
     // ✅ Refresh token (7 días)
     const refreshToken = jwt.sign(
-      { sub: userId, type: 'refresh' } as any,
-      env.JWT_PRIVATE_KEY as any,
-      { expiresIn: '7d' } as any
+      { sub: userId, type: 'refresh' },
+      env.JWT_PRIVATE_KEY,
+      { expiresIn: '7d', algorithm: 'HS256' }
     );
 
     return {
@@ -39,9 +39,10 @@ export class AuthService {
 
   static verifyToken(token: string): JWTPayload | null {
     try {
-      const decoded = jwt.verify(token, env.JWT_PUBLIC_KEY as any) as JWTPayload;
+      const decoded = jwt.verify(token, env.JWT_PRIVATE_KEY, { algorithms: ['HS256'] }) as JWTPayload;
       return decoded;
-    } catch {
+    } catch (error) {
+      console.error('Token verification failed:', error);
       return null;
     }
   }
