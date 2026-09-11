@@ -9,7 +9,7 @@ import cvRoutes from './routes/cv.js';
 import postulationsRoutes from './routes/postulations.js';
 import offersRoutes from './routes/offers.js';
 import { initializeSchema } from './db/schema.js';
-import { seedMockOffers } from './db/mockOffers.js';
+import { initializeSeedData } from './db/seedData.js';
 
 const app = express();
 
@@ -18,7 +18,7 @@ const app = express();
   try {
     await import('./db/client.js').then(m => m.db.init());
     initializeSchema();
-    seedMockOffers();
+    await initializeSeedData();
     console.log('✅ Database ready');
   } catch (err) {
     console.error('❌ Failed to initialize database:', err);
