@@ -13,10 +13,17 @@ import { seedMockOffers } from './db/mockOffers.js';
 
 const app = express();
 
-// ✅ Database initialization on deployment
-// ✅ Initialize database
-initializeSchema();
-seedMockOffers();
+// ✅ Database initialization on deployment (async)
+(async () => {
+  try {
+    await import('./db/client.js').then(m => m.db.init());
+    initializeSchema();
+    seedMockOffers();
+    console.log('✅ Database ready');
+  } catch (err) {
+    console.error('❌ Failed to initialize database:', err);
+  }
+})();
 
 // ✅ CORS configuration (must be before helmet)
 app.use(cors({
