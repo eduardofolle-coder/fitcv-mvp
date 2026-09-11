@@ -44,7 +44,12 @@ app.use(cookieParser());
 
 // ✅ Health check
 app.get('/health', (req, res) => {
-  res.json({status: 'ok', timestamp: new Date()});
+  res.json({
+    status: 'ok',
+    timestamp: new Date(),
+    version: '0.2.1',
+    offersCount: SEED_OFFERS.length
+  });
 });
 
 // ✅ Routes
