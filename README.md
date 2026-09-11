@@ -75,3 +75,4 @@ npm run lint
 ---
 
 **Created by Eduardo Folle | 2026**
+# Database reset marker
