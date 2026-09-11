@@ -9,7 +9,7 @@ import cvRoutes from './routes/cv.js';
 import postulationsRoutes from './routes/postulations.js';
 import offersRoutes from './routes/offers.js';
 import { initializeSchema } from './db/schema.js';
-import { initializeSeedData } from './db/seedData.js';
+import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
 const app = express();
 
@@ -66,6 +66,7 @@ const PORT = env.PORT;
 app.listen(PORT, () => {
   console.log(`🚀 FITCV API running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
 });
 
 export default app;
