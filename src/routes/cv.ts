@@ -83,7 +83,7 @@ router.get(
       LIMIT 1
     `);
 
-    const profile = stmt.get(req.user.id);
+    const profile = stmt.get(req.user.id) as any;
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
@@ -109,7 +109,7 @@ router.post(
       SELECT * FROM candidate_profiles WHERE userId = ? LIMIT 1
     `);
 
-    const profile = stmt.get(req.user.id);
+    const profile = stmt.get(req.user.id) as any;
 
     if (!profile) {
       throw new AppError(404, 'Profile not found');

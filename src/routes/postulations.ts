@@ -19,7 +19,7 @@ router.post(
 
     // ✅ Verificar que la oferta existe
     const offerStmt = db.prepare('SELECT * FROM offers WHERE id = ? LIMIT 1');
-    const offer = offerStmt.get(offerId);
+    const offer = offerStmt.get(offerId) as any;
 
     if (!offer) {
       throw new AppError(404, 'Job offer not found');
@@ -127,7 +127,7 @@ router.get(
       WHERE p.id = ? AND p.userId = ?
     `);
 
-    const postulation = stmt.get(id, req.user.id);
+    const postulation = stmt.get(id, req.user.id) as any;
 
     if (!postulation) {
       throw new AppError(404, 'Postulation not found');
@@ -211,7 +211,7 @@ router.post(
       JOIN offers o ON p.offerId = o.id
       WHERE p.id = ? AND p.userId = ?
     `);
-    const postulation = postStmt.get(id, req.user.id);
+    const postulation = postStmt.get(id, req.user.id) as any;
 
     if (!postulation) {
       throw new AppError(404, 'Postulation not found');
