@@ -42,6 +42,23 @@ app.use(express.json({limit: '10mb'}));
 app.use(express.urlencoded({limit: '10mb', extended: true}));
 app.use(cookieParser());
 
+// ✅ Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    name: 'FITCV MVP',
+    version: '0.2.1',
+    status: 'running',
+    description: 'Intelligent CV Posting Assistant',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      cv: '/api/cv',
+      offers: '/api/offers',
+      postulations: '/api/postulations'
+    }
+  });
+});
+
 // ✅ Health check
 app.get('/health', (req, res) => {
   res.json({
