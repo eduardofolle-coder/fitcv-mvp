@@ -58,7 +58,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
 }
 
 // ✅ Middleware de autorización (role-based)
-export function requireRole(...roles: string[]) {
+export function requireRole(..._roles: string[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({error: 'Unauthorized'});

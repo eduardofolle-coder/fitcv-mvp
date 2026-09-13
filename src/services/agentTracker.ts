@@ -180,7 +180,7 @@ export class AgentTrackerService {
   /**
    * Get recent invocations
    */
-  static getRecentInvocations(userId: string, limit: number = 20): AgentInvocationRecord[] {
+  static getRecentInvocations(userId: string, limit = 20): AgentInvocationRecord[] {
     try {
       const stmt = db.prepare(`
         SELECT *

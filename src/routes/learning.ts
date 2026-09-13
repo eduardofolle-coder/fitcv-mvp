@@ -279,7 +279,6 @@ router.get(
       const allSkills = new Set<string>();
       const recentSkills = new Set<string>();
       const strengthenedSkills = new Set<string>();
-      const obsoleteSkills = new Set<string>();
 
       rows.forEach((row, idx) => {
         try {

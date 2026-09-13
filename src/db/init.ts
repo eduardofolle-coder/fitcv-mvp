@@ -1,5 +1,4 @@
 import { initializeSchema } from './schema.js';
-import { db } from './client.js';
 
 async function main() {
   try {
@@ -13,4 +12,4 @@ async function main() {
   }
 }
 
-main();
+void main();

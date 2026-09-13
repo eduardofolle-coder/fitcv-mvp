@@ -39,7 +39,7 @@ export const schemas = {
       .pattern(/[A-Z]/)
       .pattern(/[a-z]/)
       .pattern(/[0-9]/)
-      .pattern(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/)
+      .pattern(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/)
       .required()
       .messages({
         'string.min': 'Password must be at least 12 characters',

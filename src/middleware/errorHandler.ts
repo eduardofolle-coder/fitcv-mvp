@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../services/logger.js';
 import { env } from '../env.js';
 import { v4 as uuidv4 } from 'uuid';
+import { captureException, setUserContext } from '../services/errorTracking.js';
 
 export class AppError extends Error {
   constructor(
@@ -17,7 +18,7 @@ export function errorHandler(
   err: Error | AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) {
   const errorId = uuidv4();
 
@@ -32,6 +33,18 @@ export function errorHandler(
   });
 
   const statusCode = err instanceof AppError ? err.statusCode : 500;
+
+  // Solo los 5xx son fallos nuestros. Reportar los 4xx llenaría Sentry de
+  // ruido: contraseñas mal escritas, emails repetidos, validaciones.
+  if (statusCode >= 500) {
+    setUserContext((req as any).user?.id);
+    captureException(err, {
+      errorId,
+      url: req.url,
+      method: req.method,
+      statusCode,
+    });
+  }
 
   // ✅ En desarrollo, mostrar error completo
   if (env.NODE_ENV === 'development') {
@@ -58,7 +71,13 @@ export function errorHandler(
 }
 
 // ✅ Async error wrapper
-export function asyncHandler(fn: Function) {
+type AsyncRouteHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => unknown | Promise<unknown>;
+
+export function asyncHandler(fn: AsyncRouteHandler) {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };

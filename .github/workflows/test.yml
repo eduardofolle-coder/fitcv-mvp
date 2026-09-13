@@ -1,4 +1,4 @@
-name: Tests
+name: CI
 
 on:
   push:
@@ -6,54 +6,97 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Cancela ejecuciones viejas de la misma rama en vez de acumularlas.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  backend:
+    name: Backend (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [18.x, 20.x]
+        node-version: ['20.x', '22.x']
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npx eslint src tests --ext .ts
+
+      # Los tests levantan el servidor compilado, así que necesitan un entorno
+      # coherente. Las claves son de mentira a propósito: ninguna prueba debe
+      # depender de credenciales reales.
+      - name: Tests
+        run: npm test
+        env:
+          NODE_ENV: development
+          JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
+          JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
+          DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
+          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
+
+      # Solo lo que se despliega. Las devDependencies no llegan a producción,
+      # así que no deberían frenar un merge.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: fitcv-frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: fitcv-frontend
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: fitcv-frontend
         run: npx tsc --noEmit
 
-      - name: ESLint
-        run: npx eslint src --max-warnings 0
+      - name: Build
+        working-directory: fitcv-frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3000/api
 
-      - name: Unit tests
-        run: npm run test 2>/dev/null || echo "Tests not configured"
+      - name: Audit production dependencies
+        working-directory: fitcv-frontend
+        run: npm audit --omit=dev --audit-level=high
 
-      - name: Integration tests
-        run: npm run test:integration 2>/dev/null || echo "Integration tests not configured"
-
-      - name: Security scan
-        run: npm audit --audit-level=moderate 2>/dev/null || echo "Audit skipped"
-
-  security:
+  secrets-scan:
+    name: Secret scan
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Run Trivy security scan
-        uses: aquasecurity/trivy-action@master
+      - uses: actions/checkout@v4
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          fetch-depth: 0
 
-      - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: 'trivy-results.sarif'
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

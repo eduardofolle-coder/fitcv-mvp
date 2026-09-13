@@ -30,6 +30,7 @@
   "author": "Eduardo Folle",
   "license": "MIT",
   "dependencies": {
+    "@sentry/node": "^10.74.0",
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
@@ -39,10 +40,8 @@
     "express": "^4.18.2",
     "express-rate-limit": "^6.7.0",
     "helmet": "^7.0.0",
-    "isomorphic-dompurify": "^1.12.0",
     "joi": "^17.9.2",
     "jsonwebtoken": "^9.0.0",
-    "pdfjs-dist": "^3.11.174",
     "sql.js": "^1.8.0",
     "sqlite": "^5.1.1",
     "uuid": "^9.0.0",

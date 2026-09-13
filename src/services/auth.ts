@@ -111,7 +111,7 @@ export class AuthService {
   static async validateRefreshToken(
     userId: string,
     token: string,
-    ipAddress: string
+    _ipAddress: string
   ): Promise<boolean> {
     const stmt = db.prepare(`
       SELECT tokenHash FROM refresh_tokens

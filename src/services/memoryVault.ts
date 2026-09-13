@@ -13,17 +13,6 @@ import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './logger.js';
 
-interface MemoryRecord {
-  id: string;
-  type: string;
-  userId: string;
-  title: string;
-  content: Record<string, any>;
-  createdAt: Date;
-  updatedAt: Date;
-  tags: string[];
-}
-
 interface SuccessfulCVPattern {
   id: string;
   jobTitle: string;
@@ -36,16 +25,6 @@ interface SuccessfulCVPattern {
   outcome: 'interview' | 'offer' | 'rejection';
   timeToOutcome: string;
   notes: string;
-}
-
-interface UserSkillGrowth {
-  skill: string;
-  timeline: Array<{
-    date: string;
-    proficiency: string;
-    evidence: string;
-  }>;
-  recommendations: string;
 }
 
 interface PersonalHeuristic {
@@ -307,7 +286,6 @@ ${data.topCompanies
       return [];
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
     // Parse markdown to extract patterns
     // For now, return empty (would need markdown parser)
     logger.info('Retrieved successful patterns', { userId });
@@ -324,7 +302,6 @@ ${data.topCompanies
       return [];
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
     // Parse markdown to extract heuristics
     // For now, return empty
     logger.info('Retrieved personal heuristics', { userId });
@@ -341,7 +318,6 @@ ${data.topCompanies
       return null;
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
     // Parse markdown to find company section
     // For now, return null
     logger.info('Retrieved company insight', { userId, company });
@@ -366,7 +342,7 @@ ${data.topCompanies
   /**
    * Export memory for user (e.g., for backup or sharing)
    */
-  static exportMemory(userId: string): string {
+  static exportMemory(_userId: string): string {
     const files = fs.readdirSync(this.memoryDir, { recursive: true });
     const export_data: Record<string, string> = {};
 
@@ -411,7 +387,7 @@ ${data.topCompanies
   static getMemoryContextForAgent(
     userId: string,
     agentType: string,
-    context: Record<string, any>
+    _context: Record<string, any>
   ): string {
     const heuristics = this.getPersonalHeuristics(userId);
     const patterns = this.getSuccessfulPatterns(userId);

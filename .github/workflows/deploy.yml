@@ -1,46 +1,74 @@
-name: Deploy
+name: Build artifact
 
 on:
   push:
     branches: [main]
 
 jobs:
-  deploy:
+  build:
+    name: Build backend artifact
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-          cache: 'npm'
+          node-version: '22.x'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      # Se repiten las verificaciones en vez de confiar en que CI ya pasó: este
+      # workflow produce el artefacto que se despliega, y no debe existir un
+      # camino que publique código sin verificar.
       - name: TypeScript check
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
-      - name: ESLint
-        run: npx eslint src --max-warnings 0
+      - name: Lint
+        run: npx eslint src tests --ext .ts
 
-      - name: Security audit
-        run: npm audit --audit-level=moderate
+      - name: Tests
+        run: npm test
+        env:
+          NODE_ENV: development
+          JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
+          JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
+          DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
+          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
 
       - name: Build
-        run: npm run build 2>/dev/null || echo "No build step"
+        run: npm run build
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: build
-          path: dist/
-
-      - name: Notify deployment
+      - name: Verify the built server boots
         run: |
-          echo "✅ FITCV Backend ready for deployment"
-          echo "Commit: ${{ github.sha }}"
-          echo "Author: ${{ github.actor }}"
+          node dist/server.js &
+          SERVER_PID=$!
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "✅ Built artifact boots and serves /health"
+              kill $SERVER_PID
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "❌ Built artifact did not become healthy"
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
+        env:
+          NODE_ENV: development
+          PORT: 3000
+          SQLITE_FILE: ci-smoke.db
+          JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
+          JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
+          DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
+          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist-${{ github.sha }}
+          path: dist/
+          retention-days: 14

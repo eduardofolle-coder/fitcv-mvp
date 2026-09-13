@@ -8,7 +8,6 @@
 
 import express, { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { validateRequest } from '../middleware/validation.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';

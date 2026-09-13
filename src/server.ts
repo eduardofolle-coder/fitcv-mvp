@@ -5,6 +5,8 @@ import cookieParser from 'cookie-parser';
 import { env } from './env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './services/logger.js';
+import { initErrorTracking, captureException } from './services/errorTracking.js';
+import { db } from './db/client.js';
 import authRoutes from './routes/auth.js';
 import cvRoutes from './routes/cv.js';
 import cvAgentRoutes from './routes/cv-agent.js';
@@ -15,13 +17,15 @@ import learningRoutes from './routes/learning.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
+// Lo primero: si algo falla durante el arranque, queremos que quede reportado.
+initErrorTracking();
+
 const app = express();
 
 // ✅ Database initialization. El servidor NO acepta tráfico hasta que termina:
 // antes se llamaba sin await y app.listen() arrancaba en paralelo, de modo que
 // las primeras requests de un arranque en frío pegaban contra una BD inexistente.
 async function initializeDatabase() {
-  const { db } = await import('./db/client.js');
   await db.init();
   initializeSchema();
   await initializeSeedData();
@@ -95,18 +99,32 @@ app.use(errorHandler);
 const PORT = env.PORT;
 let server: import('http').Server | undefined;
 
-async function shutdown(code: number) {
+let shuttingDown = false;
+
+/**
+ * Síncrono y reentrante a propósito: si el cierre fuera async y su promesa
+ * fallara, dispararía unhandledRejection, que vuelve a llamar aquí. Una señal
+ * repetida o un error durante el cierre tampoco deben reiniciar el proceso.
+ */
+function shutdown(code: number): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   try {
-    const { db } = await import('./db/client.js');
     db.flush();
   } catch (err) {
     console.error('Failed to flush database on shutdown:', err);
   }
 
-  if (!server) process.exit(code);
+  if (!server) {
+    process.exit(code);
+    return;
+  }
 
   // Si las conexiones abiertas no drenan, no se puede quedar colgado para siempre.
-  const force = setTimeout(() => process.exit(code), 10_000).unref();
+  const force = setTimeout(() => process.exit(code), 10_000);
+  force.unref();
+
   server.close(() => {
     clearTimeout(force);
     process.exit(code);
@@ -118,6 +136,7 @@ async function shutdown(code: number) {
 process.on('uncaughtException', err => {
   console.error('💥 Uncaught exception:', err);
   logger.error('Uncaught exception', {message: err?.message, stack: err?.stack});
+  captureException(err, {source: 'uncaughtException'});
   shutdown(1);
 });
 
@@ -125,6 +144,7 @@ process.on('unhandledRejection', reason => {
   const err = reason instanceof Error ? reason : new Error(String(reason));
   console.error('💥 Unhandled rejection:', err);
   logger.error('Unhandled rejection', {message: err.message, stack: err.stack});
+  captureException(err, {source: 'unhandledRejection'});
   shutdown(1);
 });
 
