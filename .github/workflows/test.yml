@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # En todas las ramas: enterarse de que algo se rompió al abrir el PR es tarde,
+  # y una rama sin CI no se puede verificar antes de proponer el merge.
   push:
-    branches: [main, develop]
+    branches: ['**']
   pull_request:
     branches: [main, develop]
 
