@@ -109,14 +109,11 @@ router.get(
       .map(([company, count]) => ({ company, count }));
 
     // ✅ Por usuario
-    const userPostsStmt = db.prepare(`
-      SELECT COUNT(*) as count FROM postulations WHERE userId = ?
-    `);
-    userPostsStmt.bind([req.user.id]);
-    const hasUserResults = userPostsStmt.step();
-    const userCount = hasUserResults ? userPostsStmt.getAsObject() : { count: 0 };
-    userPostsStmt.free();
-    const userPostulations = userCount.count || 0;
+    const userCount = await db.queryOne<{ count: string }>(
+      'SELECT COUNT(*) as count FROM postulations WHERE userId = $1',
+      [req.user.id]
+    );
+    const userPostulations = Number(userCount?.count ?? 0);
 
     res.json({
       success: true,
@@ -141,13 +138,9 @@ router.get(
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
     // ✅ Obtener CV del usuario
-    const profileStmt = db.prepare(`
-      SELECT cvOriginalContent FROM candidate_profiles WHERE userId = ? LIMIT 1
-    `);
-    profileStmt.bind([req.user.id]);
-    const hasProfile = profileStmt.step();
-    const profile = hasProfile ? profileStmt.getAsObject() : null;
-    profileStmt.free();
+    const profile = await db.queryOne(`
+      SELECT cvOriginalContent FROM candidate_profiles WHERE userId = $1 LIMIT 1
+    `, [req.user.id]);
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
@@ -198,11 +191,7 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const { id } = req.params;
 
-    const stmt = db.prepare('SELECT * FROM offers WHERE id = ? LIMIT 1');
-    stmt.bind([id]);
-    const hasOffer = stmt.step();
-    const offer = hasOffer ? stmt.getAsObject() : null;
-    stmt.free();
+    const offer = await db.queryOne('SELECT * FROM offers WHERE id = $1 LIMIT 1', [id]);
 
     if (!offer) {
       throw new AppError(404, 'Job offer not found');

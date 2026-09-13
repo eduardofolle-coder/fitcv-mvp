@@ -37,9 +37,9 @@ router.post(
     const { email, password } = req.body;
 
     // ✅ Verificar que email no exista
-    const existingUser = AuthService.getUserByEmail(email);
+    const existingUser = await AuthService.getUserByEmail(email);
     if (existingUser) {
-      AuditLogger.logSecurityEvent({
+      await AuditLogger.logSecurityEvent({
         eventType: 'FAILED_LOGIN',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
@@ -61,7 +61,7 @@ router.post(
     );
 
     // ✅ Log
-    AuditLogger.logSecurityEvent({
+    await AuditLogger.logSecurityEvent({
       eventType: 'LOGIN',
       userId: user.id,
       ipAddress: req.ip,
@@ -97,9 +97,9 @@ router.post(
     const { email, password } = req.body;
 
     // ✅ Buscar usuario
-    const user = AuthService.getUserByEmail(email);
+    const user = await AuthService.getUserByEmail(email);
     if (!user) {
-      AuditLogger.logSecurityEvent({
+      await AuditLogger.logSecurityEvent({
         eventType: 'FAILED_LOGIN',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
@@ -111,7 +111,7 @@ router.post(
     // ✅ Verificar contraseña
     const isValid = await AuthService.verifyPassword(password, user.passwordHash);
     if (!isValid) {
-      AuditLogger.logSecurityEvent({
+      await AuditLogger.logSecurityEvent({
         eventType: 'FAILED_LOGIN',
         userId: user.id,
         ipAddress: req.ip,
@@ -131,7 +131,7 @@ router.post(
       req.get('User-Agent') || 'unknown'
     );
 
-    AuditLogger.logSecurityEvent({
+    await AuditLogger.logSecurityEvent({
       eventType: 'LOGIN',
       userId: user.id,
       ipAddress: req.ip,
@@ -214,9 +214,9 @@ router.post(
     if (!req.user) throw new AppError(401, 'Unauthorized');
 
     // ✅ Invalidar todos los refresh tokens
-    AuthService.invalidateRefreshTokens(req.user.id);
+    await AuthService.invalidateRefreshTokens(req.user.id);
 
-    AuditLogger.logSecurityEvent({
+    await AuditLogger.logSecurityEvent({
       eventType: 'LOGOUT',
       userId: req.user.id,
       ipAddress: req.ip,

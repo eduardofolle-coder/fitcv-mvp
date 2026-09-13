@@ -55,6 +55,49 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+  # La suite local corre sobre PGlite, que es Postgres real pero en proceso.
+  # Este job ejercita además el driver `pg` contra un servidor de verdad:
+  # pool de conexiones, TLS y parseo de tipos solo se prueban por acá.
+  postgres:
+    name: Backend against a real PostgreSQL server
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fitcv
+          POSTGRES_PASSWORD: fitcv
+          POSTGRES_DB: fitcv_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+        env:
+          NODE_ENV: development
+          DATABASE_URL: postgres://fitcv:fitcv@localhost:5432/fitcv_test
+          JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
+          JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
+          DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
+          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

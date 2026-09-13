@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { JobOffer } from '../types/index.js';
-import { db } from './client.js';
 
 // ✅ Mock data: 5 ofertas para MVP v0.2 (simulación)
 export const mockOffers: JobOffer[] = [
@@ -155,33 +154,4 @@ export const mockOffers: JobOffer[] = [
   }
 ];
 
-export function seedMockOffers() {
-  // db is imported at top of file
-
-  mockOffers.forEach(offer => {
-    const stmt = db.prepare(`
-      INSERT OR IGNORE INTO offers (
-        id, title, company, level, salaryMin, salaryMax, salaryCurrency,
-        location, description, requirements, source, url, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
-      offer.id,
-      offer.title,
-      offer.company,
-      offer.level,
-      offer.salary.min,
-      offer.salary.max,
-      offer.salary.currency,
-      offer.location,
-      offer.description,
-      JSON.stringify(offer.requirements),
-      offer.source,
-      offer.url,
-      offer.createdAt
-    );
-  });
-
-  console.log(`✅ Seeded ${mockOffers.length} mock offers`);
-}
+// El seeding real vive en seedData.ts; esta versión quedó sin uso y sin migrar.

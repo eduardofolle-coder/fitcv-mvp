@@ -26,23 +26,19 @@ export class AgentTrackerService {
   /**
    * Create a record before agent invocation
    */
-  static createInvocation(
+  static async createInvocation(
     agentName: string,
     userId: string,
     input: Record<string, any>
-  ): string {
+  ): Promise<string> {
     const id = uuidv4();
     const inputJson = JSON.stringify(input);
 
     try {
-      const stmt = db.prepare(`
+      await db.query(`
         INSERT INTO agent_invocations (id, agentName, userId, status, input, createdAt)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
-
-      stmt.bind([id, agentName, userId, 'pending', inputJson]);
-      stmt.step();
-      stmt.free();
+        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      `, [id, agentName, userId, 'pending', inputJson]);
 
       return id;
     } catch (error) {
@@ -54,22 +50,18 @@ export class AgentTrackerService {
   /**
    * Update record after successful invocation
    */
-  static recordSuccess(
+  static async recordSuccess(
     invocationId: string,
     invocation: AgentInvocation
-  ): void {
+  ): Promise<void> {
     try {
       const outputJson = JSON.stringify(invocation.output);
 
-      const stmt = db.prepare(`
+      await db.query(`
         UPDATE agent_invocations
-        SET status = ?, output = ?, durationMs = ?, costTokens = ?, completedAt = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `);
-
-      stmt.bind(['completed', outputJson, invocation.durationMs, invocation.costTokens, invocationId]);
-      stmt.step();
-      stmt.free();
+        SET status = $1, output = $2, durationMs = $3, costTokens = $4, completedAt = CURRENT_TIMESTAMP
+        WHERE id = $5
+      `, ['completed', outputJson, invocation.durationMs, invocation.costTokens, invocationId]);
     } catch (error) {
       console.error('Failed to record agent success:', error);
     }
@@ -78,21 +70,17 @@ export class AgentTrackerService {
   /**
    * Update record after failed invocation
    */
-  static recordFailure(
+  static async recordFailure(
     invocationId: string,
     error: string,
     durationMs?: number
-  ): void {
+  ): Promise<void> {
     try {
-      const stmt = db.prepare(`
+      await db.query(`
         UPDATE agent_invocations
-        SET status = ?, error = ?, durationMs = ?, completedAt = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `);
-
-      stmt.bind(['failed', error, durationMs || 0, invocationId]);
-      stmt.step();
-      stmt.free();
+        SET status = $1, error = $2, durationMs = $3, completedAt = CURRENT_TIMESTAMP
+        WHERE id = $4
+      `, ['failed', error, durationMs || 0, invocationId]);
     } catch (error) {
       console.error('Failed to record agent failure:', error);
     }
@@ -101,7 +89,7 @@ export class AgentTrackerService {
   /**
    * Get invocation statistics for user
    */
-  static getStatistics(userId: string): {
+  static async getStatistics(userId: string): Promise<{
     totalInvocations: number;
     succeededInvocations: number;
     failedInvocations: number;
@@ -109,9 +97,9 @@ export class AgentTrackerService {
     totalTokensCost: number;
     averageDurationMs: number;
     byAgent: Record<string, { count: number; succeeded: number; failed: number; tokens: number }>;
-  } {
+  }> {
     try {
-      const stmt = db.prepare(`
+      const totals = await db.queryOne<any>(`
         SELECT
           COUNT(*) as total,
           SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as succeeded,
@@ -120,16 +108,11 @@ export class AgentTrackerService {
           SUM(COALESCE(costTokens, 0)) as totalTokens,
           AVG(COALESCE(durationMs, 0)) as avgDuration
         FROM agent_invocations
-        WHERE userId = ?
-      `);
-
-      stmt.bind([userId]);
-      const hasSummary = stmt.step();
-      const summary = hasSummary ? stmt.getAsObject() : null;
-      stmt.free();
+        WHERE userId = $1
+      `, [userId]);
 
       // Get statistics by agent
-      const agentStmt = db.prepare(`
+      const byAgentRows = (await db.query<any>(`
         SELECT
           agentName,
           COUNT(*) as count,
@@ -137,14 +120,12 @@ export class AgentTrackerService {
           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
           SUM(COALESCE(costTokens, 0)) as tokens
         FROM agent_invocations
-        WHERE userId = ?
+        WHERE userId = $1
         GROUP BY agentName
-      `);
+      `, [userId])).rows;
 
-      agentStmt.bind([userId]);
       const byAgent: Record<string, any> = {};
-      while (agentStmt.step()) {
-        const row = agentStmt.getAsObject();
+      for (const row of byAgentRows) {
         byAgent[row.agentName as string] = {
           count: row.count,
           succeeded: row.succeeded,
@@ -152,15 +133,14 @@ export class AgentTrackerService {
           tokens: row.tokens || 0,
         };
       }
-      agentStmt.free();
 
       return {
-        totalInvocations: summary.total || 0,
-        succeededInvocations: summary.succeeded || 0,
-        failedInvocations: summary.failed || 0,
-        pendingInvocations: summary.pending || 0,
-        totalTokensCost: summary.totalTokens || 0,
-        averageDurationMs: Math.round(summary.avgDuration || 0),
+        totalInvocations: totals.total || 0,
+        succeededInvocations: totals.succeeded || 0,
+        failedInvocations: totals.failed || 0,
+        pendingInvocations: totals.pending || 0,
+        totalTokensCost: totals.totalTokens || 0,
+        averageDurationMs: Math.round(totals.avgDuration || 0),
         byAgent,
       };
     } catch (error) {
@@ -180,21 +160,19 @@ export class AgentTrackerService {
   /**
    * Get recent invocations
    */
-  static getRecentInvocations(userId: string, limit = 20): AgentInvocationRecord[] {
+  static async getRecentInvocations(userId: string, limit = 20): Promise<AgentInvocationRecord[]> {
     try {
-      const stmt = db.prepare(`
+      const invocationRows = (await db.query<any>(`
         SELECT *
         FROM agent_invocations
-        WHERE userId = ?
+        WHERE userId = $1
         ORDER BY createdAt DESC
-        LIMIT ?
-      `);
+        LIMIT $2
+      `, [userId, limit])).rows;
 
-      stmt.bind([userId, limit]);
       const records: AgentInvocationRecord[] = [];
 
-      while (stmt.step()) {
-        const row = stmt.getAsObject() as any;
+      for (const row of invocationRows) {
         records.push({
           id: row.id,
           agentName: row.agentName,
@@ -209,8 +187,6 @@ export class AgentTrackerService {
           completedAt: row.completedAt ? new Date(row.completedAt) : undefined,
         });
       }
-
-      stmt.free();
       return records;
     } catch (error) {
       console.error('Failed to get recent invocations:', error);
@@ -221,17 +197,14 @@ export class AgentTrackerService {
   /**
    * Clean up old records (older than 90 days)
    */
-  static cleanupOldRecords(): number {
+  static async cleanupOldRecords(): Promise<number> {
     try {
-      const stmt = db.prepare(`
-        DELETE FROM agent_invocations
-        WHERE createdAt < datetime('now', '-90 days')
-      `);
+      // datetime('now','-90 days') es sintaxis de SQLite.
+      const res = await db.query(
+        "DELETE FROM agent_invocations WHERE createdAt < NOW() - INTERVAL '90 days'"
+      );
 
-      stmt.step();
-      stmt.free();
-
-      return 0;
+      return res.rowCount;
     } catch (error) {
       console.error('Failed to cleanup old records:', error);
       return 0;

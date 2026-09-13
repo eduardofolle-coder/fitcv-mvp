@@ -1,9 +1,12 @@
 import { initializeSchema } from './schema.js';
+import { db } from './client.js';
 
 async function main() {
   try {
     console.log('Initializing database...');
-    initializeSchema();
+    // Sin conectar primero, el esquema se aplicaba contra una BD inexistente.
+    await db.init();
+    await initializeSchema();
     console.log('✅ Database initialized successfully');
     process.exit(0);
   } catch (error) {

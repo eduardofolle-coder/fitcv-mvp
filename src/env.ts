@@ -3,7 +3,9 @@ import 'dotenv/config';
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '3000'),
-  DATABASE_URL: process.env.DATABASE_URL || 'sqlite://./data/fitcv.db',
+  // postgres:// en producción; pglite:// corre el mismo Postgres en proceso
+  // para desarrollo, y memory:// para tests.
+  DATABASE_URL: process.env.DATABASE_URL || 'pglite://./data/fitcv-pg',
 
   JWT_PRIVATE_KEY: process.env.JWT_PRIVATE_KEY || 'dev-private-key',
   JWT_PUBLIC_KEY: process.env.JWT_PUBLIC_KEY || 'dev-public-key',

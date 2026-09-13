@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/auth.js';
 import { AuditLogger } from '../services/logger.js';
+import { asyncHandler } from './errorHandler.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -10,7 +11,10 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // ✅ Middleware de autenticación
-export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+// Va envuelto en asyncHandler: al consultar el usuario en la BD puede rechazar,
+// y una rejection sin capturar en middleware tumba el proceso entero.
+export const requireAuth = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const authReq = req as AuthenticatedRequest;
   let token: string | undefined;
 
   // Check multiple token sources
@@ -23,7 +27,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
     console.error('❌ No token found in request');
     console.error('  Headers:', Object.keys(req.headers));
     console.error('  Authorization header:', authHeader);
-    AuditLogger.logSecurityEvent({
+    await AuditLogger.logSecurityEvent({
       eventType: 'UNAUTHORIZED_ACCESS',
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
@@ -34,7 +38,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
 
   const payload = AuthService.verifyToken(token);
   if (!payload) {
-    AuditLogger.logSecurityEvent({
+    await AuditLogger.logSecurityEvent({
       eventType: 'UNAUTHORIZED_ACCESS',
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
@@ -44,18 +48,18 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   // ✅ Obtener usuario
-  const user = AuthService.getUserById(payload.sub);
+  const user = await AuthService.getUserById(payload.sub);
   if (!user) {
     return res.status(401).json({error: 'User not found'});
   }
 
-  req.user = {
+  authReq.user = {
     id: user.id,
     email: user.email
   };
 
   next();
-}
+});
 
 // ✅ Middleware de autorización (role-based)
 export function requireRole(..._roles: string[]) {

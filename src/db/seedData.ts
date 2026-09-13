@@ -83,11 +83,7 @@ export async function initializeSeedData() {
   console.log('🌱 Initializing seed data...');
 
   // Check if offers already exist
-  const checkStmt = db.prepare('SELECT COUNT(*) as count FROM offers');
-  checkStmt.bind([]);
-  const hasResult = checkStmt.step();
-  const result = hasResult ? checkStmt.getAsObject() : { count: 0 };
-  checkStmt.free();
+  const result = (await db.queryOne('SELECT COUNT(*) as count FROM offers')) ?? { count: 0 };
 
   if (result.count > 0) {
     console.log('✅ Offers already initialized');
@@ -96,14 +92,12 @@ export async function initializeSeedData() {
 
   // Insert offers
   for (const offer of SEED_OFFERS) {
-    const stmt = db.prepare(`
-      INSERT OR IGNORE INTO offers (
+    await db.query(`
+      INSERT INTO offers (
         id, title, company, level, salaryMin, salaryMax, salaryCurrency,
         location, description, requirements, source, url, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `);
-
-    stmt.bind([
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
+    `, [
       offer.id,
       offer.title,
       offer.company,
@@ -117,9 +111,6 @@ export async function initializeSeedData() {
       offer.source,
       offer.url
     ]);
-
-    stmt.step();
-    stmt.free();
 
     console.log(`✅ Inserted offer: ${offer.title}`);
   }

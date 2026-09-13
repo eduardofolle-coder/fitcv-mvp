@@ -51,17 +51,12 @@ router.post(
     const postulationId = req.params.id;
 
     // Fetch postulation
-    const postStmt = db.prepare(`
+    const postulation = await db.queryOne(`
       SELECT p.*, o.title, o.description, o.level
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
-      WHERE p.id = ? AND p.userId = ?
-    `);
-
-    postStmt.bind([postulationId, userId]);
-    const hasPostulation = postStmt.step();
-    const postulation = hasPostulation ? postStmt.getAsObject() : null;
-    postStmt.free();
+      WHERE p.id = $1 AND p.userId = $2
+    `, [postulationId, userId]);
 
     if (!postulation || !postulation.id) {
       return res.status(404).json({
@@ -71,13 +66,10 @@ router.post(
     }
 
     // Fetch candidate profile
-    const profileStmt = db.prepare(`
-      SELECT * FROM candidate_profiles WHERE userId = ? LIMIT 1
-    `);
-
-    profileStmt.bind([userId]);
-    const profile = profileStmt.getAsObject() as any;
-    profileStmt.free();
+    const profile = await db.queryOne<any>(
+      'SELECT * FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+      [userId]
+    );
 
     if (!profile || !profile.id) {
       return res.status(400).json({
@@ -89,7 +81,7 @@ router.post(
     logger.info('CV adaptation started', { userId, postulationId });
 
     // Create tracking record
-    const invocationId = AgentTrackerService.createInvocation('cv-adapter', userId, {
+    const invocationId = await AgentTrackerService.createInvocation('cv-adapter', userId, {
       postulationId,
       offerId: postulation.offerId,
       jobTitle: postulation.title,
@@ -116,7 +108,7 @@ router.post(
       );
 
       // Record success
-      AgentTrackerService.recordSuccess(invocationId, invocation);
+      await AgentTrackerService.recordSuccess(invocationId, invocation);
 
       if (!invocation.success || !invocation.output) {
         logger.warn('CV adaptation failed', { userId, postulationId, error: invocation.error });
@@ -130,12 +122,10 @@ router.post(
       const adaptedCvId = uuidv4();
       const adaptation = invocation.output.adaptation;
 
-      const cvStmt = db.prepare(`
+      await db.query(`
         INSERT INTO adapted_cvs (id, postulationId, userId, offerId, htmlContent, atsScore, changesHighlights, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
-
-      cvStmt.bind([
+        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+      `, [
         adaptedCvId,
         postulationId,
         userId,
@@ -145,17 +135,10 @@ router.post(
         JSON.stringify(adaptation.changes),
       ]);
 
-      cvStmt.step();
-      cvStmt.free();
-
       // Update postulation with adapted CV reference
-      const updateStmt = db.prepare(`
-        UPDATE postulations SET cvAdaptedId = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?
-      `);
-
-      updateStmt.bind([adaptedCvId, postulationId]);
-      updateStmt.step();
-      updateStmt.free();
+      await db.query(`
+        UPDATE postulations SET cvAdaptedId = $1, updatedAt = CURRENT_TIMESTAMP WHERE id = $2
+      `, [adaptedCvId, postulationId]);
 
       logger.info('CV adaptation saved', { userId, postulationId, adaptedCvId, atsScore: adaptation.atsScore });
 
@@ -174,7 +157,7 @@ router.post(
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      AgentTrackerService.recordFailure(
+      await AgentTrackerService.recordFailure(
         invocationId,
         errorMsg,
         Math.abs(Date.now() - new Date().getTime())
@@ -236,13 +219,10 @@ router.post(
     }
 
     // Fetch candidate profile
-    const profileStmt = db.prepare(`
-      SELECT * FROM candidate_profiles WHERE userId = ? LIMIT 1
-    `);
-
-    profileStmt.bind([userId]);
-    const profile = profileStmt.getAsObject() as any;
-    profileStmt.free();
+    const profile = await db.queryOne<any>(
+      'SELECT * FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+      [userId]
+    );
 
     if (!profile) {
       return res.status(400).json({
@@ -254,7 +234,7 @@ router.post(
     logger.info('Postulation matching started', { userId, offerId });
 
     // Create tracking record
-    const invocationId = AgentTrackerService.createInvocation('postulation-matcher', userId, {
+    const invocationId = await AgentTrackerService.createInvocation('postulation-matcher', userId, {
       offerId,
       jobTitle: offer.title,
     });
@@ -278,7 +258,7 @@ router.post(
         userId
       );
 
-      AgentTrackerService.recordSuccess(invocationId, invocation);
+      await AgentTrackerService.recordSuccess(invocationId, invocation);
 
       if (!invocation.success || !invocation.output) {
         return res.status(400).json({
@@ -297,7 +277,7 @@ router.post(
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      AgentTrackerService.recordFailure(invocationId, errorMsg);
+      await AgentTrackerService.recordFailure(invocationId, errorMsg);
 
       res.status(500).json({
         success: false,
@@ -336,13 +316,10 @@ router.get(
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
 
     // Fetch candidate profile
-    const profileStmt = db.prepare(`
-      SELECT * FROM candidate_profiles WHERE userId = ? LIMIT 1
-    `);
-
-    profileStmt.bind([userId]);
-    const profile = profileStmt.getAsObject() as any;
-    profileStmt.free();
+    const profile = await db.queryOne<any>(
+      'SELECT * FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+      [userId]
+    );
 
     if (!profile) {
       return res.status(400).json({
@@ -354,7 +331,7 @@ router.get(
     logger.info('Offer ranking started', { userId, offerCount: SEED_OFFERS.length });
 
     // Create tracking record
-    const invocationId = AgentTrackerService.createInvocation('offer-ranker', userId, {
+    const invocationId = await AgentTrackerService.createInvocation('offer-ranker', userId, {
       offerCount: SEED_OFFERS.length,
     });
 
@@ -387,7 +364,7 @@ router.get(
         userId
       );
 
-      AgentTrackerService.recordSuccess(invocationId, invocation);
+      await AgentTrackerService.recordSuccess(invocationId, invocation);
 
       if (!invocation.success || !invocation.output) {
         return res.status(400).json({
@@ -409,7 +386,7 @@ router.get(
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      AgentTrackerService.recordFailure(invocationId, errorMsg);
+      await AgentTrackerService.recordFailure(invocationId, errorMsg);
 
       res.status(500).json({
         success: false,

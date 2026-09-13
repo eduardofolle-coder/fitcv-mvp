@@ -22,11 +22,7 @@ router.post(
     const { offerId, estado, prioridad, notes } = req.body;
 
     // ✅ Verificar que la oferta existe
-    const offerStmt = db.prepare('SELECT * FROM offers WHERE id = ? LIMIT 1');
-    offerStmt.bind([offerId]);
-    const hasOffer = offerStmt.step();
-    const offer = hasOffer ? offerStmt.getAsObject() : null;
-    offerStmt.free();
+    const offer = await db.queryOne('SELECT * FROM offers WHERE id = $1 LIMIT 1', [offerId]);
 
     if (!offer) {
       throw new AppError(404, 'Job offer not found');
@@ -39,13 +35,11 @@ router.post(
 
     // ✅ Crear postulación
     const postulationId = uuidv4();
-    const stmt = db.prepare(`
+    await db.query(`
       INSERT INTO postulations (
         id, userId, offerId, estado, prioridad, notes, postulationWeight, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `);
-
-    stmt.bind([
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [
       postulationId,
       req.user.id,
       offerId,
@@ -54,8 +48,6 @@ router.post(
       notes || null,
       postulationWeight
     ]);
-    stmt.step();
-    stmt.free();
 
     res.status(201).json({
       success: true,
@@ -77,43 +69,40 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const { page = 1, limit = 20, estado, prioridad } = req.query;
 
+    // Los filtros son opcionales, así que el número de parámetros varía y los
+    // $n se numeran sobre la marcha en vez de estar fijos en el texto.
+    const params: any[] = [req.user.id];
     let query = `
       SELECT p.*, o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
-      WHERE p.userId = ?
+      WHERE p.userId = $1
     `;
-    const params = [req.user.id];
 
     if (estado) {
-      query += ' AND p.estado = ?';
       params.push(estado);
+      query += ` AND p.estado = $${params.length}`;
     }
 
     if (prioridad) {
-      query += ' AND p.prioridad = ?';
       params.push(prioridad);
+      query += ` AND p.prioridad = $${params.length}`;
     }
 
-    query += ' ORDER BY p.createdAt DESC LIMIT ? OFFSET ?';
-    params.push(limit, (page - 1) * limit);
+    const limitNum = Math.min(Number(limit) || 20, 100);
+    const pageNum = Math.max(Number(page) || 1, 1);
 
-    const stmt = db.prepare(query);
-    stmt.bind(params);
-    const postulations = [];
-    while (stmt.step()) {
-      postulations.push(stmt.getAsObject());
-    }
-    stmt.free();
+    params.push(limitNum, (pageNum - 1) * limitNum);
+    query += ` ORDER BY p.createdAt DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+    const postulations = (await db.query(query, params)).rows;
 
     // ✅ Contar total
-    const countStmt = db.prepare(`
-      SELECT COUNT(*) as count FROM postulations WHERE userId = ?
-    `);
-    countStmt.bind([req.user.id]);
-    const hasCount = countStmt.step();
-    const { count } = hasCount ? countStmt.getAsObject() : { count: 0 };
-    countStmt.free();
+    const countRow = await db.queryOne<{ count: string }>(
+      'SELECT COUNT(*) as count FROM postulations WHERE userId = $1',
+      [req.user.id]
+    );
+    const count = Number(countRow?.count ?? 0);
 
     res.json({
       success: true,
@@ -135,17 +124,12 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const { id } = req.params;
 
-    const stmt = db.prepare(`
+    const postulation = await db.queryOne<any>(`
       SELECT p.*, o.title, o.company, o.level, o.description, o.requirements
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
-      WHERE p.id = ? AND p.userId = ?
-    `);
-
-    stmt.bind([id, req.user.id]);
-    const hasPostulation = stmt.step();
-    const postulation = hasPostulation ? stmt.getAsObject() : null;
-    stmt.free();
+      WHERE p.id = $1 AND p.userId = $2
+    `, [id, req.user.id]);
 
     if (!postulation) {
       throw new AppError(404, 'Postulation not found');
@@ -170,10 +154,10 @@ router.put(
     const { estado, prioridad, notes } = req.body;
 
     // ✅ Verificar que la postulación pertenece al usuario
-    const checkStmt = db.prepare('SELECT id FROM postulations WHERE id = ? AND userId = ?');
-    checkStmt.bind([id, req.user.id]);
-    const exists = checkStmt.step();
-    checkStmt.free();
+    const exists = await db.queryOne(
+      'SELECT id FROM postulations WHERE id = $1 AND userId = $2',
+      [id, req.user.id]
+    );
 
     if (!exists) {
       throw new AppError(404, 'Postulation not found');
@@ -188,36 +172,32 @@ router.put(
       if (!ESTADOS.includes(estado)) {
         throw new AppError(400, `Invalid estado. Must be one of: ${ESTADOS.join(', ')}`);
       }
-      fields.push('estado = ?');
       values.push(estado);
+      fields.push(`estado = $${values.length}`);
     }
 
     if (prioridad !== undefined) {
       if (!PRIORIDADES.includes(prioridad)) {
         throw new AppError(400, `Invalid prioridad. Must be one of: ${PRIORIDADES.join(', ')}`);
       }
-      fields.push('prioridad = ?');
       values.push(prioridad);
+      fields.push(`prioridad = $${values.length}`);
     }
 
     if (notes !== undefined) {
-      fields.push('notes = ?');
       values.push(notes === null ? null : String(notes).slice(0, 500));
+      fields.push(`notes = $${values.length}`);
     }
 
     if (fields.length === 0) {
       throw new AppError(400, 'No fields to update. Provide estado, prioridad or notes.');
     }
 
-    const stmt = db.prepare(`
+    await db.query(`
       UPDATE postulations
       SET ${fields.join(', ')}, updatedAt = CURRENT_TIMESTAMP
-      WHERE id = ? AND userId = ?
-    `);
-
-    stmt.bind([...values, id, req.user.id]);
-    stmt.step();
-    stmt.free();
+      WHERE id = $${values.length + 1} AND userId = $${values.length + 2}
+    `, [...values, id, req.user.id]);
 
     res.json({
       success: true,
@@ -234,20 +214,17 @@ router.delete(
     const { id } = req.params;
 
     // ✅ Verificar que la postulación pertenece al usuario
-    const checkStmt = db.prepare('SELECT id FROM postulations WHERE id = ? AND userId = ?');
-    checkStmt.bind([id, req.user.id]);
-    const exists = checkStmt.step();
-    checkStmt.free();
+    const exists = await db.queryOne(
+      'SELECT id FROM postulations WHERE id = $1 AND userId = $2',
+      [id, req.user.id]
+    );
 
     if (!exists) {
       throw new AppError(404, 'Postulation not found');
     }
 
     // ✅ Eliminar
-    const stmt = db.prepare('DELETE FROM postulations WHERE id = ? AND userId = ?');
-    stmt.bind([id, req.user.id]);
-    stmt.step();
-    stmt.free();
+    await db.query('DELETE FROM postulations WHERE id = $1 AND userId = $2', [id, req.user.id]);
 
     res.json({
       success: true,
@@ -264,29 +241,22 @@ router.post(
     const { id } = req.params;
 
     // ✅ Obtener postulación
-    const postStmt = db.prepare(`
+    const postulation = await db.queryOne<any>(`
       SELECT p.*, o.title, o.company, o.description
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
-      WHERE p.id = ? AND p.userId = ?
-    `);
-    postStmt.bind([id, req.user.id]);
-    const hasPost = postStmt.step();
-    const postulation = hasPost ? postStmt.getAsObject() : null;
-    postStmt.free();
+      WHERE p.id = $1 AND p.userId = $2
+    `, [id, req.user.id]);
 
     if (!postulation) {
       throw new AppError(404, 'Postulation not found');
     }
 
     // ✅ Obtener CV original
-    const profileStmt = db.prepare(`
-      SELECT cvOriginalContent FROM candidate_profiles WHERE userId = ? LIMIT 1
-    `);
-    profileStmt.bind([req.user.id]);
-    const hasProfile = profileStmt.step();
-    const profile = hasProfile ? profileStmt.getAsObject() : null;
-    profileStmt.free();
+    const profile = await db.queryOne<any>(
+      'SELECT cvOriginalContent FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+      [req.user.id]
+    );
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
@@ -314,13 +284,11 @@ router.post(
 
     // ✅ Guardar CV adaptado
     const cvId = uuidv4();
-    const cvStmt = db.prepare(`
+    await db.query(`
       INSERT INTO adapted_cvs (
         id, postulationId, userId, offerId, htmlContent, atsScore, changesHighlights, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `);
-
-    cvStmt.bind([
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+    `, [
       cvId,
       id,
       req.user.id,
@@ -329,16 +297,11 @@ router.post(
       adaptation.atsScore,
       JSON.stringify(adaptation.changes)
     ]);
-    cvStmt.step();
-    cvStmt.free();
 
     // ✅ Actualizar postulación con referencia a CV adaptado
-    const updateStmt = db.prepare(`
-      UPDATE postulations SET cvAdaptedId = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?
-    `);
-    updateStmt.bind([cvId, id]);
-    updateStmt.step();
-    updateStmt.free();
+    await db.query(`
+      UPDATE postulations SET cvAdaptedId = $1, updatedAt = CURRENT_TIMESTAMP WHERE id = $2
+    `, [cvId, id]);
 
     res.json({
       success: true,
@@ -360,18 +323,13 @@ router.get(
     const { id } = req.params;
 
     // ✅ Obtener CV adaptado
-    const stmt = db.prepare(`
+    const cv = await db.queryOne<any>(`
       SELECT ac.htmlContent, ac.atsScore, ac.changesHighlights, o.title, o.company
       FROM adapted_cvs ac
       JOIN postulations p ON ac.postulationId = p.id
       JOIN offers o ON p.offerId = o.id
-      WHERE p.id = ? AND p.userId = ?
-    `);
-
-    stmt.bind([id, req.user.id]);
-    const hasCv = stmt.step();
-    const cv = hasCv ? stmt.getAsObject() : null;
-    stmt.free();
+      WHERE p.id = $1 AND p.userId = $2
+    `, [id, req.user.id]);
 
     if (!cv) {
       throw new AppError(404, 'Adapted CV not found. Please generate it first.');
@@ -400,29 +358,21 @@ router.post(
     const { id } = req.params;
 
     // ✅ Obtener postulación y oferta
-    const postStmt = db.prepare(`
+    const postulation = await db.queryOne(`
       SELECT p.*, o.title, o.company, o.description
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
-      WHERE p.id = ? AND p.userId = ?
-    `);
-    postStmt.bind([id, req.user.id]);
-    const hasPost = postStmt.step();
-    const postulation = hasPost ? postStmt.getAsObject() : null;
-    postStmt.free();
+      WHERE p.id = $1 AND p.userId = $2
+    `, [id, req.user.id]);
 
     if (!postulation) {
       throw new AppError(404, 'Postulation not found');
     }
 
     // ✅ Obtener CV original
-    const profileStmt = db.prepare(`
-      SELECT cvOriginalContent FROM candidate_profiles WHERE userId = ? LIMIT 1
-    `);
-    profileStmt.bind([req.user.id]);
-    const hasProfile = profileStmt.step();
-    const profile = hasProfile ? profileStmt.getAsObject() : null;
-    profileStmt.free();
+    const profile = await db.queryOne(`
+      SELECT cvOriginalContent FROM candidate_profiles WHERE userId = $1 LIMIT 1
+    `, [req.user.id]);
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
@@ -445,13 +395,11 @@ router.post(
 
     // ✅ Guardar resultado de matching
     const matchId = uuidv4();
-    const matchStmt = db.prepare(`
+    await db.query(`
       INSERT INTO postulation_matches (
         id, postulationId, userId, matchScore, matchPercentage, strengths, gaps, recommendation, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `);
-
-    matchStmt.bind([
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+    `, [
       matchId,
       id,
       req.user.id,
@@ -461,8 +409,6 @@ router.post(
       JSON.stringify(matchAnalysis.gaps || []),
       matchAnalysis.recommendation || matchAnalysis.verdict || ''
     ]);
-    matchStmt.step();
-    matchStmt.free();
 
     res.json({
       success: true,

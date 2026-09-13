@@ -52,14 +52,10 @@ export class AuthService {
     const passwordHash = await this.hashPassword(password);
     const now = new Date();
 
-    const stmt = db.prepare(`
+    await db.query(`
       INSERT INTO users (id, email, passwordHash, createdAt, updatedAt)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `);
-
-    stmt.bind([id, email.toLowerCase(), passwordHash]);
-    stmt.step();
-    stmt.free();
+      VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [id, email.toLowerCase(), passwordHash]);
 
     return {
       id,
@@ -71,21 +67,13 @@ export class AuthService {
     };
   }
 
-  static getUserById(userId: string): User | null {
-    const stmt = db.prepare('SELECT * FROM users WHERE id = ? AND isDeleted = 0');
-    stmt.bind([userId]);
-    const hasUser = stmt.step();
-    const user = hasUser ? stmt.getAsObject() : null;
-    stmt.free();
+  static async getUserById(userId: string): Promise<User | null> {
+    const user = await db.queryOne('SELECT * FROM users WHERE id = $1 AND isDeleted = FALSE', [userId]);
     return user as User | null;
   }
 
-  static getUserByEmail(email: string): User | null {
-    const stmt = db.prepare('SELECT * FROM users WHERE email = ? AND isDeleted = 0');
-    stmt.bind([email.toLowerCase()]);
-    const hasUser = stmt.step();
-    const user = hasUser ? stmt.getAsObject() : null;
-    stmt.free();
+  static async getUserByEmail(email: string): Promise<User | null> {
+    const user = await db.queryOne('SELECT * FROM users WHERE email = $1 AND isDeleted = FALSE', [email.toLowerCase()]);
     return user as User | null;
   }
 
@@ -98,14 +86,10 @@ export class AuthService {
     const tokenHash = await bcryptjs.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const stmt = db.prepare(`
+    await db.query(`
       INSERT INTO refresh_tokens (id, userId, tokenHash, ipAddress, userAgent, expiresAt, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `);
-
-    stmt.bind([uuidv4(), userId, tokenHash, ipAddress, userAgent, expiresAt]);
-    stmt.step();
-    stmt.free();
+      VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+    `, [uuidv4(), userId, tokenHash, ipAddress, userAgent, expiresAt]);
   }
 
   static async validateRefreshToken(
@@ -113,16 +97,12 @@ export class AuthService {
     token: string,
     _ipAddress: string
   ): Promise<boolean> {
-    const stmt = db.prepare(`
+    // datetime('now') es de SQLite; en Postgres el equivalente es NOW().
+    const record = await db.queryOne<any>(`
       SELECT tokenHash FROM refresh_tokens
-      WHERE userId = ? AND expiresAt > datetime('now')
+      WHERE userId = $1 AND expiresAt > NOW()
       ORDER BY createdAt DESC LIMIT 1
-    `);
-
-    stmt.bind([userId]);
-    const hasRecord = stmt.step();
-    const record = hasRecord ? stmt.getAsObject() : null;
-    stmt.free();
+    `, [userId]);
 
     if (!record) return false;
 
@@ -131,10 +111,7 @@ export class AuthService {
     return isValid;
   }
 
-  static invalidateRefreshTokens(userId: string): void {
-    const stmt = db.prepare('DELETE FROM refresh_tokens WHERE userId = ?');
-    stmt.bind([userId]);
-    stmt.step();
-    stmt.free();
+  static async invalidateRefreshTokens(userId: string): Promise<void> {
+    await db.query('DELETE FROM refresh_tokens WHERE userId = $1', [userId]);
   }
 }

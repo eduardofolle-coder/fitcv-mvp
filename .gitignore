@@ -17,3 +17,8 @@ dist/
 coverage/
 .nyc_output/
 tests/.tmp/
+data/
+boot.log
+boot.err.log
+restart.log
+restart.err.log

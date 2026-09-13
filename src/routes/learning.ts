@@ -39,12 +39,10 @@ router.post(
 
     try {
       const adaptationId = `adapt-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      const stmt = db.prepare(`
+      await db.query(`
         INSERT INTO successful_adaptations (id, userId, jobTitle, company, atsScore, keywords, cvChanges, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
-
-      stmt.bind([
+        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+      `, [
         adaptationId,
         userId,
         jobTitle,
@@ -53,9 +51,6 @@ router.post(
         JSON.stringify(keywords || []),
         JSON.stringify(cvChanges || []),
       ]);
-
-      stmt.step();
-      stmt.free();
 
       logger.info('Adaptation recorded', { userId, adaptationId, company, atsScore });
 
@@ -98,21 +93,16 @@ router.post(
     }
 
     try {
-      const stmt = db.prepare(`
+      await db.query(`
         INSERT INTO application_outcomes (id, adaptationId, userId, outcome, feedback, createdAt)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
-
-      stmt.bind([
+        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      `, [
         `outcome-${Date.now()}`,
         adaptationId,
         userId,
         outcome,
         feedback || null,
       ]);
-
-      stmt.step();
-      stmt.free();
 
       logger.info('Outcome recorded', { userId, adaptationId, outcome });
 
@@ -140,20 +130,13 @@ router.get(
     const userId = (req as any).user.id;
 
     try {
-      const stmt = db.prepare(`
+      const rows = (await db.query<any>(`
         SELECT keywords, atsScore
         FROM successful_adaptations
-        WHERE userId = ?
+        WHERE userId = $1
         ORDER BY atsScore DESC
         LIMIT 10
-      `);
-
-      stmt.bind([userId]);
-      const rows: any[] = [];
-      while (stmt.step()) {
-        rows.push(stmt.getAsObject());
-      }
-      stmt.free();
+      `, [userId])).rows;
 
       // Aggregate keywords
       const keywordMap = new Map<string, number>();
@@ -200,22 +183,18 @@ router.get(
 
     try {
       // Get all successful adaptations with positive outcomes
-      const stmt = db.prepare(`
-        SELECT DISTINCT sa.jobTitle, sa.company, sa.atsScore, COUNT(ao.id) as outcomeCount
+      // atsScore se agrega con MAX: al agrupar por empresa y cargo, la fila
+      // representa la mejor adaptación de ese grupo. Antes se seleccionaba sin
+      // agregar, y SQLite devolvía un valor cualquiera del grupo.
+      const rows: any[] = (await db.query(`
+        SELECT sa.jobTitle, sa.company, MAX(sa.atsScore) as atsScore, COUNT(ao.id) as outcomeCount
         FROM successful_adaptations sa
         LEFT JOIN application_outcomes ao ON sa.id = ao.adaptationId
-        WHERE sa.userId = ?
+        WHERE sa.userId = $1
         GROUP BY sa.company, sa.jobTitle
-        ORDER BY sa.atsScore DESC
+        ORDER BY atsScore DESC
         LIMIT 20
-      `);
-
-      stmt.bind([userId]);
-      const rows: any[] = [];
-      while (stmt.step()) {
-        rows.push(stmt.getAsObject());
-      }
-      stmt.free();
+      `, [userId])).rows;
 
       const companies = new Set<string>();
       const roles = new Set<string>();
@@ -260,20 +239,13 @@ router.get(
     const userId = (req as any).user.id;
 
     try {
-      const stmt = db.prepare(`
+      const rows: any[] = (await db.query(`
         SELECT keywords, atsScore, createdAt
         FROM successful_adaptations
-        WHERE userId = ?
+        WHERE userId = $1
         ORDER BY createdAt DESC
         LIMIT 30
-      `);
-
-      stmt.bind([userId]);
-      const rows: any[] = [];
-      while (stmt.step()) {
-        rows.push(stmt.getAsObject());
-      }
-      stmt.free();
+      `, [userId])).rows;
 
       // Categorize skills by recency and frequency
       const allSkills = new Set<string>();
@@ -327,20 +299,13 @@ router.get(
 
     try {
       // Get user's top keywords
-      const keywordStmt = db.prepare(`
+      const keywordRows: any[] = (await db.query(`
         SELECT keywords, atsScore
         FROM successful_adaptations
-        WHERE userId = ?
+        WHERE userId = $1
         ORDER BY atsScore DESC
         LIMIT 10
-      `);
-
-      keywordStmt.bind([userId]);
-      const keywordRows: any[] = [];
-      while (keywordStmt.step()) {
-        keywordRows.push(keywordStmt.getAsObject());
-      }
-      keywordStmt.free();
+      `, [userId])).rows;
 
       const keywordMap = new Map<string, number>();
       keywordRows.forEach(row => {
@@ -360,36 +325,20 @@ router.get(
         .map(([k]) => k);
 
       // Get user's successful companies
-      const companyStmt = db.prepare(`
+      const companies = (await db.query<any>(`
         SELECT DISTINCT company
         FROM successful_adaptations
-        WHERE userId = ? AND atsScore >= 80
+        WHERE userId = $1 AND atsScore >= 80
         LIMIT 5
-      `);
-
-      companyStmt.bind([userId]);
-      const companies: string[] = [];
-      while (companyStmt.step()) {
-        const row = companyStmt.getAsObject();
-        companies.push((row as any).company);
-      }
-      companyStmt.free();
+      `, [userId])).rows.map(row => row.company as string);
 
       // Get top roles
-      const roleStmt = db.prepare(`
+      const roles = (await db.query<any>(`
         SELECT DISTINCT jobTitle
         FROM successful_adaptations
-        WHERE userId = ? AND atsScore >= 80
+        WHERE userId = $1 AND atsScore >= 80
         LIMIT 5
-      `);
-
-      roleStmt.bind([userId]);
-      const roles: string[] = [];
-      while (roleStmt.step()) {
-        const row = roleStmt.getAsObject();
-        roles.push((row as any).jobTitle);
-      }
-      roleStmt.free();
+      `, [userId])).rows.map(row => row.jobTitle as string);
 
       logger.info('Recommendations generated', { userId, keywordCount: topKeywords.length });
 
@@ -421,19 +370,13 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       // Get overall trending keywords across ALL users
-      const trendStmt = db.prepare(`
+      const trendRows = (await db.query<any>(`
         SELECT keywords, AVG(atsScore) as avgScore
         FROM successful_adaptations
         GROUP BY keywords
         ORDER BY avgScore DESC
         LIMIT 50
-      `);
-
-      const trendRows: any[] = [];
-      while (trendStmt.step()) {
-        trendRows.push(trendStmt.getAsObject());
-      }
-      trendStmt.free();
+      `)).rows;
 
       const hotSkills = new Set<string>();
       trendRows.forEach(row => {
@@ -448,36 +391,22 @@ router.get(
       });
 
       // Get hot roles
-      const roleStmt = db.prepare(`
+      const roles = (await db.query<any>(`
         SELECT jobTitle, COUNT(*) as count, AVG(atsScore) as avgScore
         FROM successful_adaptations
         GROUP BY jobTitle
         ORDER BY count DESC
         LIMIT 5
-      `);
-
-      const roles: string[] = [];
-      while (roleStmt.step()) {
-        const row = roleStmt.getAsObject();
-        roles.push((row as any).jobTitle);
-      }
-      roleStmt.free();
+      `)).rows.map(row => row.jobTitle as string);
 
       // Get hot companies
-      const companyStmt = db.prepare(`
+      const companies = (await db.query<any>(`
         SELECT company, COUNT(*) as count, AVG(atsScore) as avgScore
         FROM successful_adaptations
         GROUP BY company
         ORDER BY count DESC
         LIMIT 5
-      `);
-
-      const companies: string[] = [];
-      while (companyStmt.step()) {
-        const row = companyStmt.getAsObject();
-        companies.push((row as any).company);
-      }
-      companyStmt.free();
+      `)).rows.map(row => row.company as string);
 
       logger.info('Market trends analyzed');
 

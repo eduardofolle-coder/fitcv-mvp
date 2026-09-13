@@ -72,16 +72,16 @@ router.post(
 
     // ✅ Guardar en BD. userId es UNIQUE: volver a subir el CV debe reemplazar
     // el perfil existente, no fallar con un constraint error.
-    const existingStmt = db.prepare('SELECT id FROM candidate_profiles WHERE userId = ? LIMIT 1');
-    existingStmt.bind([req.user.id]);
-    const hasExisting = existingStmt.step();
-    const profileId = hasExisting ? existingStmt.getAsObject().id : uuidv4();
-    existingStmt.free();
+    const existing = await db.queryOne<{ id: string }>(
+      'SELECT id FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+      [req.user.id]
+    );
+    const profileId = existing?.id ?? uuidv4();
 
-    const stmt = db.prepare(`
+    await db.query(`
       INSERT INTO candidate_profiles (
         id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(userId) DO UPDATE SET
         fullName = excluded.fullName,
         yearsExperience = excluded.yearsExperience,
@@ -90,9 +90,7 @@ router.post(
         summary = excluded.summary,
         cvOriginalContent = excluded.cvOriginalContent,
         updatedAt = CURRENT_TIMESTAMP
-    `);
-
-    stmt.bind([
+    `, [
       profileId,
       req.user.id,
       fullName || profile.fullName || null,
@@ -102,8 +100,6 @@ router.post(
       profile.summary || null,
       encryptedCV
     ]);
-    stmt.step();
-    stmt.free();
 
     res.json({
       success: true,
@@ -126,17 +122,12 @@ router.get(
   '/profile',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const stmt = db.prepare(`
+    const profile = await db.queryOne<any>(`
       SELECT id, fullName, yearsExperience, education, skills, summary, createdAt
       FROM candidate_profiles
-      WHERE userId = ?
+      WHERE userId = $1
       LIMIT 1
-    `);
-
-    stmt.bind([req.user.id]);
-    const hasProfile = stmt.step();
-    const profile = hasProfile ? stmt.getAsObject() : null;
-    stmt.free();
+    `, [req.user.id]);
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
@@ -158,14 +149,9 @@ router.post(
   '/suggest-roles',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const stmt = db.prepare(`
-      SELECT * FROM candidate_profiles WHERE userId = ? LIMIT 1
-    `);
-
-    stmt.bind([req.user.id]);
-    const hasProfile = stmt.step();
-    const profile = hasProfile ? stmt.getAsObject() : null;
-    stmt.free();
+    const profile = await db.queryOne(`
+      SELECT * FROM candidate_profiles WHERE userId = $1 LIMIT 1
+    `, [req.user.id]);
 
     if (!profile) {
       throw new AppError(404, 'Profile not found');
@@ -186,13 +172,11 @@ router.post(
     const suggestedRoles = await ProfileAnalyzerService.suggestRoles(profileData);
 
     // ✅ Guardar roles sugeridos
-    suggestedRoles.forEach(role => {
-      const insertStmt = db.prepare(`
+    await Promise.all(suggestedRoles.map(role =>
+      db.query(`
         INSERT INTO suggested_roles (id, userId, roleTitle, level, description, matchScore, isSelected, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
-
-      insertStmt.bind([
+        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+      `, [
         uuidv4(),
         req.user.id,
         role.title,
@@ -200,10 +184,8 @@ router.post(
         role.description,
         role.matchScore,
         false
-      ]);
-      insertStmt.step();
-      insertStmt.free();
-    });
+      ])
+    ));
 
     res.json({
       success: true,
@@ -217,16 +199,9 @@ router.get(
   '/roles',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const stmt = db.prepare(`
-      SELECT * FROM suggested_roles WHERE userId = ? ORDER BY matchScore DESC
-    `);
-
-    stmt.bind([req.user.id]);
-    const roles: any[] = [];
-    while (stmt.step()) {
-      roles.push(stmt.getAsObject());
-    }
-    stmt.free();
+    const roles = (await db.query(`
+      SELECT * FROM suggested_roles WHERE userId = $1 ORDER BY matchScore DESC
+    `, [req.user.id])).rows;
 
     res.json({
       success: true,
@@ -247,14 +222,12 @@ router.post(
     }
 
     // ✅ Actualizar roles seleccionados
-    roleIds.forEach(roleId => {
-      const stmt = db.prepare(`
-        UPDATE suggested_roles SET isSelected = 1 WHERE id = ? AND userId = ?
-      `);
-      stmt.bind([roleId, req.user.id]);
-      stmt.step();
-      stmt.free();
-    });
+    await Promise.all(roleIds.map((roleId: string) =>
+      db.query(
+        'UPDATE suggested_roles SET isSelected = TRUE WHERE id = $1 AND userId = $2',
+        [roleId, req.user.id]
+      )
+    ));
 
     res.json({
       success: true,

@@ -27,7 +27,7 @@ const app = express();
 // las primeras requests de un arranque en frío pegaban contra una BD inexistente.
 async function initializeDatabase() {
   await db.init();
-  initializeSchema();
+  await initializeSchema();
   await initializeSeedData();
   console.log('✅ Database ready');
 }
@@ -109,12 +109,6 @@ let shuttingDown = false;
 function shutdown(code: number): void {
   if (shuttingDown) return;
   shuttingDown = true;
-
-  try {
-    db.flush();
-  } catch (err) {
-    console.error('Failed to flush database on shutdown:', err);
-  }
 
   if (!server) {
     process.exit(code);

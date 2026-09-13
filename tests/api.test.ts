@@ -15,7 +15,14 @@ import path from 'path';
 const PORT = 3100;
 const API = `http://localhost:${PORT}/api`;
 const DB_DIR = path.resolve(process.cwd(), 'tests', '.tmp');
-const DB_FILE = path.join(DB_DIR, 'regression.db');
+
+// En local corre sobre PGlite; CI inyecta un postgres:// para ejercitar además
+// el driver `pg` contra un servidor real. Respetar el externo es lo que hace
+// que ese job pruebe algo distinto en vez de repetir el mismo camino.
+const DATABASE_URL =
+  process.env.DATABASE_URL?.startsWith('postgres')
+    ? process.env.DATABASE_URL
+    : `pglite://${path.relative(process.cwd(), DB_DIR).split(path.sep).join('/')}/pg`;
 
 let server: ChildProcess | undefined;
 let token = '';
@@ -31,7 +38,7 @@ function startServer(): Promise<void> {
       ...process.env,
       NODE_ENV: 'development',
       PORT: String(PORT),
-      SQLITE_FILE: path.relative(process.cwd(), DB_FILE),
+      DATABASE_URL: DATABASE_URL,
     },
     stdio: 'ignore',
   });

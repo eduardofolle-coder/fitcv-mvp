@@ -71,7 +71,7 @@ router.post(
     logger.info('CV upload started', { userId, fileName });
 
     // Create tracking record
-    const invocationId = AgentTrackerService.createInvocation('cv-analyzer', userId, {
+    const invocationId = await AgentTrackerService.createInvocation('cv-analyzer', userId, {
       cvTextLength: cvText.length,
       fileName,
     });
@@ -81,7 +81,7 @@ router.post(
       const invocation = await AgentInvokerService.invoke('cv-analyzer', { cvText }, userId);
 
       // Record success
-      AgentTrackerService.recordSuccess(invocationId, invocation);
+      await AgentTrackerService.recordSuccess(invocationId, invocation);
 
       if (!invocation.success || !invocation.output) {
         logger.warn('CV analysis failed', { userId, error: invocation.error });
@@ -96,12 +96,10 @@ router.post(
       const profile = invocation.output.profile;
 
       // Store profile (skills and summary encrypted in production)
-      const stmt = db.prepare(`
-        INSERT OR REPLACE INTO candidate_profiles (id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
-
-      stmt.bind([
+      await db.query(`
+        INSERT INTO candidate_profiles (id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent, updatedAt)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+      `, [
         profileId,
         userId,
         profile.fullName || null,
@@ -111,9 +109,6 @@ router.post(
         profile.summary || null,
         cvText, // In production, this should be encrypted
       ]);
-
-      stmt.step();
-      stmt.free();
 
       logger.info('CV profile saved', { userId, profileId });
 
@@ -137,7 +132,7 @@ router.post(
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      AgentTrackerService.recordFailure(
+      await AgentTrackerService.recordFailure(
         invocationId,
         errorMsg,
         (Date.now() - new Date().getTime()) * -1
@@ -165,17 +160,12 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
 
-    const stmt = db.prepare(`
+    const profile = await db.queryOne<any>(`
       SELECT id, fullName, yearsExperience, education, skills, summary
       FROM candidate_profiles
-      WHERE userId = ?
+      WHERE userId = $1
       LIMIT 1
-    `);
-
-    stmt.bind([userId]);
-    const hasProfile = stmt.step();
-    const profile = hasProfile ? stmt.getAsObject() : null;
-    stmt.free();
+    `, [userId]);
 
     if (!profile || !profile.id) {
       return res.status(404).json({
@@ -209,8 +199,8 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
 
-    const stats = AgentTrackerService.getStatistics(userId);
-    const recentInvocations = AgentTrackerService.getRecentInvocations(userId, 10);
+    const stats = await AgentTrackerService.getStatistics(userId);
+    const recentInvocations = await AgentTrackerService.getRecentInvocations(userId, 10);
 
     res.json({
       success: true,

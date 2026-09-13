@@ -24,14 +24,14 @@ if (env.NODE_ENV !== 'production') {
 
 // ✅ Security event logger
 export class AuditLogger {
-  static logSecurityEvent(event: {
+  static async logSecurityEvent(event: {
     eventType: 'LOGIN' | 'LOGOUT' | 'FAILED_LOGIN' | 'UNAUTHORIZED_ACCESS' | 'READ_CV' | 'ADMIN_QUERY' | string;
     userId?: string;
     targetUserId?: string;
     ipAddress?: string;
     userAgent?: string;
     details?: any;
-  }) {
+  }): Promise<void> {
     const id = uuidv4();
     const timestamp = new Date();
     const yearMonth = timestamp.toISOString().slice(0, 7);
@@ -43,12 +43,10 @@ export class AuditLogger {
       detailsEncrypted = EncryptionService.encrypt(JSON.stringify(event.details));
     }
 
-    const stmt = db.prepare(`
+    await db.query(`
       INSERT INTO audit_logs (id, eventType, userId, targetUserId, ipAddress, userAgent, timestamp, detailsEncrypted, yearMonth, month)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.bind([
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [
       id,
       event.eventType,
       event.userId || null,
@@ -60,8 +58,6 @@ export class AuditLogger {
       yearMonth,
       month
     ]);
-    stmt.step();
-    stmt.free();
 
     // ✅ Log también en Winston
     logger.warn(`SECURITY_EVENT: ${event.eventType}`, {
@@ -72,11 +68,10 @@ export class AuditLogger {
     });
   }
 
-  static purgeOldLogs() {
+  static async purgeOldLogs(): Promise<void> {
     // ✅ Eliminar logs anteriores a 1 año
     const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-    const stmt = db.prepare('DELETE FROM audit_logs WHERE timestamp < ?');
-    stmt.run(oneYearAgo);
+    await db.query('DELETE FROM audit_logs WHERE timestamp < $1', [oneYearAgo]);
 
     logger.info('Old audit logs purged');
   }
