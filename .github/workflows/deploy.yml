@@ -37,7 +37,7 @@ jobs:
           JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
           JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
           DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
-          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
+          CLAUDE_API_KEY: ci-placeholder-not-a-real-key
 
       - name: Build
         run: npm run build
@@ -60,11 +60,11 @@ jobs:
         env:
           NODE_ENV: development
           PORT: 3000
-          SQLITE_FILE: ci-smoke.db
+          DATABASE_URL: pglite://ci-smoke/pg
           JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
           JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
           DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
-          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
+          CLAUDE_API_KEY: ci-placeholder-not-a-real-key
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

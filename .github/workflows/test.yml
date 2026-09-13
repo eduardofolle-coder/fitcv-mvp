@@ -50,7 +50,7 @@ jobs:
           JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
           JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
           DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
-          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
+          CLAUDE_API_KEY: ci-placeholder-not-a-real-key
 
       # Solo lo que se despliega. Las devDependencies no llegan a producción,
       # así que no deberían frenar un merge.
@@ -98,7 +98,7 @@ jobs:
           JWT_PRIVATE_KEY: ci-private-key-for-tests-only-32chars
           JWT_PUBLIC_KEY: ci-public-key-for-tests-only-32chars!
           DATA_ENCRYPTION_KEY: ci-encryption-key-for-tests-32chars!
-          CLAUDE_API_KEY: sk-ant-ci-placeholder-not-a-real-key
+          CLAUDE_API_KEY: ci-placeholder-not-a-real-key
 
   frontend:
     name: Frontend
