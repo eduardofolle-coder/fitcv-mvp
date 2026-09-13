@@ -64,9 +64,13 @@ router.post(
     });
 
     res.status(201).json({
-      accessToken,
-      expiresIn,
-      user: {id: user.id, email: user.email}
+      success: true,
+      data: {
+        accessToken,
+        expiresIn,
+        userId: user.id,
+        email: user.email
+      }
     });
   })
 );
@@ -130,9 +134,13 @@ router.post(
     });
 
     res.json({
-      accessToken,
-      expiresIn,
-      user: {id: user.id, email: user.email}
+      success: true,
+      data: {
+        accessToken,
+        expiresIn,
+        userId: user.id,
+        email: user.email
+      }
     });
   })
 );
