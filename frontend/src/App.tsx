@@ -1,15 +1,27 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useEffect } from 'react'
+import { api } from './services/api'
 import { LoginPage, RegisterPage, UploadCVPage, DashboardPage } from './pages'
+import { CVManagementPage } from './pages/CVManagementPage'
+import { PostulationsPage } from './pages/PostulationsPage'
+import { OffersPage } from './pages/OffersPage'
+import { InsightsPage } from './pages/InsightsPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
+  const token = useAuthStore(s => s.token)
   const loadFromStorage = useAuthStore(s => s.loadFromStorage)
 
   useEffect(() => {
     loadFromStorage()
   }, [loadFromStorage])
+
+  useEffect(() => {
+    if (token) {
+      api.setToken(token)
+    }
+  }, [token])
 
   return (
     <BrowserRouter>
@@ -20,7 +32,15 @@ function App() {
 
         {/* Protected Routes */}
         <Route
-          path="/upload-cv"
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cv-upload"
           element={
             <ProtectedRoute>
               <UploadCVPage />
@@ -28,10 +48,34 @@ function App() {
           }
         />
         <Route
-          path="/dashboard"
+          path="/cv-management"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <CVManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/postulations"
+          element={
+            <ProtectedRoute>
+              <PostulationsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/offers"
+          element={
+            <ProtectedRoute>
+              <OffersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/insights"
+          element={
+            <ProtectedRoute>
+              <InsightsPage />
             </ProtectedRoute>
           }
         />

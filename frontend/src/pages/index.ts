@@ -1,4 +1,9 @@
 export { LoginPage } from './LoginPage';
 export { RegisterPage } from './RegisterPage';
 export { UploadCVPage } from './UploadCVPage';
+export { CVManagementPage } from './CVManagementPage';
+export { PostulationsPage } from './PostulationsPage';
+export { PostulationDetailPage } from './PostulationDetailPage';
+export { OffersPage } from './OffersPage';
+export { InsightsPage } from './InsightsPage';
 export { DashboardPage } from './DashboardPage';

@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { CVAdapterService } from '../services/cvAdapter.js';
 import { EncryptionService } from '../services/encryption.js';
+import { AgentInvokerService } from '../services/agentInvoker.js';
 
 const router = Router();
 
@@ -19,7 +20,10 @@ router.post(
 
     // ✅ Verificar que la oferta existe
     const offerStmt = db.prepare('SELECT * FROM offers WHERE id = ? LIMIT 1');
-    const offer = offerStmt.get(offerId) as any;
+    offerStmt.bind([offerId]);
+    const hasOffer = offerStmt.step();
+    const offer = hasOffer ? offerStmt.getAsObject() : null;
+    offerStmt.free();
 
     if (!offer) {
       throw new AppError(404, 'Job offer not found');
@@ -35,20 +39,20 @@ router.post(
     const stmt = db.prepare(`
       INSERT INTO postulations (
         id, userId, offerId, estado, prioridad, notes, postulationWeight, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
 
-    stmt.run(
+    stmt.bind([
       postulationId,
       req.user.id,
       offerId,
       estado,
       prioridad,
       notes || null,
-      postulationWeight,
-      new Date(),
-      new Date()
-    );
+      postulationWeight
+    ]);
+    stmt.step();
+    stmt.free();
 
     res.status(201).json({
       success: true,
@@ -92,13 +96,21 @@ router.get(
     params.push(limit, (page - 1) * limit);
 
     const stmt = db.prepare(query);
-    const postulations = stmt.all(...params);
+    stmt.bind(params);
+    const postulations = [];
+    while (stmt.step()) {
+      postulations.push(stmt.getAsObject());
+    }
+    stmt.free();
 
     // ✅ Contar total
     const countStmt = db.prepare(`
       SELECT COUNT(*) as count FROM postulations WHERE userId = ?
     `);
-    const { count } = countStmt.get(req.user.id) as any;
+    countStmt.bind([req.user.id]);
+    const hasCount = countStmt.step();
+    const { count } = hasCount ? countStmt.getAsObject() : { count: 0 };
+    countStmt.free();
 
     res.json({
       success: true,
@@ -127,7 +139,10 @@ router.get(
       WHERE p.id = ? AND p.userId = ?
     `);
 
-    const postulation = stmt.get(id, req.user.id) as any;
+    stmt.bind([id, req.user.id]);
+    const hasPostulation = stmt.step();
+    const postulation = hasPostulation ? stmt.getAsObject() : null;
+    stmt.free();
 
     if (!postulation) {
       throw new AppError(404, 'Postulation not found');
@@ -153,18 +168,24 @@ router.put(
 
     // ✅ Verificar que la postulación pertenece al usuario
     const checkStmt = db.prepare('SELECT id FROM postulations WHERE id = ? AND userId = ?');
-    if (!checkStmt.get(id, req.user.id)) {
+    checkStmt.bind([id, req.user.id]);
+    const exists = checkStmt.step();
+    checkStmt.free();
+
+    if (!exists) {
       throw new AppError(404, 'Postulation not found');
     }
 
     // ✅ Actualizar
     const stmt = db.prepare(`
       UPDATE postulations
-      SET estado = ?, prioridad = ?, notes = ?, updatedAt = ?
+      SET estado = ?, prioridad = ?, notes = ?, updatedAt = CURRENT_TIMESTAMP
       WHERE id = ? AND userId = ?
     `);
 
-    stmt.run(estado || null, prioridad || null, notes || null, new Date(), id, req.user.id);
+    stmt.bind([estado || null, prioridad || null, notes || null, id, req.user.id]);
+    stmt.step();
+    stmt.free();
 
     res.json({
       success: true,
@@ -182,13 +203,19 @@ router.delete(
 
     // ✅ Verificar que la postulación pertenece al usuario
     const checkStmt = db.prepare('SELECT id FROM postulations WHERE id = ? AND userId = ?');
-    if (!checkStmt.get(id, req.user.id)) {
+    checkStmt.bind([id, req.user.id]);
+    const exists = checkStmt.step();
+    checkStmt.free();
+
+    if (!exists) {
       throw new AppError(404, 'Postulation not found');
     }
 
     // ✅ Eliminar
     const stmt = db.prepare('DELETE FROM postulations WHERE id = ? AND userId = ?');
-    stmt.run(id, req.user.id);
+    stmt.bind([id, req.user.id]);
+    stmt.step();
+    stmt.free();
 
     res.json({
       success: true,
@@ -211,7 +238,10 @@ router.post(
       JOIN offers o ON p.offerId = o.id
       WHERE p.id = ? AND p.userId = ?
     `);
-    const postulation = postStmt.get(id, req.user.id) as any;
+    postStmt.bind([id, req.user.id]);
+    const hasPost = postStmt.step();
+    const postulation = hasPost ? postStmt.getAsObject() : null;
+    postStmt.free();
 
     if (!postulation) {
       throw new AppError(404, 'Postulation not found');
@@ -221,7 +251,10 @@ router.post(
     const profileStmt = db.prepare(`
       SELECT cvOriginalContent FROM candidate_profiles WHERE userId = ? LIMIT 1
     `);
-    const profile = profileStmt.get(req.user.id) as any;
+    profileStmt.bind([req.user.id]);
+    const hasProfile = profileStmt.step();
+    const profile = hasProfile ? profileStmt.getAsObject() : null;
+    profileStmt.free();
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
@@ -230,13 +263,19 @@ router.post(
     // ✅ Desencriptar CV
     const cvContent = EncryptionService.decrypt(profile.cvOriginalContent);
 
-    // ✅ Adaptar CV con Claude
-    const adaptation = await CVAdapterService.adaptCV({
+    // ✅ Adaptar CV con Agent
+    const agentResult = await AgentInvokerService.invoke('cv-adapter', {
       originalCV: cvContent,
-      jobOffer: postulation.description,
+      jobDescription: postulation.description,
       jobTitle: postulation.title,
       company: postulation.company
-    });
+    }, req.user.id);
+
+    if (!agentResult.success || !agentResult.output) {
+      throw new AppError(500, 'Failed to adapt CV');
+    }
+
+    const adaptation = agentResult.output.adaptation || agentResult.output;
 
     // ✅ Encriptar CV adaptado
     const encryptedAdaptedCV = EncryptionService.encrypt(adaptation.adaptedCV);
@@ -246,25 +285,28 @@ router.post(
     const cvStmt = db.prepare(`
       INSERT INTO adapted_cvs (
         id, postulationId, userId, offerId, htmlContent, atsScore, changesHighlights, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
 
-    cvStmt.run(
+    cvStmt.bind([
       cvId,
       id,
       req.user.id,
       postulation.offerId,
       encryptedAdaptedCV,
       adaptation.atsScore,
-      JSON.stringify(adaptation.changes),
-      new Date()
-    );
+      JSON.stringify(adaptation.changes)
+    ]);
+    cvStmt.step();
+    cvStmt.free();
 
     // ✅ Actualizar postulación con referencia a CV adaptado
     const updateStmt = db.prepare(`
-      UPDATE postulations SET cvAdaptedId = ?, updatedAt = ? WHERE id = ?
+      UPDATE postulations SET cvAdaptedId = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?
     `);
-    updateStmt.run(cvId, new Date(), id);
+    updateStmt.bind([cvId, id]);
+    updateStmt.step();
+    updateStmt.free();
 
     res.json({
       success: true,
@@ -294,7 +336,10 @@ router.get(
       WHERE p.id = ? AND p.userId = ?
     `);
 
-    const cv = stmt.get(id, req.user.id) as any;
+    stmt.bind([id, req.user.id]);
+    const hasCv = stmt.step();
+    const cv = hasCv ? stmt.getAsObject() : null;
+    stmt.free();
 
     if (!cv) {
       throw new AppError(404, 'Adapted CV not found. Please generate it first.');
@@ -310,6 +355,91 @@ router.get(
         atsScore: cv.atsScore,
         changes: JSON.parse(cv.changesHighlights),
         job: `${cv.title} at ${cv.company}`
+      }
+    });
+  })
+);
+
+// ✅ POST /api/postulations/:id/match - Hacer match entre CV y oferta
+router.post(
+  '/:id/match',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+
+    // ✅ Obtener postulación y oferta
+    const postStmt = db.prepare(`
+      SELECT p.*, o.title, o.company, o.description
+      FROM postulations p
+      JOIN offers o ON p.offerId = o.id
+      WHERE p.id = ? AND p.userId = ?
+    `);
+    postStmt.bind([id, req.user.id]);
+    const hasPost = postStmt.step();
+    const postulation = hasPost ? postStmt.getAsObject() : null;
+    postStmt.free();
+
+    if (!postulation) {
+      throw new AppError(404, 'Postulation not found');
+    }
+
+    // ✅ Obtener CV original
+    const profileStmt = db.prepare(`
+      SELECT cvOriginalContent FROM candidate_profiles WHERE userId = ? LIMIT 1
+    `);
+    profileStmt.bind([req.user.id]);
+    const hasProfile = profileStmt.step();
+    const profile = hasProfile ? profileStmt.getAsObject() : null;
+    profileStmt.free();
+
+    if (!profile) {
+      throw new AppError(404, 'Profile not found. Please upload your CV first.');
+    }
+
+    // ✅ Desencriptar CV
+    const cvContent = EncryptionService.decrypt(profile.cvOriginalContent);
+
+    // ✅ Invocar agent de matching
+    const agentResult = await AgentInvokerService.invoke('postulation-matcher', {
+      cvText: cvContent,
+      jobDescription: postulation.description
+    }, req.user.id);
+
+    if (!agentResult.success || !agentResult.output) {
+      throw new AppError(500, 'Failed to match postulation');
+    }
+
+    const matchAnalysis = agentResult.output.matchAnalysis || agentResult.output;
+
+    // ✅ Guardar resultado de matching
+    const matchId = uuidv4();
+    const matchStmt = db.prepare(`
+      INSERT INTO postulation_matches (
+        id, postulationId, userId, matchScore, matchPercentage, strengths, gaps, recommendation, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `);
+
+    matchStmt.bind([
+      matchId,
+      id,
+      req.user.id,
+      matchAnalysis.scores?.overallMatch || matchAnalysis.matchPercentile || 0,
+      matchAnalysis.matchPercentage || 0,
+      JSON.stringify(matchAnalysis.strengths || []),
+      JSON.stringify(matchAnalysis.gaps || []),
+      matchAnalysis.recommendation || matchAnalysis.verdict || ''
+    ]);
+    matchStmt.step();
+    matchStmt.free();
+
+    res.json({
+      success: true,
+      data: {
+        matchId,
+        score: matchAnalysis.scores?.overallMatch || matchAnalysis.matchPercentile || 0,
+        strengths: matchAnalysis.strengths || [],
+        gaps: matchAnalysis.gaps || [],
+        recommendation: matchAnalysis.recommendation || matchAnalysis.verdict || ''
       }
     });
   })

@@ -1,38 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useAPI } from '../hooks';
-import { useAuthStore } from '../store/authStore';
-
-interface JobOffer {
-  id: string;
-  title: string;
-  company: string;
-  level: string;
-  salaryMin?: number;
-  salaryMax?: number;
-  location?: string;
-  description: string;
-}
-
-interface Postulation {
-  id: string;
-  offerId: string;
-  title: string;
-  company: string;
-  estado: string;
-  prioridad: string;
-  postulationWeight: number;
-  createdAt: string;
-}
+import { useAuth } from '../hooks';
+import { api } from '../services/api';
+import { Layout } from '../components/Layout';
+import { Offer, Postulation } from '../types';
 
 export function DashboardPage() {
-  const api = useAPI();
-  const user = useAuthStore(s => s.user);
-  const logout = useAuthStore(s => s.logout);
-  const [offers, setOffers] = useState<JobOffer[]>([]);
+  const { user } = useAuth();
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [postulations, setPostulations] = useState<Postulation[]>([]);
-  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [posting, setPosting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -40,15 +16,12 @@ export function DashboardPage() {
 
   const loadData = async () => {
     try {
-      const [offersRes, statsRes, postulationsRes] = await Promise.all([
-        api.get('/offers?limit=50'),
-        api.get('/offers/stats/summary'),
-        api.get('/postulations?limit=50')
+      const [offersRes, postulationsRes] = await Promise.all([
+        api.getOffers(),
+        api.getPostulations(),
       ]);
-
-      setOffers(offersRes.data.data || []);
-      setStats(statsRes.data.data || {});
-      setPostulations(postulationsRes.data.data || []);
+      setOffers(offersRes);
+      setPostulations(postulationsRes);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -56,155 +29,108 @@ export function DashboardPage() {
     }
   };
 
-  const handlePostulate = async (offerId: string) => {
-    setPosting(true);
-    try {
-      await api.post('/postulations', {
-        offerId,
-        estado: 'Por revisar',
-        prioridad: 'Media',
-        notes: ''
-      });
-      loadData();
-    } catch (err: any) {
-      alert('Error: ' + (err.response?.data?.message || 'Failed to apply'));
-    } finally {
-      setPosting(false);
-    }
-  };
-
-  const isPosted = (offerId: string) => postulations.some(p => p.offerId === offerId);
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
+      <Layout title="Dashboard">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">FITCV Dashboard</h1>
-            <p className="text-sm text-gray-600">Welcome back, {user?.email}</p>
-          </div>
-          <button
-            onClick={() => {
-              logout?.();
-              window.location.href = '/login';
-            }}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Logout
-          </button>
+    <Layout title="Dashboard">
+      <div className="space-y-8">
+        {/* Welcome Card */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-8 text-white">
+          <h1 className="text-3xl font-bold mb-2">Welcome, {user?.email}!</h1>
+          <p className="text-blue-100">Start by uploading your CV or exploring job opportunities</p>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-sm text-gray-600">Total Job Offers</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.totalOffers || 0}</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-sm text-gray-600">My Postulations</p>
-              <p className="text-3xl font-bold text-green-600">{postulations.length}</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-sm text-gray-600">Success Rate</p>
-              <p className="text-3xl font-bold text-purple-600">
-                {postulations.length > 0 ? Math.round((postulations.filter(p => p.estado === 'Aceptado').length / postulations.length) * 100) : 0}%
-              </p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-sm text-gray-600">Total Weight</p>
-              <p className="text-3xl font-bold text-orange-600">
-                {postulations.reduce((sum, p) => sum + p.postulationWeight, 0)}
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard label="Total Postulations" value={postulations.length} color="blue" />
+          <StatCard label="Interview Rate" value={`${Math.round((postulations.filter(p => p.estado === 'Entrevista').length / Math.max(postulations.length, 1)) * 100)}%`} color="green" />
+          <StatCard label="Offers Received" value={postulations.filter(p => p.estado === 'Oferta').length} color="purple" />
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Jobs</h2>
-            {offers.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-600">
-                No jobs available
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {offers.map(offer => (
-                  <div key={offer.id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{offer.title}</h3>
-                        <p className="text-gray-600">{offer.company}</p>
-                      </div>
-                      <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded">
-                        {offer.level}
-                      </span>
-                    </div>
-                    <p className="text-gray-700 text-sm mb-3">{offer.description}</p>
-                    <div className="flex gap-4 mb-4 text-sm text-gray-600">
-                      {offer.location && <span>📍 {offer.location}</span>}
-                      {offer.salaryMin && <span>💰 CLP ${offer.salaryMin.toLocaleString()}</span>}
-                    </div>
-                    <button
-                      onClick={() => handlePostulate(offer.id)}
-                      disabled={isPosted(offer.id) || posting}
-                      className={`w-full py-2 px-4 rounded font-semibold transition ${
-                        isPosted(offer.id)
-                          ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                          : 'bg-blue-600 hover:bg-blue-700 text-white'
-                      }`}
-                    >
-                      {isPosted(offer.id) ? '✓ Applied' : 'Apply Now'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">My Applications</h2>
-            {postulations.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-600 text-sm">
-                No applications yet
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {postulations.map(post => (
-                  <div key={post.id} className="bg-white rounded-lg shadow p-4">
-                    <h4 className="font-semibold text-gray-900 text-sm">{post.title}</h4>
-                    <p className="text-xs text-gray-600">{post.company}</p>
-                    <div className="mt-2 flex gap-2 text-xs">
-                      <span className={`px-2 py-1 rounded ${
-                        post.estado === 'Aceptado' ? 'bg-green-100 text-green-700' :
-                        post.estado === 'Rechazado' ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {post.estado}
-                      </span>
-                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                        Wt: {post.postulationWeight}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Quick Actions */}
+        <div>
+          <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <QuickActionCard href="/cv-upload" title="Upload CV" description="Analyze your CV" />
+            <QuickActionCard href="/cv-management" title="View Profile" description="See your analysis" />
+            <QuickActionCard href="/offers" title="Find Offers" description="Discover opportunities" />
           </div>
         </div>
+
+        {/* Recent Postulations */}
+        <div>
+          <h2 className="text-xl font-bold mb-4">Recent Applications</h2>
+          {postulations.length === 0 ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-600">
+              No applications yet. Start by exploring offers!
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {postulations.slice(0, 5).map(p => (
+                <div key={p.id} className="bg-white rounded-lg shadow p-4 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Postulation {p.offerId}</h3>
+                    <p className="text-sm text-gray-600">Created {new Date(p.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <StatusBadge estado={p.estado} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+    </Layout>
+  );
+}
+
+function StatCard({ label, value, color }: { label: string; value: string | number; color: string }) {
+  const colorClass = {
+    blue: 'from-blue-50 to-blue-100 text-blue-600',
+    green: 'from-green-50 to-green-100 text-green-600',
+    purple: 'from-purple-50 to-purple-100 text-purple-600',
+  }[color];
+
+  return (
+    <div className={`bg-gradient-to-br ${colorClass} rounded-lg shadow p-6`}>
+      <p className="text-sm font-medium opacity-75">{label}</p>
+      <p className="text-3xl font-bold mt-2">{value}</p>
     </div>
+  );
+}
+
+function QuickActionCard({ href, title, description }: { href: string; title: string; description: string }) {
+  return (
+    <a href={href} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition hover:bg-blue-50">
+      <h3 className="font-bold text-gray-900 mb-1">{title}</h3>
+      <p className="text-sm text-gray-600">{description}</p>
+      <p className="text-blue-600 font-semibold text-sm mt-3">→ Go</p>
+    </a>
+  );
+}
+
+function StatusBadge({ estado }: { estado: string }) {
+  const colors = {
+    'Por revisar': 'bg-yellow-100 text-yellow-800',
+    'Preparar': 'bg-blue-100 text-blue-800',
+    'Aplicado': 'bg-gray-100 text-gray-800',
+    'Entrevista': 'bg-purple-100 text-purple-800',
+    'Oferta': 'bg-green-100 text-green-800',
+  };
+
+  return (
+    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${colors[estado as keyof typeof colors] || 'bg-gray-100'}`}>
+      {estado}
+    </span>
   );
 }

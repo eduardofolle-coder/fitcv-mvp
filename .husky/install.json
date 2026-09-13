@@ -1,0 +1,6 @@
+{
+  "hooks": {
+    "pre-commit": "node .claude/hooks/pre-commit.js",
+    "pre-push": "node .claude/hooks/pre-push.js"
+  }
+}

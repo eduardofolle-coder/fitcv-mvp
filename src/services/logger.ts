@@ -48,18 +48,20 @@ export class AuditLogger {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    stmt.run(
+    stmt.bind([
       id,
       event.eventType,
       event.userId || null,
       event.targetUserId || null,
       event.ipAddress || null,
       event.userAgent || null,
-      timestamp,
+      new Date().toISOString(),
       detailsEncrypted,
       yearMonth,
       month
-    );
+    ]);
+    stmt.step();
+    stmt.free();
 
     // ✅ Log también en Winston
     logger.warn(`SECURITY_EVENT: ${event.eventType}`, {

@@ -54,10 +54,12 @@ export class AuthService {
 
     const stmt = db.prepare(`
       INSERT INTO users (id, email, passwordHash, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
 
-    stmt.run(id, email.toLowerCase(), passwordHash, now, now);
+    stmt.bind([id, email.toLowerCase(), passwordHash]);
+    stmt.step();
+    stmt.free();
 
     return {
       id,
@@ -71,12 +73,20 @@ export class AuthService {
 
   static getUserById(userId: string): User | null {
     const stmt = db.prepare('SELECT * FROM users WHERE id = ? AND isDeleted = 0');
-    return stmt.get(userId) as User | undefined || null;
+    stmt.bind([userId]);
+    const hasUser = stmt.step();
+    const user = hasUser ? stmt.getAsObject() : null;
+    stmt.free();
+    return user as User | null;
   }
 
   static getUserByEmail(email: string): User | null {
     const stmt = db.prepare('SELECT * FROM users WHERE email = ? AND isDeleted = 0');
-    return stmt.get(email.toLowerCase()) as User | undefined || null;
+    stmt.bind([email.toLowerCase()]);
+    const hasUser = stmt.step();
+    const user = hasUser ? stmt.getAsObject() : null;
+    stmt.free();
+    return user as User | null;
   }
 
   static async storeRefreshToken(
@@ -86,14 +96,16 @@ export class AuthService {
     userAgent: string
   ): Promise<void> {
     const tokenHash = await bcryptjs.hash(refreshToken, 10);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const stmt = db.prepare(`
-      INSERT INTO refresh_tokens (id, userId, tokenHash, ipAddress, userAgent, expiresAt)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO refresh_tokens (id, userId, tokenHash, ipAddress, userAgent, expiresAt, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
 
-    stmt.run(uuidv4(), userId, tokenHash, ipAddress, userAgent, expiresAt);
+    stmt.bind([uuidv4(), userId, tokenHash, ipAddress, userAgent, expiresAt]);
+    stmt.step();
+    stmt.free();
   }
 
   static async validateRefreshToken(
@@ -107,19 +119,22 @@ export class AuthService {
       ORDER BY createdAt DESC LIMIT 1
     `);
 
-    const record = stmt.get(userId) as { tokenHash: string } | undefined;
+    stmt.bind([userId]);
+    const hasRecord = stmt.step();
+    const record = hasRecord ? stmt.getAsObject() : null;
+    stmt.free();
+
     if (!record) return false;
 
-    const isValid = await bcryptjs.compare(token, record.tokenHash);
-
-    // ✅ Si IP diferente → invalida token (token hijacking detection)
-    // if (oldIp !== newIp) → log security event
+    const isValid = await bcryptjs.compare(token, (record as any).tokenHash);
 
     return isValid;
   }
 
   static invalidateRefreshTokens(userId: string): void {
     const stmt = db.prepare('DELETE FROM refresh_tokens WHERE userId = ?');
-    stmt.run(userId);
+    stmt.bind([userId]);
+    stmt.step();
+    stmt.free();
   }
 }

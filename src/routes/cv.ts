@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { EncryptionService } from '../services/encryption.js';
 import { ProfileAnalyzerService, type ProfileAnalysisResult } from '../services/profileAnalyzer.js';
+import { AgentInvokerService } from '../services/agentInvoker.js';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
@@ -31,18 +32,24 @@ router.post(
     // ✅ Encriptar CV
     const encryptedCV = EncryptionService.encrypt(cvContent);
 
-    // ✅ Analizar perfil
-    const profile = await ProfileAnalyzerService.analyzeProfile(cvContent);
+    // ✅ Analizar perfil con Agent
+    const agentResult = await AgentInvokerService.invoke('cv-analyzer', { cvText: cvContent }, req.user.id);
+
+    if (!agentResult.success || !agentResult.output) {
+      throw new AppError(500, 'Failed to analyze CV');
+    }
+
+    const profile = agentResult.output.profile || agentResult.output;
 
     // ✅ Guardar en BD
     const profileId = uuidv4();
     const stmt = db.prepare(`
       INSERT INTO candidate_profiles (
         id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
 
-    stmt.run(
+    stmt.bind([
       profileId,
       req.user.id,
       fullName || profile.fullName,
@@ -50,10 +57,10 @@ router.post(
       JSON.stringify(profile.education),
       JSON.stringify(profile.skills),
       profile.summary,
-      encryptedCV,
-      new Date(),
-      new Date()
-    );
+      encryptedCV
+    ]);
+    stmt.step();
+    stmt.free();
 
     res.json({
       success: true,
@@ -83,7 +90,10 @@ router.get(
       LIMIT 1
     `);
 
-    const profile = stmt.get(req.user.id) as any;
+    stmt.bind([req.user.id]);
+    const hasProfile = stmt.step();
+    const profile = hasProfile ? stmt.getAsObject() : null;
+    stmt.free();
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
@@ -109,7 +119,10 @@ router.post(
       SELECT * FROM candidate_profiles WHERE userId = ? LIMIT 1
     `);
 
-    const profile = stmt.get(req.user.id) as any;
+    stmt.bind([req.user.id]);
+    const hasProfile = stmt.step();
+    const profile = hasProfile ? stmt.getAsObject() : null;
+    stmt.free();
 
     if (!profile) {
       throw new AppError(404, 'Profile not found');
@@ -129,12 +142,12 @@ router.post(
 
     // ✅ Guardar roles sugeridos
     suggestedRoles.forEach(role => {
-      const stmt = db.prepare(`
-        INSERT INTO suggested_roles (id, userId, roleTitle, level, description, matchScore, isSelected)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+      const insertStmt = db.prepare(`
+        INSERT INTO suggested_roles (id, userId, roleTitle, level, description, matchScore, isSelected, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `);
 
-      stmt.run(
+      insertStmt.bind([
         uuidv4(),
         req.user.id,
         role.title,
@@ -142,7 +155,9 @@ router.post(
         role.description,
         role.matchScore,
         false
-      );
+      ]);
+      insertStmt.step();
+      insertStmt.free();
     });
 
     res.json({
@@ -161,7 +176,12 @@ router.get(
       SELECT * FROM suggested_roles WHERE userId = ? ORDER BY matchScore DESC
     `);
 
-    const roles = stmt.all(req.user.id);
+    stmt.bind([req.user.id]);
+    const roles: any[] = [];
+    while (stmt.step()) {
+      roles.push(stmt.getAsObject());
+    }
+    stmt.free();
 
     res.json({
       success: true,
@@ -186,7 +206,9 @@ router.post(
       const stmt = db.prepare(`
         UPDATE suggested_roles SET isSelected = 1 WHERE id = ? AND userId = ?
       `);
-      stmt.run(roleId, req.user.id);
+      stmt.bind([roleId, req.user.id]);
+      stmt.step();
+      stmt.free();
     });
 
     res.json({

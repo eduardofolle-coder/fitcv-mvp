@@ -1,118 +1,72 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-
-export interface User {
-  id: string;
-  email: string;
-}
-
-export interface AuthState {
-  user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  loading: boolean;
-}
+import { useCallback, useState } from 'react';
+import { useAuthStore } from '../store/authStore';
+import { api } from '../services/api';
 
 export function useAuth() {
-  const navigate = useNavigate();
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    token: null,
-    isAuthenticated: false,
-    loading: true
-  });
+  const { token, user, setToken, setUser, logout: storeLogout } = useAuthStore();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadFromStorage = () => {
-      const token = localStorage.getItem('token');
-      const user = localStorage.getItem('user');
-
-      if (token && user) {
-        setState({
-          token,
-          user: JSON.parse(user),
-          isAuthenticated: true,
-          loading: false
-        });
-      } else {
-        setState(prev => ({ ...prev, loading: false }));
+  const login = useCallback(
+    async (email: string, password: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api.login(email, password);
+        api.setToken(response.accessToken);
+        setToken(response.accessToken);
+        setUser(response.user);
+        localStorage.setItem('token', response.accessToken);
+        localStorage.setItem('user', JSON.stringify(response.user));
+        return response.user;
+      } catch (err: any) {
+        const message = err.response?.data?.error || 'Login failed';
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
-    };
+    },
+    [setToken, setUser]
+  );
 
-    loadFromStorage();
-  }, []);
+  const register = useCallback(
+    async (email: string, password: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api.register(email, password);
+        api.setToken(response.accessToken);
+        setToken(response.accessToken);
+        setUser(response.user);
+        localStorage.setItem('token', response.accessToken);
+        localStorage.setItem('user', JSON.stringify(response.user));
+        return response.user;
+      } catch (err: any) {
+        const message = err.response?.data?.error || 'Registration failed';
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setToken, setUser]
+  );
 
-  const register = async (email: string, password: string) => {
-    try {
-      const response = await axios.post(`${API_URL}/auth/register`, {
-        email,
-        password
-      });
-
-      const { accessToken, user } = response.data;
-      localStorage.setItem('token', accessToken);
-      localStorage.setItem('user', JSON.stringify(user));
-
-      setState({
-        token: accessToken,
-        user,
-        isAuthenticated: true,
-        loading: false
-      });
-
-      navigate('/upload-cv');
-      return true;
-    } catch (error) {
-      console.error('Registration failed:', error);
-      return false;
-    }
-  };
-
-  const login = async (email: string, password: string) => {
-    try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
-        email,
-        password
-      });
-
-      const { accessToken, user } = response.data;
-      localStorage.setItem('token', accessToken);
-      localStorage.setItem('user', JSON.stringify(user));
-
-      setState({
-        token: accessToken,
-        user,
-        isAuthenticated: true,
-        loading: false
-      });
-
-      navigate('/dashboard');
-      return true;
-    } catch (error) {
-      console.error('Login failed:', error);
-      return false;
-    }
-  };
-
-  const logout = () => {
+  const logout = useCallback(() => {
+    storeLogout();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setState({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      loading: false
-    });
-    navigate('/login');
-  };
+  }, [storeLogout]);
 
   return {
-    ...state,
-    register,
+    user,
+    token,
+    loading,
+    error,
     login,
-    logout
+    register,
+    logout,
+    isAuthenticated: !!token && !!user,
   };
 }

@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { db } from '../db/client.js';
+import { EncryptionService } from '../services/encryption.js';
+import { AgentInvokerService } from '../services/agentInvoker.js';
 import { SEED_OFFERS } from '../db/seedData.js';
 
 const router = Router();
@@ -86,7 +88,10 @@ router.get(
     const { id } = req.params;
 
     const stmt = db.prepare('SELECT * FROM offers WHERE id = ? LIMIT 1');
-    const offer = stmt.get(id) as any;
+    stmt.bind([id]);
+    const hasOffer = stmt.step();
+    const offer = hasOffer ? stmt.getAsObject() : null;
+    stmt.free();
 
     if (!offer) {
       throw new AppError(404, 'Job offer not found');
@@ -133,8 +138,11 @@ router.get(
     const userPostsStmt = db.prepare(`
       SELECT COUNT(*) as count FROM postulations WHERE userId = ?
     `);
-    const userResults = userPostsStmt.all(req.user.id) as any[];
-    const userPostulations = userResults?.[0]?.count || 0;
+    userPostsStmt.bind([req.user.id]);
+    const hasUserResults = userPostsStmt.step();
+    const userCount = hasUserResults ? userPostsStmt.getAsObject() : { count: 0 };
+    userPostsStmt.free();
+    const userPostulations = userCount.count || 0;
 
     res.json({
       success: true,
@@ -148,6 +156,61 @@ router.get(
           averageSalary: 0,
           topLocations: []
         }
+      }
+    });
+  })
+);
+
+// ✅ GET /api/offers/ranked - Rankear ofertas según perfil
+router.get(
+  '/ranked',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    // ✅ Obtener CV del usuario
+    const profileStmt = db.prepare(`
+      SELECT cvOriginalContent FROM candidate_profiles WHERE userId = ? LIMIT 1
+    `);
+    profileStmt.bind([req.user.id]);
+    const hasProfile = profileStmt.step();
+    const profile = hasProfile ? profileStmt.getAsObject() : null;
+    profileStmt.free();
+
+    if (!profile) {
+      throw new AppError(404, 'Profile not found. Please upload your CV first.');
+    }
+
+    // ✅ Desencriptar CV
+    const cvContent = EncryptionService.decrypt(profile.cvOriginalContent);
+
+    // ✅ Usar seed offers (5 offers disponibles)
+    const offersForRanking = SEED_OFFERS.map((o, i) => ({
+      id: o.id,
+      index: i + 1,
+      title: o.title,
+      company: o.company,
+      description: o.description,
+      level: o.level,
+      salary: `${o.salaryMin}-${o.salaryMax}`,
+      location: o.location
+    }));
+
+    // ✅ Invocar agent de ranking
+    const agentResult = await AgentInvokerService.invoke('offer-ranker', {
+      cvText: cvContent,
+      offers: offersForRanking
+    }, req.user.id);
+
+    if (!agentResult.success || !agentResult.output) {
+      throw new AppError(500, 'Failed to rank offers');
+    }
+
+    const rankings = agentResult.output.rankings || agentResult.output;
+
+    res.json({
+      success: true,
+      data: {
+        rankings,
+        candidateSummary: agentResult.output.candidateSummary
       }
     });
   })

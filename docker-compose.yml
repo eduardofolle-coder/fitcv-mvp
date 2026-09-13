@@ -1,62 +1,45 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database (for v1.0+)
-  postgres:
-    image: postgres:15-alpine
-    container_name: fitcv-db
-    environment:
-      POSTGRES_DB: fitcv
-      POSTGRES_USER: fitcv_user
-      POSTGRES_PASSWORD: fitcv_password_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fitcv_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Backend API
   backend:
-    build: .
-    container_name: fitcv-api
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "3000:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://fitcv_user:fitcv_password_dev@postgres:5432/fitcv
-      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-dev-secret-key}
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-dev-secret-key}
-      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-dev-encryption-key-32bytes}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-key}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev-encryption-key-32-chars}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 5s
+      start_period: 10s
+    restart: unless-stopped
 
-  # Frontend (optional - for full stack dev)
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: fitcv-web
-  #   ports:
-  #     - "3001:3001"
-  #   depends_on:
-  #     - backend
-
-volumes:
-  postgres_data:
-    driver: local
+  frontend:
+    build:
+      context: ./fitcv-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:3000/api
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
 networks:
   default:

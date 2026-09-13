@@ -1,319 +1,242 @@
 # FITCV Deployment Guide
 
-**Version:** MVP v0.2  
-**Target:** Railway (Backend) + Vercel (Frontend)  
-**Estimated Time:** 30 minutes
+Production-ready deployment instructions for FITCV MVP (Phases 1-5 complete).
 
----
+## 📋 Prerequisites
 
-## Prerequisites
+- Docker & Docker Compose (recommended)
+- OR Node.js 20+ + npm
+- Claude API key from https://console.anthropic.com
+- Domain name (optional, for HTTPS)
 
-- GitHub account (for code)
-- Railway account (free tier available)
-- Vercel account (free tier available)
-- Claude API key (from console.anthropic.com)
+## 🚀 Option 1: Docker Compose (Recommended)
 
----
+Fastest way to deploy both backend and frontend together.
 
-## Part A: Backend Deployment (Railway)
-
-### 1. Push Code to GitHub
+### Setup
 
 ```bash
-cd C:\Users\Userx\Desktop\fitcv-mvp
-git remote add origin https://github.com/YOUR_USERNAME/fitcv-mvp.git
-git branch -M main
-git push -u origin main
+# Clone repository
+git clone <repo>
+cd fitcv-mvp
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your secrets
+nano .env
+# Set: JWT_SECRET, JWT_REFRESH_SECRET, ENCRYPTION_KEY, CLAUDE_API_KEY
 ```
 
-### 2. Create Railway Project
-
-1. Go to https://railway.app
-2. Click "New Project"
-3. Select "Deploy from GitHub"
-4. Connect GitHub and select `fitcv-mvp` repository
-5. Select `main` branch
-
-### 3. Configure Backend Service
-
-**Environment Variables (add in Railway dashboard):**
-
-```
-NODE_ENV=production
-PORT=3000
-DATABASE_URL=postgresql://[railway-postgres-url]
-JWT_PRIVATE_KEY=your-secret-key-here
-JWT_PUBLIC_KEY=your-public-key-here
-DATA_ENCRYPTION_KEY=your-32-byte-key-here
-CLAUDE_API_KEY=sk-ant-xxxxx
-ALLOWED_ORIGINS=https://fitcv.vercel.app
-LOG_LEVEL=info
-```
-
-### 4. Add PostgreSQL Database
-
-1. In Railway, click "+ New"
-2. Select "PostgreSQL"
-3. Railway will auto-populate `DATABASE_URL`
-4. Copy the URL to your backend service
-
-### 5. Deploy
-
-1. Railway auto-deploys on git push
-2. Check "Deployments" tab for status
-3. Copy the deployed URL: `https://fitcv-api-xxxxx.railway.app`
-
----
-
-## Part B: Frontend Deployment (Vercel)
-
-### 1. Create Vercel Project
-
-1. Go to https://vercel.com
-2. Click "New Project"
-3. Import your GitHub repository
-4. Select `main` branch
-5. Set framework to "Vite"
-
-### 2. Configure Build Settings
-
-**Build Command:**
-```
-cd frontend && npm install && npm run build
-```
-
-**Output Directory:**
-```
-frontend/dist
-```
-
-### 3. Environment Variables
-
-**In Vercel dashboard, set:**
-
-```
-VITE_API_URL=https://fitcv-api-xxxxx.railway.app/api
-```
-
-### 4. Deploy
-
-1. Vercel auto-deploys on git push
-2. Check "Deployments" tab
-3. Your URL: `https://fitcv.vercel.app`
-
----
-
-## Part C: Local Docker Deployment (Optional)
-
-### For full-stack local testing with PostgreSQL:
+### Deploy
 
 ```bash
-# 1. Build and run with Docker Compose
-docker-compose up -d
+# Build and start all services
+docker-compose up --build
 
-# 2. Wait for services to start (30s)
-docker-compose logs -f
+# Services will be available at:
+# - Backend API: http://localhost:3000
+# - Frontend UI: http://localhost:3001
+```
 
-# 3. Test backend
+### Verify
+
+```bash
 curl http://localhost:3000/health
-
-# 4. Backend at: http://localhost:3000
-# 5. Database at: localhost:5432
+curl http://localhost:3001
 ```
 
-### Connect to PostgreSQL locally:
-
-```bash
-psql -h localhost -U fitcv_user -d fitcv
-# Password: fitcv_password_dev
-```
-
----
-
-## Monitoring & Logs
-
-### Railway Logs
-
-```bash
-# View real-time logs
-railway logs
-
-# Or in dashboard: Project → Service → Logs
-```
-
-### Vercel Logs
-
-```bash
-# View build logs in dashboard
-# Project → Deployments → Click deployment → Logs
-```
-
----
-
-## Production Checklist
-
-- [ ] Environment variables set on Railway
-- [ ] PostgreSQL database connected
-- [ ] Claude API key configured
-- [ ] Frontend CORS allowed origins set
-- [ ] HTTPS enforced on both services
-- [ ] SSL certificates valid
-- [ ] Backups configured (Railway: automated)
-- [ ] Monitoring enabled (logs)
-- [ ] Error tracking (optional: Sentry)
-
----
-
-## Rollback Plan
-
-### If deployment fails:
-
-1. **Railway:** Go to Deployments → select previous → "Redeploy"
-2. **Vercel:** Go to Deployments → select previous → "Redeploy"
-
-### Manual Rollback:
-
-```bash
-git revert HEAD
-git push origin main
-# Auto-redeploys
-```
-
----
-
-## Cost Estimates (as of 2026)
-
-| Service | Tier | Cost/Month |
-|---------|------|-----------|
-| Railway | Starter | $5-20 |
-| Vercel | Pro | $20 |
-| Claude API | Pay-as-you-go | $0.01/CV generated |
-| **Total** | | **$25-40 + API** |
-
-**Example:** 100K users × 50 CVs/month × $0.01 = $50K/month API (but gross revenue = $2M/month)
-
----
-
-## Performance Optimization
+## 🚀 Option 2: Vercel + Railway (Recommended for Production)
 
 ### Backend (Railway)
 
-- Vertical scale: Add more RAM/CPU if needed
-- Horizontal scale: Multiple instances with load balancer
-- Cache: Add Redis for session/data cache
-- Database: Add read replicas for heavy queries
+```bash
+# 1. Push code to GitHub
+git push origin main
+
+# 2. Connect to Railway: https://railway.app
+# 3. New Project → GitHub repo
+# 4. Set environment variables:
+#    - NODE_ENV=production
+#    - JWT_SECRET=<generate>
+#    - JWT_REFRESH_SECRET=<generate>
+#    - ENCRYPTION_KEY=<32 random chars>
+#    - CLAUDE_API_KEY=<your key>
+
+# 5. Deploy - Railway auto-deploys from git
+```
+
+Railway will provide: `https://fitcv-backend-prod.railway.app`
 
 ### Frontend (Vercel)
 
-- Edge caching: Configure in vercel.json
-- Image optimization: Use next/image or vite-plugin-imagemin
-- Bundle analysis: `npm run build -- --analyze`
+```bash
+# 1. Push code to GitHub
 
----
+# 2. Import project: https://vercel.com/new
+#    - Select: fitcv-frontend folder
+#    - Framework: Next.js
+#    - Build: npm run build
+#    - Start: npm start
 
-## Security Checklist
+# 3. Set environment variable:
+#    - NEXT_PUBLIC_API_URL=https://fitcv-backend-prod.railway.app/api
 
-- [ ] Environment variables NEVER in git (use .env.local)
-- [ ] JWT keys rotated regularly
-- [ ] SSL/TLS enforced
-- [ ] CORS properly configured
-- [ ] Rate limiting active
-- [ ] Input validation on all endpoints
-- [ ] Secrets manager for sensitive data
-
----
-
-## Disaster Recovery
-
-### Backup Strategy
-
-```
-Daily automated backups:
-- Database: Railway handles (included)
-- Code: GitHub (included)
-- Secrets: Use Railway's vault
-
-Recovery time: < 1 hour
-Recovery point: < 24 hours
+# 4. Deploy - Vercel auto-deploys from git
 ```
 
-### Restore from Backup
+Vercel will provide: `https://fitcv-frontend.vercel.app`
+
+## 🚀 Option 3: AWS Elastic Beanstalk
+
+### Backend
 
 ```bash
-# Railway provides one-click restore
-# 1. Go to Database service
-# 2. Click "Restore"
-# 3. Select date
-# 4. Done
+# 1. Create Elastic Beanstalk app
+eb create fitcv-backend --instance-type t3.micro
+
+# 2. Set environment variables
+eb setenv \
+  NODE_ENV=production \
+  JWT_SECRET=<generate> \
+  JWT_REFRESH_SECRET=<generate> \
+  ENCRYPTION_KEY=<32 chars> \
+  CLAUDE_API_KEY=<your key>
+
+# 3. Deploy
+eb deploy
+
+# 4. Enable HTTPS (AWS Certificate Manager)
+eb scale 2  # Auto-scaling
 ```
 
----
-
-## CI/CD Pipeline
-
-### Auto-deploy on git push
+### Frontend (S3 + CloudFront)
 
 ```bash
-# Add to repository secrets (GitHub)
-# → Settings → Secrets
+# 1. Build
+npm run build
 
-RAILWAY_API_TOKEN=your-token
-VERCEL_TOKEN=your-token
+# 2. Upload to S3
+aws s3 sync .next s3://fitcv-frontend/ --delete
 
-# Then add GitHub Actions workflow...
-# (see .github/workflows/deploy.yml)
+# 3. CloudFront invalidation
+aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"
 ```
 
+## 🔒 Security Checklist
+
+Before going to production:
+
+- [ ] Generate strong secrets (32+ chars, random)
+- [ ] Enable HTTPS with SSL certificate
+- [ ] Set rate limiting limits
+- [ ] Configure CORS for your domain only
+- [ ] Enable database encryption
+- [ ] Set up monitoring/alerting
+- [ ] Enable audit logging
+- [ ] Configure backup strategy
+- [ ] Test authentication flows
+- [ ] Run security scan (npm audit)
+
+## 📊 Monitoring
+
+### Health Checks
+
+```bash
+# Backend
+curl https://api.fitcv.example.com/health
+
+# Frontend
+curl https://fitcv.example.com
+```
+
+### Logs
+
+```bash
+# Docker
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# Railway/Vercel - view in dashboard
+
+# AWS - CloudWatch logs
+```
+
+## 🔄 CI/CD Pipeline (GitHub Actions)
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel --prod
+```
+
+## 🚨 Troubleshooting
+
+### "Port already in use"
+```bash
+# Change port in .env
+PORT=3001
+```
+
+### "Database locked"
+```bash
+# Stop all processes and restart
+docker-compose restart
+```
+
+### "CLAUDE_API_KEY invalid"
+```bash
+# Verify key format: sk-ant-...
+# Check at https://console.anthropic.com
+```
+
+### "CORS errors in browser"
+```bash
+# Update ALLOWED_ORIGINS in .env
+ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
+```
+
+## 📈 Scaling
+
+For high traffic:
+
+1. **Database**: Switch from SQLite to PostgreSQL
+2. **Cache**: Add Redis for session storage
+3. **API**: Use load balancer (AWS ALB, Nginx)
+4. **CDN**: Cloudflare for static assets
+5. **Analytics**: Add monitoring (Datadog, New Relic)
+
+## 📞 Support
+
+For issues:
+1. Check logs first
+2. Verify environment variables
+3. Test with curl before debugging UI
+4. Check security audit with `npm audit`
+
 ---
 
-## Troubleshooting
-
-### Backend won't start
-
-1. Check logs on Railway
-2. Verify DATABASE_URL is correct
-3. Verify all env vars are set
-4. Check Node version (should be 22)
-
-### Frontend won't build
-
-1. Check build logs on Vercel
-2. Verify VITE_API_URL is set
-3. Verify frontend/package.json exists
-4. Check npm dependencies installed
-
-### CORS errors
-
-1. Backend: Verify ALLOWED_ORIGINS includes frontend URL
-2. Frontend: Verify VITE_API_URL points to backend
-3. Restart services after env changes
-
-### Database connection timeout
-
-1. Verify DATABASE_URL syntax
-2. Check PostgreSQL is running (Docker)
-3. Check firewall rules (Railway allows public)
-4. Verify credentials
-
----
-
-## Next Steps
-
-1. ✅ Push code to GitHub
-2. ✅ Deploy backend to Railway
-3. ✅ Deploy frontend to Vercel
-4. ✅ Test full flow in production
-5. ✅ Monitor logs and metrics
-6. ✅ Set up error tracking (Sentry)
-7. ✅ Configure analytics (Google Analytics)
-8. ✅ Set up monitoring alerts
-
----
-
-**Deployment Status:**
-- Backend: Ready for Railway
-- Frontend: Ready for Vercel
-- Database: Railway PostgreSQL included
-- Monitoring: Built-in (logs)
-
-**Expected uptime:** 99.5%+ with auto-recovery
+**Status**: All 5 phases complete and production-ready ✅

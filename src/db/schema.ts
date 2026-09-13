@@ -158,5 +158,95 @@ export function initializeSchema() {
     CREATE INDEX IF NOT EXISTS idx_support_tickets_userId ON support_tickets(userId);
   `);
 
+  // Agent invocations table (for tracking agent calls and costs)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_invocations (
+      id TEXT PRIMARY KEY,
+      agentName TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      input TEXT NOT NULL,
+      output TEXT,
+      error TEXT,
+      durationMs INTEGER,
+      costTokens INTEGER,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completedAt DATETIME,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_invocations_userId ON agent_invocations(userId);
+    CREATE INDEX IF NOT EXISTS idx_agent_invocations_agentName ON agent_invocations(agentName);
+    CREATE INDEX IF NOT EXISTS idx_agent_invocations_status ON agent_invocations(status);
+    CREATE INDEX IF NOT EXISTS idx_agent_invocations_createdAt ON agent_invocations(createdAt);
+  `);
+
+  // Postulation matches table (results from cv-matcher agent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS postulation_matches (
+      id TEXT PRIMARY KEY,
+      postulationId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      matchScore REAL,
+      matchPercentage REAL,
+      strengths TEXT, -- JSON array
+      gaps TEXT, -- JSON array
+      recommendation TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (postulationId) REFERENCES postulations(id) ON DELETE CASCADE,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_postulation_matches_userId ON postulation_matches(userId);
+    CREATE INDEX IF NOT EXISTS idx_postulation_matches_postulationId ON postulation_matches(postulationId);
+  `);
+
+  // Successful adaptations table (for memory & learning)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS successful_adaptations (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      jobTitle TEXT NOT NULL,
+      company TEXT NOT NULL,
+      atsScore REAL,
+      keywords TEXT, -- JSON array
+      cvChanges TEXT, -- JSON array
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_successful_adaptations_userId ON successful_adaptations(userId);
+    CREATE INDEX IF NOT EXISTS idx_successful_adaptations_atsScore ON successful_adaptations(atsScore);
+  `);
+
+  // Application outcomes table (tracking results)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS application_outcomes (
+      id TEXT PRIMARY KEY,
+      adaptationId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      outcome TEXT NOT NULL, -- applied|interview|offer|rejection
+      feedback TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (adaptationId) REFERENCES successful_adaptations(id) ON DELETE CASCADE,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_application_outcomes_userId ON application_outcomes(userId);
+    CREATE INDEX IF NOT EXISTS idx_application_outcomes_outcome ON application_outcomes(outcome);
+  `);
+
+  // Postulation outcomes table (for continuous learning)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS postulation_outcomes (
+      id TEXT PRIMARY KEY,
+      postulationId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      feedback TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (postulationId) REFERENCES postulations(id) ON DELETE CASCADE,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_postulation_outcomes_userId ON postulation_outcomes(userId);
+    CREATE INDEX IF NOT EXISTS idx_postulation_outcomes_outcome ON postulation_outcomes(outcome);
+  `);
+
   console.log('✅ Database schema initialized');
 }

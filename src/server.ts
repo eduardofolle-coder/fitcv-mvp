@@ -6,8 +6,11 @@ import { env } from './env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
 import cvRoutes from './routes/cv.js';
+import cvAgentRoutes from './routes/cv-agent.js';
 import postulationsRoutes from './routes/postulations.js';
+import postulationsAgentRoutes from './routes/postulations-agent.js';
 import offersRoutes from './routes/offers.js';
+import learningRoutes from './routes/learning.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
@@ -72,8 +75,11 @@ app.get('/health', (req, res) => {
 // ✅ Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/cv', cvRoutes);
+app.use('/api/cv', cvAgentRoutes); // Agent-integrated CV routes
 app.use('/api/postulations', postulationsRoutes);
+app.use('/api/postulations', postulationsAgentRoutes); // Agent-integrated postulation routes
 app.use('/api/offers', offersRoutes);
+app.use('/api/learning', learningRoutes); // Continuous learning routes
 
 // ✅ 404 handler
 app.use((req, res) => {
