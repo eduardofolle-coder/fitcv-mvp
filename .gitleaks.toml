@@ -1,0 +1,34 @@
+# Configuración de gitleaks.
+#
+# Se mantienen TODAS las reglas por defecto: esto no baja el listón, solo
+# exceptúa dos cadenas concretas que ya están en el historial y que se verificó
+# que son señuelos, no credenciales.
+#
+# Por qué una excepción y no borrarlas: los patrones ya no están en el árbol de
+# trabajo, pero sí en commits publicados. Sacarlos de ahí exigiría reescribir
+# historia compartida, lo que es desproporcionado y riesgoso frente a dos
+# valores inertes. Se verificó además que .env nunca estuvo versionado.
+#
+# Las expresiones son literales exactos a propósito: cualquier otra clave, aun
+# parecida, sigue haciendo fallar el escaneo.
+
+title = "FITCV"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Señuelos conocidos en el historial (no son credenciales)"
+regexes = [
+  # Placeholder de CI. Nunca fue una clave: la de verdad mide ~108 caracteres
+  # y esta anuncia en su propio texto que no lo es.
+  '''sk-ant-ci-placeholder-not-a-real-key''',
+
+  # JWT deliberadamente inválido, usado por el test que comprueba que un token
+  # falsificado se rechaza. Su firma es literalmente "bogussignature".
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJzdWIiOiJmYWtlIn0\.bogussignature''',
+
+  # Claves de prueba de los workflows: su valor declara que son de CI.
+  '''ci-(private|public)-key-for-tests-only-32chars!?''',
+  '''ci-encryption-key-for-tests-32chars!''',
+]

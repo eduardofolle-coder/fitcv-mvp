@@ -145,3 +145,5 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Reglas por defecto más las excepciones justificadas en el archivo.
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
