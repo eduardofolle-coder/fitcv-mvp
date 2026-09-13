@@ -7,7 +7,6 @@
  */
 
 import express, { Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
@@ -18,161 +17,12 @@ import { SEED_OFFERS } from '../db/seedData.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = express.Router();
+// El POST /:id/generate-cv que vivía acá duplicaba el de postulations.ts,
+// pero guardaba el CV adaptado en texto plano en vez de cifrarlo. Como este
+// router se monta primero (para que /ranked y /match no los trague el /:id
+// del otro), su versión ganaba y el CV quedaba sin cifrar. Se elimina: la
+// ruta base ya invoca al agente cv-adapter y cifra antes de persistir.
 
-/**
- * POST /api/postulations/:id/generate-cv
- *
- * Generate adapted CV for specific postulation using cv-adapter agent
- *
- * URL params:
- * - id: Postulation ID
- *
- * Request body:
- * {
- *   "offerId": "offer-123" (optional, uses postulation offerId if not provided)
- * }
- *
- * Response:
- * {
- *   "success": true,
- *   "adaptedCvId": "...",
- *   "adaptedCV": "Full CV text...",
- *   "atsScore": 88,
- *   "keywordMatches": [...],
- *   "changes": [...],
- *   "agentCost": 450
- * }
- */
-router.post(
-  '/:id/generate-cv',
-  requireAuth,
-  asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user.id;
-    const postulationId = req.params.id;
-
-    // Fetch postulation
-    const postulation = await db.queryOne(`
-      SELECT p.*, o.title, o.description, o.level
-      FROM postulations p
-      JOIN offers o ON p.offerId = o.id
-      WHERE p.id = $1 AND p.userId = $2
-    `, [postulationId, userId]);
-
-    if (!postulation || !postulation.id) {
-      return res.status(404).json({
-        success: false,
-        error: 'Postulation not found',
-      });
-    }
-
-    // Fetch candidate profile
-    const profile = await db.queryOne<any>(
-      'SELECT * FROM candidate_profiles WHERE userId = $1 LIMIT 1',
-      [userId]
-    );
-
-    if (!profile || !profile.id) {
-      return res.status(400).json({
-        success: false,
-        error: 'No CV profile found. Please upload a CV first.',
-      });
-    }
-
-    logger.info('CV adaptation started', { userId, postulationId });
-
-    // Create tracking record
-    const invocationId = await AgentTrackerService.createInvocation('cv-adapter', userId, {
-      postulationId,
-      offerId: postulation.offerId,
-      jobTitle: postulation.title,
-    });
-
-    try {
-      // Invoke cv-adapter agent
-      const invocation = await AgentInvokerService.invoke(
-        'cv-adapter',
-        {
-          originalCV: profile.cvOriginalContent,
-          candidateProfile: {
-            fullName: profile.fullName,
-            yearsExperience: profile.yearsExperience,
-            skills: safeJsonParse(profile.skills, {}),
-            education: safeJsonParse(profile.education, []),
-            summary: profile.summary,
-          },
-          jobDescription: postulation.description,
-          jobTitle: postulation.title,
-          jobLevel: postulation.level,
-        },
-        userId
-      );
-
-      // Record success
-      await AgentTrackerService.recordSuccess(invocationId, invocation);
-
-      if (!invocation.success || !invocation.output) {
-        logger.warn('CV adaptation failed', { userId, postulationId, error: invocation.error });
-        return res.status(400).json({
-          success: false,
-          error: invocation.error || 'Failed to adapt CV',
-        });
-      }
-
-      // Save adapted CV to database
-      const adaptedCvId = uuidv4();
-      const adaptation = invocation.output.adaptation;
-
-      await db.query(`
-        INSERT INTO adapted_cvs (id, postulationId, userId, offerId, htmlContent, atsScore, changesHighlights, createdAt)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-      `, [
-        adaptedCvId,
-        postulationId,
-        userId,
-        postulation.offerId,
-        adaptation.adaptedCV, // In production, should be encrypted
-        adaptation.atsScore,
-        JSON.stringify(adaptation.changes),
-      ]);
-
-      // Update postulation with adapted CV reference
-      await db.query(`
-        UPDATE postulations SET cvAdaptedId = $1, updatedAt = CURRENT_TIMESTAMP WHERE id = $2
-      `, [adaptedCvId, postulationId]);
-
-      logger.info('CV adaptation saved', { userId, postulationId, adaptedCvId, atsScore: adaptation.atsScore });
-
-      res.status(201).json({
-        success: true,
-        adaptedCvId,
-        adaptedCV: adaptation.adaptedCV,
-        atsScore: adaptation.atsScore,
-        keywordMatches: adaptation.keywordMatches,
-        changes: adaptation.changes,
-        optimizations: adaptation.optimizations,
-        quality: invocation.output.quality,
-        recommendations: invocation.output.recommendations,
-        agentCost: invocation.costTokens,
-        agentDuration: invocation.durationMs,
-      });
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      await AgentTrackerService.recordFailure(
-        invocationId,
-        errorMsg,
-        Math.abs(Date.now() - new Date().getTime())
-      );
-
-      logger.error('CV adaptation error', { userId, postulationId, error: errorMsg });
-
-      res.status(500).json({
-        success: false,
-        error: 'Failed to adapt CV',
-        agentId: invocationId,
-      });
-    }
-  })
-);
 
 /**
  * POST /api/postulations/match

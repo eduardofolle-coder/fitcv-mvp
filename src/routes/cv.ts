@@ -31,11 +31,19 @@ function flattenSkills(raw: any): string[] {
   return [];
 }
 
-// ✅ Rate limiting: máximo 5 uploads por hora
+// ✅ Rate limiting por usuario: cada subida cuesta una llamada al modelo.
+// El límite anterior de 5/hora lo alcanzaba cualquiera corrigiendo su CV, y
+// respondía sin campo `error`, así que el frontend mostraba "Request failed
+// (429)" en vez de explicar qué pasó.
 const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
-  keyGenerator: (req: any) => req.user?.id || req.ip
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || req.ip,
+  message: {
+    error: 'You have reached the CV analysis limit for this hour. Please try again later.'
+  }
 });
 
 // ✅ POST /api/cv/upload

@@ -7,6 +7,7 @@
 
 import axios from 'axios';
 import { logger } from './logger';
+import { env } from '../env';
 import { AppError } from '../middleware/errorHandler';
 import { extractJson } from '../utils/safeJson';
 
@@ -55,8 +56,10 @@ const AGENT_CONFIG: Record<AgentName, { model: string; maxTokens: number }> = {
 };
 
 export class AgentInvokerService {
-  private static apiKey = process.env.CLAUDE_API_KEY;
-  private static apiUrl = 'https://api.anthropic.com/v1/messages';
+  private static apiKey = env.CLAUDE_API_KEY;
+  // Configurable para poder apuntar a un gateway propio, y para que los tests
+  // ejerciten el flujo completo contra un upstream simulado.
+  private static apiUrl = env.CLAUDE_API_URL;
 
   /**
    * Invoke a FITCV agent
