@@ -15,6 +15,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { db } from '../db/client.js';
 import { logger } from '../services/logger.js';
+import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = Router();
 
@@ -158,7 +159,7 @@ router.get(
       const keywordMap = new Map<string, number>();
       rows.forEach(row => {
         try {
-          const keywords = JSON.parse(row.keywords || '[]');
+          const keywords = safeJsonParse<string[]>(row.keywords, []);
           keywords.forEach((k: string) => {
             keywordMap.set(k, (keywordMap.get(k) || 0) + (row.atsScore || 0));
           });
@@ -282,7 +283,7 @@ router.get(
 
       rows.forEach((row, idx) => {
         try {
-          const keywords = JSON.parse(row.keywords || '[]');
+          const keywords = safeJsonParse<string[]>(row.keywords, []);
           keywords.forEach((k: string) => {
             allSkills.add(k);
             if (idx < 10) recentSkills.add(k); // Last 10 adaptations
@@ -345,7 +346,7 @@ router.get(
       const keywordMap = new Map<string, number>();
       keywordRows.forEach(row => {
         try {
-          const keywords = JSON.parse(row.keywords || '[]');
+          const keywords = safeJsonParse<string[]>(row.keywords, []);
           keywords.forEach((k: string) => {
             keywordMap.set(k, (keywordMap.get(k) || 0) + 1);
           });
@@ -438,7 +439,7 @@ router.get(
       const hotSkills = new Set<string>();
       trendRows.forEach(row => {
         try {
-          const keywords = JSON.parse(row.keywords || '[]');
+          const keywords = safeJsonParse<string[]>(row.keywords, []);
           keywords.forEach((k: string) => {
             if (hotSkills.size < 10) hotSkills.add(k);
           });

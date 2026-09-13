@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './env.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { logger } from './services/logger.js';
 import authRoutes from './routes/auth.js';
 import cvRoutes from './routes/cv.js';
 import cvAgentRoutes from './routes/cv-agent.js';
@@ -16,17 +17,16 @@ import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
 const app = express();
 
-// ✅ Database initialization on deployment (async)
-(async () => {
-  try {
-    await import('./db/client.js').then(m => m.db.init());
-    initializeSchema();
-    await initializeSeedData();
-    console.log('✅ Database ready');
-  } catch (err) {
-    console.error('❌ Failed to initialize database:', err);
-  }
-})();
+// ✅ Database initialization. El servidor NO acepta tráfico hasta que termina:
+// antes se llamaba sin await y app.listen() arrancaba en paralelo, de modo que
+// las primeras requests de un arranque en frío pegaban contra una BD inexistente.
+async function initializeDatabase() {
+  const { db } = await import('./db/client.js');
+  await db.init();
+  initializeSchema();
+  await initializeSeedData();
+  console.log('✅ Database ready');
+}
 
 // ✅ CORS configuration (must be before helmet)
 app.use(cors({
@@ -93,19 +93,58 @@ app.use(errorHandler);
 
 // ✅ Start server
 const PORT = env.PORT;
-const server = app.listen(PORT, () => {
-  console.log(`🚀 FITCV API running on http://localhost:${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
-});
+let server: import('http').Server | undefined;
 
-// Writes are flushed on a short debounce, so drain them before exiting.
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, async () => {
+async function shutdown(code: number) {
+  try {
     const { db } = await import('./db/client.js');
     db.flush();
-    server.close(() => process.exit(0));
+  } catch (err) {
+    console.error('Failed to flush database on shutdown:', err);
+  }
+
+  if (!server) process.exit(code);
+
+  // Si las conexiones abiertas no drenan, no se puede quedar colgado para siempre.
+  const force = setTimeout(() => process.exit(code), 10_000).unref();
+  server.close(() => {
+    clearTimeout(force);
+    process.exit(code);
   });
 }
+
+// Un throw fuera de un handler de Express mataba el proceso sin dejar rastro ni
+// guardar la BD. Se registra, se persiste y recién ahí se sale.
+process.on('uncaughtException', err => {
+  console.error('💥 Uncaught exception:', err);
+  logger.error('Uncaught exception', {message: err?.message, stack: err?.stack});
+  shutdown(1);
+});
+
+process.on('unhandledRejection', reason => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  console.error('💥 Unhandled rejection:', err);
+  logger.error('Unhandled rejection', {message: err.message, stack: err.stack});
+  shutdown(1);
+});
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => shutdown(0));
+}
+
+// Arrancar solo con la BD lista. Si no lo está, se sale con código de error en
+// vez de servir 500s en silencio para siempre.
+initializeDatabase()
+  .then(() => {
+    server = app.listen(PORT, () => {
+      console.log(`🚀 FITCV API running on http://localhost:${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
+    });
+  })
+  .catch(err => {
+    console.error('❌ Failed to initialize database, refusing to start:', err);
+    process.exit(1);
+  });
 
 export default app;

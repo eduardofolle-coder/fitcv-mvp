@@ -11,8 +11,17 @@ const DB_FILE = path.resolve(
 
 let dbInstance: any = null;
 let SQL: any = null;
-let saveTimer: NodeJS.Timeout | null = null;
 
+/**
+ * Escribe vía archivo temporal + rename, que es atómico: un corte a mitad de
+ * escritura deja el .db anterior intacto en vez de un archivo truncado.
+ *
+ * Es síncrono a propósito. Con flush diferido, una caída dura (SIGKILL, OOM,
+ * corte de luz) perdía las últimas escrituras, y en Windows los handlers de
+ * señal ni siquiera corren para un kill programático. La BD del MVP pesa unos
+ * pocos KB, así que el costo por escritura es despreciable frente a perder la
+ * cuenta de un usuario.
+ */
 function persistNow() {
   if (!dbInstance) return;
   try {
@@ -25,16 +34,26 @@ function persistNow() {
   }
 }
 
-// Writes are batched: a burst of statements results in a single disk flush.
-function schedulePersist() {
-  if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    persistNow();
-  }, 150);
-}
-
 const MUTATING = /^\s*(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)/i;
+
+/**
+ * Persiste apenas la sentencia se ejecuta. No se puede guardar en prepare():
+ * en ese momento el cambio todavía no ocurrió.
+ */
+function persistAfterWrite(stmt: any) {
+  return new Proxy(stmt, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function') return value;
+
+      return (...args: any[]) => {
+        const result = value.apply(target, args);
+        if (prop === 'step' || prop === 'run') persistNow();
+        return result;
+      };
+    },
+  });
+}
 
 async function getDB() {
   if (!SQL) {
@@ -61,8 +80,7 @@ const dbClient = {
     if (!dbInstance) throw new Error('Database not initialized');
     try {
       const stmt = dbInstance.prepare(sql);
-      if (MUTATING.test(sql)) schedulePersist();
-      return stmt;
+      return MUTATING.test(sql) ? persistAfterWrite(stmt) : stmt;
     } catch (err) {
       console.error('SQL Error (prepare):', err);
       throw err;
@@ -73,17 +91,13 @@ const dbClient = {
     try {
       if (!dbInstance) throw new Error('Database not initialized');
       dbInstance.run(sql);
-      if (MUTATING.test(sql)) schedulePersist();
+      if (MUTATING.test(sql)) persistNow();
     } catch (err) {
       console.error('Exec error:', err);
     }
   },
 
   flush() {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
     persistNow();
   },
 

@@ -8,6 +8,7 @@
 import axios from 'axios';
 import { logger } from './logger';
 import { AppError } from '../middleware/errorHandler';
+import { extractJson } from '../utils/safeJson';
 
 export type AgentName = 'cv-analyzer' | 'postulation-matcher' | 'cv-adapter' | 'offer-ranker' | 'postulation-orchestrator';
 
@@ -374,28 +375,18 @@ CRITICAL: Return only JSON. This agent coordinates others.`,
    * Parse agent output (handles JSON in markdown code blocks)
    */
   private static parseOutput(text: string): Record<string, any> {
-    try {
-      // Try direct JSON parse first
-      return JSON.parse(text);
-    } catch {
-      // Try extracting JSON from markdown code block
-      const jsonMatch = text.match(/```(?:json)?\n?([\s\S]*?)\n?```/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[1]);
-      }
+    // Los reintentos previos hacían JSON.parse sin protección dentro del catch,
+    // así que un bloque markdown malformado lanzaba en vez de degradar.
+    const parsed = extractJson<Record<string, any>>(text);
 
-      // Try extracting JSON object
-      const objectMatch = text.match(/\{[\s\S]*\}/);
-      if (objectMatch) {
-        return JSON.parse(objectMatch[0]);
-      }
-
-      // Fallback: return error
-      return {
-        success: false,
-        error: 'Could not parse agent response',
-        rawResponse: text,
-      };
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
     }
+
+    return {
+      success: false,
+      error: 'Could not parse agent response',
+      rawResponse: typeof text === 'string' ? text.slice(0, 500) : '',
+    };
   }
 }

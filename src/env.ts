@@ -27,6 +27,34 @@ if (missing.length > 0 && env.NODE_ENV === 'production') {
   throw new Error(`Missing required env vars: ${missing.join(', ')}`);
 }
 
+// Los secretos tienen defaults de desarrollo. Arrancar en producción con ellos
+// significa firmar tokens con una clave pública conocida: cualquiera podría
+// falsificar sesiones. Se prefiere no arrancar.
+const DEV_SECRET_DEFAULTS: Record<string, string> = {
+  JWT_PRIVATE_KEY: 'dev-private-key',
+  JWT_PUBLIC_KEY: 'dev-public-key',
+  DATA_ENCRYPTION_KEY: 'dev-encryption-key-32bytes-min!!!',
+};
+
+if (env.NODE_ENV === 'production') {
+  const insecure = Object.entries(DEV_SECRET_DEFAULTS)
+    .filter(([name, devValue]) => {
+      const actual = process.env[name];
+      return !actual || actual === devValue || actual.length < 32;
+    })
+    .map(([name]) => name);
+
+  if (insecure.length > 0) {
+    throw new Error(
+      `Refusing to start: ${insecure.join(', ')} must be set to a unique value of at least 32 characters in production.`
+    );
+  }
+
+  if (env.ALLOWED_ORIGINS.some(o => o.includes('localhost'))) {
+    console.warn('⚠️  ALLOWED_ORIGINS still contains localhost in production.');
+  }
+}
+
 // Una key con forma de placeholder falla recién al primer análisis de CV, que
 // es tarde y confuso. Se avisa al arrancar.
 const keyLooksUnusable =

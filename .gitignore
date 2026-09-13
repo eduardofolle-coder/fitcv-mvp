@@ -16,3 +16,4 @@ dist/
 .turbo/
 coverage/
 .nyc_output/
+tests/.tmp/

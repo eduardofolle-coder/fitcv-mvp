@@ -34,13 +34,27 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // El análisis con IA puede tardar; sin límite, una request colgada dejaba
+    // la interfaz girando para siempre sin decir nada.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+
     try {
       const response = await fetch(url, {
         ...options,
         headers,
+        signal: controller.signal,
       });
 
-      const data = await response.json();
+      // Un proxy caído devuelve HTML, no JSON. Hacer response.json() directo
+      // convertía eso en "Unexpected token <", que no le dice nada a nadie.
+      const raw = await response.text();
+      let data: any;
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = {};
+      }
 
       if (!response.ok) {
         // Un 401 en los endpoints de auth es un intento fallido y su mensaje
@@ -55,17 +69,24 @@ class ApiClient {
         }
         return {
           success: false,
-          error: data.error || 'Unknown error',
+          error: data.error || `Request failed (${response.status})`,
         };
       }
 
       return data;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Network error';
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return {
+          success: false,
+          error: 'The request took too long. Please try again.',
+        };
+      }
       return {
         success: false,
-        error: message,
+        error: 'Could not reach the server. Check your connection and try again.',
       };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

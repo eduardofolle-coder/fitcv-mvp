@@ -15,6 +15,7 @@ import { AgentTrackerService } from '../services/agentTracker.js';
 import { db } from '../db/client.js';
 import { logger } from '../services/logger.js';
 import { SEED_OFFERS } from '../db/seedData.js';
+import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = express.Router();
 
@@ -103,8 +104,8 @@ router.post(
           candidateProfile: {
             fullName: profile.fullName,
             yearsExperience: profile.yearsExperience,
-            skills: JSON.parse(profile.skills || '{}'),
-            education: JSON.parse(profile.education || '[]'),
+            skills: safeJsonParse(profile.skills, {}),
+            education: safeJsonParse(profile.education, []),
             summary: profile.summary,
           },
           jobDescription: postulation.description,
@@ -266,8 +267,8 @@ router.post(
           candidateProfile: {
             fullName: profile.fullName,
             yearsExperience: profile.yearsExperience,
-            skills: JSON.parse(profile.skills || '{}'),
-            education: JSON.parse(profile.education || '[]'),
+            skills: safeJsonParse(profile.skills, {}),
+            education: safeJsonParse(profile.education, []),
           },
           jobDescription: offer.description,
           jobTitle: offer.title,
@@ -365,8 +366,8 @@ router.get(
           candidateProfile: {
             fullName: profile.fullName,
             yearsExperience: profile.yearsExperience,
-            skills: JSON.parse(profile.skills || '{}'),
-            education: JSON.parse(profile.education || '[]'),
+            skills: safeJsonParse(profile.skills, {}),
+            education: safeJsonParse(profile.education, []),
             summary: profile.summary,
           },
           opportunities: SEED_OFFERS.map(o => ({

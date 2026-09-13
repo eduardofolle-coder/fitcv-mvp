@@ -15,6 +15,7 @@ import { AgentInvokerService } from '../services/agentInvoker.js';
 import { AgentTrackerService } from '../services/agentTracker.js';
 import { db } from '../db/client.js';
 import { logger } from '../services/logger.js';
+import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = express.Router();
 
@@ -190,8 +191,8 @@ router.get(
         id: profile.id,
         fullName: profile.fullName,
         yearsExperience: profile.yearsExperience,
-        education: profile.education ? JSON.parse(profile.education as string) : [],
-        skills: profile.skills ? JSON.parse(profile.skills as string) : {},
+        education: safeJsonParse(profile.education, []),
+        skills: safeJsonParse(profile.skills, {}),
         summary: profile.summary,
       },
     });

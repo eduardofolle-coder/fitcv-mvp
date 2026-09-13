@@ -7,6 +7,7 @@ import { db } from '../db/client.js';
 import { CVAdapterService } from '../services/cvAdapter.js';
 import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
+import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = Router();
 
@@ -155,7 +156,7 @@ router.get(
       success: true,
       data: {
         ...postulation,
-        requirements: JSON.parse(postulation.requirements)
+        requirements: safeJsonParse(postulation.requirements, [])
       }
     });
   })
@@ -385,7 +386,7 @@ router.get(
       data: {
         content: decryptedContent,
         atsScore: cv.atsScore,
-        changes: JSON.parse(cv.changesHighlights),
+        changes: safeJsonParse(cv.changesHighlights, []),
         job: `${cv.title} at ${cv.company}`
       }
     });

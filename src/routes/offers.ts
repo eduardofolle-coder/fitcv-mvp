@@ -5,6 +5,7 @@ import { db } from '../db/client.js';
 import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { SEED_OFFERS } from '../db/seedData.js';
+import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = Router();
 
@@ -68,7 +69,7 @@ router.get(
       success: true,
       data: paginatedOffers.map((o: any) => ({
         ...o,
-        requirements: typeof o.requirements === 'string' ? JSON.parse(o.requirements) : o.requirements
+        requirements: safeJsonParse(o.requirements, [])
       })),
       pagination: {
         page: pageNum,
@@ -211,7 +212,7 @@ router.get(
       success: true,
       data: {
         ...offer,
-        requirements: JSON.parse(offer.requirements)
+        requirements: safeJsonParse(offer.requirements, [])
       }
     });
   })
