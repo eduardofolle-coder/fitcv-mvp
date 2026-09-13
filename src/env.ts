@@ -26,3 +26,19 @@ const missing = requiredVars.filter(v => !process.env[v]);
 if (missing.length > 0 && env.NODE_ENV === 'production') {
   throw new Error(`Missing required env vars: ${missing.join(', ')}`);
 }
+
+// Una key con forma de placeholder falla recién al primer análisis de CV, que
+// es tarde y confuso. Se avisa al arrancar.
+const keyLooksUnusable =
+  !env.CLAUDE_API_KEY ||
+  env.CLAUDE_API_KEY.length < 50 ||
+  /your|xxx|placeholder|here|changeme/i.test(env.CLAUDE_API_KEY);
+
+if (keyLooksUnusable) {
+  const message =
+    'CLAUDE_API_KEY does not look like a usable key. CV analysis, ranking and CV adaptation will fail until it is set.';
+  if (env.NODE_ENV === 'production') {
+    throw new Error(message);
+  }
+  console.warn(`⚠️  ${message}`);
+}

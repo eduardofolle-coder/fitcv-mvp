@@ -7,6 +7,7 @@
 
 import axios from 'axios';
 import { logger } from './logger';
+import { AppError } from '../middleware/errorHandler';
 
 export type AgentName = 'cv-analyzer' | 'postulation-matcher' | 'cv-adapter' | 'offer-ranker' | 'postulation-orchestrator';
 
@@ -128,7 +129,7 @@ export class AgentInvokerService {
       return invocation;
     } catch (error) {
       invocation.success = false;
-      invocation.error = error instanceof Error ? error.message : String(error);
+      invocation.error = this.describeError(error);
 
       logger.error(`Agent invocation failed: ${agentName}`, {
         userId,
@@ -136,11 +137,38 @@ export class AgentInvokerService {
         error: invocation.error,
       });
 
-      throw error;
+      // Un 401/403 del upstream es un fallo de configuración nuestro, no del
+      // cliente: se reporta como 503 para no confundirlo con su propia sesión.
+      const status = (error as any)?.response?.status;
+      throw new AppError(status === 429 ? 429 : 503, invocation.error);
     } finally {
       invocation.endTime = new Date();
       invocation.durationMs = invocation.endTime.getTime() - invocation.startTime.getTime();
     }
+  }
+
+  /**
+   * Traduce fallos del upstream a algo accionable. Sin esto, una API key
+   * inválida llegaba al cliente como "Request failed with status code 401".
+   */
+  private static describeError(error: unknown): string {
+    const status = (error as any)?.response?.status;
+    const upstream = (error as any)?.response?.data?.error?.message;
+
+    if (status === 401 || status === 403) {
+      return 'AI service rejected the credentials (CLAUDE_API_KEY is missing, invalid or expired).';
+    }
+    if (status === 429) {
+      return 'AI service rate limit reached. Please retry in a moment.';
+    }
+    if (status >= 500) {
+      return 'AI service is temporarily unavailable. Please retry in a moment.';
+    }
+    if ((error as any)?.code === 'ECONNABORTED') {
+      return 'AI service timed out while analyzing. Please retry.';
+    }
+    if (upstream) return `AI service error: ${upstream}`;
+    return error instanceof Error ? error.message : String(error);
   }
 
   /**

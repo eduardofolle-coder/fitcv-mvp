@@ -80,33 +80,6 @@ router.get(
   })
 );
 
-// ✅ GET /api/offers/:id - Obtener detalles de oferta
-router.get(
-  '/:id',
-  requireAuth,
-  asyncHandler(async (req: any, res: any) => {
-    const { id } = req.params;
-
-    const stmt = db.prepare('SELECT * FROM offers WHERE id = ? LIMIT 1');
-    stmt.bind([id]);
-    const hasOffer = stmt.step();
-    const offer = hasOffer ? stmt.getAsObject() : null;
-    stmt.free();
-
-    if (!offer) {
-      throw new AppError(404, 'Job offer not found');
-    }
-
-    res.json({
-      success: true,
-      data: {
-        ...offer,
-        requirements: JSON.parse(offer.requirements)
-      }
-    });
-  })
-);
-
 // ✅ GET /api/offers/stats - Estadísticas de búsqueda
 router.get(
   '/stats/summary',
@@ -211,6 +184,34 @@ router.get(
       data: {
         rankings,
         candidateSummary: agentResult.output.candidateSummary
+      }
+    });
+  })
+);
+
+// ✅ GET /api/offers/:id - Obtener detalles de oferta
+// Debe declararse al final: '/:id' also matches literal paths like '/ranked'.
+router.get(
+  '/:id',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+
+    const stmt = db.prepare('SELECT * FROM offers WHERE id = ? LIMIT 1');
+    stmt.bind([id]);
+    const hasOffer = stmt.step();
+    const offer = hasOffer ? stmt.getAsObject() : null;
+    stmt.free();
+
+    if (!offer) {
+      throw new AppError(404, 'Job offer not found');
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...offer,
+        requirements: JSON.parse(offer.requirements)
       }
     });
   })

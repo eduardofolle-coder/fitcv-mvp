@@ -32,11 +32,11 @@ export default function RegisterPage() {
       return;
     }
 
-    const success = await register({ email, password });
-    if (success) {
+    const result = await register({ email, password });
+    if (result.ok) {
       router.push('/dashboard');
     } else {
-      setLocalError(error || 'Registration failed');
+      setLocalError(result.error ?? 'Registration failed');
     }
   };
 

@@ -24,11 +24,11 @@ export default function LoginPage() {
       return;
     }
 
-    const success = await login({ email, password });
-    if (success) {
+    const result = await login({ email, password });
+    if (result.ok) {
       router.push('/dashboard');
     } else {
-      setLocalError(error || 'Login failed');
+      setLocalError(result.error ?? 'Login failed');
     }
   };
 

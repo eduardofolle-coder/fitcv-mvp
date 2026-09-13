@@ -9,9 +9,11 @@ export function validateRequest(schema: Joi.ObjectSchema) {
     });
 
     if (error) {
-      const messages = error.details.map(d => `${d.path.join('.')}: ${d.message}`);
+      const messages = error.details.map(d => d.message.replace(/"/g, ''));
+      // El primer mensaje es el que se muestra en el formulario, así que debe
+      // decir qué corregir en vez de un genérico "Validation error".
       return res.status(400).json({
-        error: 'Validation error',
+        error: messages[0] || 'Validation error',
         details: messages
       });
     }
@@ -59,7 +61,10 @@ export const schemas = {
 
   // Postulation
   postulation: Joi.object({
-    offerId: Joi.string().uuid().required(),
+    // Offer ids are not UUIDs (seeded offers look like 'offer-001'), so accept
+    // any safe slug/uuid shape rather than rejecting every real offer.
+    offerId: Joi.string().max(64).pattern(/^[A-Za-z0-9_-]+$/).required()
+      .messages({'string.pattern.base': 'Invalid offer id format'}),
     estado: Joi.string()
       .valid('Por revisar', 'Preparar postulación', 'Descartado', 'Aplicado', 'En revisión', 'Entrevista')
       .required(),

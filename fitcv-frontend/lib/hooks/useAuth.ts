@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { apiClient } from '../api-client';
 import { AuthUser, LoginRequest, RegisterRequest, AuthResponse } from '../types';
 
+export type AuthResult = { ok: boolean; error?: string };
+
 export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,12 +19,18 @@ export function useAuth() {
     setLoading(false);
   }, []);
 
-  const login = async (credentials: LoginRequest): Promise<boolean> => {
+  // Devuelve el mensaje de error además de setearlo: el estado `error` no está
+  // disponible para quien llama hasta el siguiente render.
+  const submitCredentials = async (
+    endpoint: '/auth/login' | '/auth/register',
+    credentials: LoginRequest | RegisterRequest,
+    fallbackMessage: string
+  ): Promise<AuthResult> => {
     setLoading(true);
     setError(null);
 
     const response = await apiClient.post<AuthResponse['data']>(
-      '/auth/login',
+      endpoint,
       credentials
     );
 
@@ -34,38 +42,20 @@ export function useAuth() {
         accessToken: response.data.accessToken,
       });
       setLoading(false);
-      return true;
+      return { ok: true };
     }
 
-    setError(response.error || 'Login failed');
+    const message = response.error || fallbackMessage;
+    setError(message);
     setLoading(false);
-    return false;
+    return { ok: false, error: message };
   };
 
-  const register = async (credentials: RegisterRequest): Promise<boolean> => {
-    setLoading(true);
-    setError(null);
+  const login = (credentials: LoginRequest): Promise<AuthResult> =>
+    submitCredentials('/auth/login', credentials, 'Login failed');
 
-    const response = await apiClient.post<AuthResponse['data']>(
-      '/auth/register',
-      credentials
-    );
-
-    if (response.success && response.data) {
-      apiClient.setAuthToken(response.data.accessToken);
-      setUser({
-        id: response.data.userId,
-        email: response.data.email,
-        accessToken: response.data.accessToken,
-      });
-      setLoading(false);
-      return true;
-    }
-
-    setError(response.error || 'Registration failed');
-    setLoading(false);
-    return false;
-  };
+  const register = (credentials: RegisterRequest): Promise<AuthResult> =>
+    submitCredentials('/auth/register', credentials, 'Registration failed');
 
   const logout = (): void => {
     apiClient.logout();

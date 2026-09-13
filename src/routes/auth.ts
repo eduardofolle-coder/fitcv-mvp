@@ -8,17 +8,30 @@ import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
-// ✅ Rate limiting: máximo 5 intentos de login por 15 minutos
+// ✅ Rate limiting: solo cuentan los intentos fallidos, de modo que un usuario
+// que entra bien no consume el presupuesto de otros detrás de la misma IP/NAT.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: 'Too many login attempts, please try again later'
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {error: 'Too many login attempts, please try again later'}
+});
+
+// ✅ Registro: presupuesto propio, separado del de login
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {error: 'Too many accounts created from this IP, please try again later'}
 });
 
 // POST /api/auth/register
 router.post(
   '/register',
-  loginLimiter,
+  registerLimiter,
   validateRequest(schemas.register),
   asyncHandler(async (req: any, res: any) => {
     const { email, password } = req.body;

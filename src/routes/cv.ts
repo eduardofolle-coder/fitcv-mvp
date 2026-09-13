@@ -10,6 +10,27 @@ import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
+// Las columnas JSON pueden venir nulas o corruptas de perfiles antiguos; un
+// JSON.parse directo tumbaba la request entera.
+function safeParse<T>(value: any, fallback: T): T {
+  if (typeof value !== 'string' || value.length === 0) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function flattenSkills(raw: any): string[] {
+  if (Array.isArray(raw)) return raw.filter(s => typeof s === 'string');
+  if (raw && typeof raw === 'object') {
+    return Object.values(raw)
+      .flat()
+      .filter((s): s is string => typeof s === 'string');
+  }
+  return [];
+}
+
 // ✅ Rate limiting: máximo 5 uploads por hora
 const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -41,22 +62,44 @@ router.post(
 
     const profile = agentResult.output.profile || agentResult.output;
 
-    // ✅ Guardar en BD
-    const profileId = uuidv4();
+    // El agente puede omitir secciones si el CV no las trae; se normaliza para
+    // que el guardado y el JSON.parse posterior no dependan de su forma exacta.
+    const education = Array.isArray(profile.education) ? profile.education : [];
+    const skills = profile.skills ?? {};
+    const yearsExperience = Number.isFinite(profile.yearsExperience)
+      ? profile.yearsExperience
+      : 0;
+
+    // ✅ Guardar en BD. userId es UNIQUE: volver a subir el CV debe reemplazar
+    // el perfil existente, no fallar con un constraint error.
+    const existingStmt = db.prepare('SELECT id FROM candidate_profiles WHERE userId = ? LIMIT 1');
+    existingStmt.bind([req.user.id]);
+    const hasExisting = existingStmt.step();
+    const profileId = hasExisting ? existingStmt.getAsObject().id : uuidv4();
+    existingStmt.free();
+
     const stmt = db.prepare(`
       INSERT INTO candidate_profiles (
         id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent, createdAt, updatedAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(userId) DO UPDATE SET
+        fullName = excluded.fullName,
+        yearsExperience = excluded.yearsExperience,
+        education = excluded.education,
+        skills = excluded.skills,
+        summary = excluded.summary,
+        cvOriginalContent = excluded.cvOriginalContent,
+        updatedAt = CURRENT_TIMESTAMP
     `);
 
     stmt.bind([
       profileId,
       req.user.id,
-      fullName || profile.fullName,
-      profile.yearsExperience,
-      JSON.stringify(profile.education),
-      JSON.stringify(profile.skills),
-      profile.summary,
+      fullName || profile.fullName || null,
+      yearsExperience,
+      JSON.stringify(education),
+      JSON.stringify(skills),
+      profile.summary || null,
       encryptedCV
     ]);
     stmt.step();
@@ -67,11 +110,11 @@ router.post(
       data: {
         profileId,
         profile: {
-          fullName: profile.fullName,
-          yearsExperience: profile.yearsExperience,
-          education: profile.education,
-          skills: profile.skills,
-          summary: profile.summary
+          fullName: fullName || profile.fullName || null,
+          yearsExperience,
+          education,
+          skills,
+          summary: profile.summary || null
         }
       }
     });
@@ -103,8 +146,8 @@ router.get(
       success: true,
       data: {
         ...profile,
-        education: JSON.parse(profile.education),
-        skills: JSON.parse(profile.skills)
+        education: safeParse(profile.education, []),
+        skills: safeParse(profile.skills, {})
       }
     });
   })
@@ -132,8 +175,10 @@ router.post(
     const profileData: ProfileAnalysisResult = {
       fullName: profile.fullName,
       yearsExperience: profile.yearsExperience,
-      education: JSON.parse(profile.education),
-      skills: JSON.parse(profile.skills),
+      education: safeParse(profile.education, []),
+      // El agente agrupa skills por categoría ({programming:[], tools:[]}),
+      // pero suggestRoles espera una lista plana.
+      skills: flattenSkills(safeParse<any>(profile.skills, [])),
       industries: [],
       summary: profile.summary
     };

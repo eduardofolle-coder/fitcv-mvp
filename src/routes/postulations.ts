@@ -10,6 +10,9 @@ import { AgentInvokerService } from '../services/agentInvoker.js';
 
 const router = Router();
 
+const ESTADOS = ['Por revisar', 'Preparar postulación', 'Descartado', 'Aplicado', 'En revisión', 'Entrevista'];
+const PRIORIDADES = ['Alta', 'Media', 'Baja'];
+
 // ✅ POST /api/postulations - Crear postulación
 router.post(
   '/',
@@ -176,14 +179,43 @@ router.put(
       throw new AppError(404, 'Postulation not found');
     }
 
-    // ✅ Actualizar
+    // ✅ Actualización parcial: solo se tocan los campos enviados. Escribir los
+    // omitidos como NULL rompía las columnas NOT NULL (estado, prioridad).
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (estado !== undefined) {
+      if (!ESTADOS.includes(estado)) {
+        throw new AppError(400, `Invalid estado. Must be one of: ${ESTADOS.join(', ')}`);
+      }
+      fields.push('estado = ?');
+      values.push(estado);
+    }
+
+    if (prioridad !== undefined) {
+      if (!PRIORIDADES.includes(prioridad)) {
+        throw new AppError(400, `Invalid prioridad. Must be one of: ${PRIORIDADES.join(', ')}`);
+      }
+      fields.push('prioridad = ?');
+      values.push(prioridad);
+    }
+
+    if (notes !== undefined) {
+      fields.push('notes = ?');
+      values.push(notes === null ? null : String(notes).slice(0, 500));
+    }
+
+    if (fields.length === 0) {
+      throw new AppError(400, 'No fields to update. Provide estado, prioridad or notes.');
+    }
+
     const stmt = db.prepare(`
       UPDATE postulations
-      SET estado = ?, prioridad = ?, notes = ?, updatedAt = CURRENT_TIMESTAMP
+      SET ${fields.join(', ')}, updatedAt = CURRENT_TIMESTAMP
       WHERE id = ? AND userId = ?
     `);
 
-    stmt.bind([estado || null, prioridad || null, notes || null, id, req.user.id]);
+    stmt.bind([...values, id, req.user.id]);
     stmt.step();
     stmt.free();
 

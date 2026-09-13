@@ -43,7 +43,13 @@ class ApiClient {
       const data = await response.json();
 
       if (!response.ok) {
-        if (response.status === 401) {
+        // Un 401 en los endpoints de auth es un intento fallido y su mensaje
+        // debe llegar al formulario; redirigir aquí recargaría la página y
+        // borraría el error antes de que el usuario pueda leerlo.
+        const isAuthAttempt =
+          endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/register');
+
+        if (response.status === 401 && !isAuthAttempt) {
           this.clearToken();
           window.location.href = '/login';
         }

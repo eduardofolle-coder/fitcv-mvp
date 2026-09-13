@@ -76,8 +76,10 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/cv', cvRoutes);
 app.use('/api/cv', cvAgentRoutes); // Agent-integrated CV routes
+// Agent routes first: they use literal paths ('/ranked', '/match') that the
+// base router's '/:id' would otherwise swallow.
+app.use('/api/postulations', postulationsAgentRoutes);
 app.use('/api/postulations', postulationsRoutes);
-app.use('/api/postulations', postulationsAgentRoutes); // Agent-integrated postulation routes
 app.use('/api/offers', offersRoutes);
 app.use('/api/learning', learningRoutes); // Continuous learning routes
 
@@ -91,10 +93,19 @@ app.use(errorHandler);
 
 // ✅ Start server
 const PORT = env.PORT;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 FITCV API running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
 });
+
+// Writes are flushed on a short debounce, so drain them before exiting.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, async () => {
+    const { db } = await import('./db/client.js');
+    db.flush();
+    server.close(() => process.exit(0));
+  });
+}
 
 export default app;

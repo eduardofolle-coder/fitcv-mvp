@@ -31,17 +31,27 @@ export function errorHandler(
     statusCode: err instanceof AppError ? err.statusCode : 500
   });
 
-  // ✅ En desarrollo, mostrar error. En producción, genérico
+  const statusCode = err instanceof AppError ? err.statusCode : 500;
+
+  // ✅ En desarrollo, mostrar error completo
   if (env.NODE_ENV === 'development') {
-    return res.status(err instanceof AppError ? err.statusCode : 500).json({
+    return res.status(statusCode).json({
       error: err.message,
       errorId,
       stack: err.stack
     });
   }
 
-  // Producción: error genérico
-  return res.status(err instanceof AppError ? err.statusCode : 500).json({
+  // Producción: los errores de cliente (4xx) son intencionales y deben llegar
+  // al usuario ("Email already in use"). Solo los 5xx se ocultan.
+  if (err instanceof AppError && statusCode < 500) {
+    return res.status(statusCode).json({
+      error: err.message,
+      errorId
+    });
+  }
+
+  return res.status(statusCode).json({
     error: 'Internal server error',
     errorId
   });

@@ -5,6 +5,48 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 
+const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown'];
+
+function isSupported(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    file.type.includes('pdf') ||
+    name.endsWith('.pdf') ||
+    TEXT_EXTENSIONS.some(ext => name.endsWith(ext))
+  );
+}
+
+async function extractText(file: File): Promise<string> {
+  const name = file.name.toLowerCase();
+
+  if (TEXT_EXTENSIONS.some(ext => name.endsWith(ext))) {
+    return file.text();
+  }
+
+  // pdf.js se carga solo en el navegador y bajo demanda: importarlo arriba
+  // rompe el render en servidor y agranda el bundle inicial.
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString();
+
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const pages: string[] = [];
+
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(
+      content.items
+        .map((item: any) => ('str' in item ? item.str : ''))
+        .join(' ')
+    );
+  }
+
+  return pages.join('\n\n');
+}
+
 export default function CVUploadPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -26,8 +68,8 @@ export default function CVUploadPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      if (!selectedFile.type.includes('pdf') && !selectedFile.name.endsWith('.pdf')) {
-        setError('Please select a PDF file');
+      if (!isSupported(selectedFile)) {
+        setError('Please select a PDF or plain text (.txt, .md) file');
         return;
       }
       if (selectedFile.size > 5 * 1024 * 1024) {
@@ -51,14 +93,32 @@ export default function CVUploadPage() {
     setSuccess(null);
 
     try {
-      // In real implementation, would upload to /api/cv/upload
-      // For now, show success simulation
-      setSuccess(`CV "${file.name}" uploaded successfully! Analyzing with AI...`);
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000);
+      const cvContent = (await extractText(file)).trim();
+
+      if (cvContent.length < 50) {
+        setError(
+          'Could not read enough text from that file. If it is a scanned PDF (an image), export a text-based PDF or upload a .txt version.'
+        );
+        return;
+      }
+
+      setSuccess(`Analyzing "${file.name}" with AI...`);
+
+      const response = await apiClient.post<{ profileId: string }>('/cv/upload', {
+        cvContent,
+      });
+
+      if (!response.success) {
+        setSuccess(null);
+        setError(response.error || 'Failed to upload CV');
+        return;
+      }
+
+      setSuccess('CV analyzed successfully. Redirecting...');
+      router.push('/dashboard');
     } catch (err) {
-      setError('Failed to upload CV');
+      setSuccess(null);
+      setError(err instanceof Error ? err.message : 'Failed to upload CV');
     } finally {
       setLoading(false);
     }
@@ -90,7 +150,7 @@ export default function CVUploadPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.txt,.md,.markdown"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -119,7 +179,7 @@ export default function CVUploadPage() {
                 <div>
                   <p className="mt-2 font-medium text-gray-900">Click to upload your CV</p>
                   <p className="text-sm text-gray-600">or drag and drop</p>
-                  <p className="text-xs text-gray-500 mt-2">PDF files up to 5MB</p>
+                  <p className="text-xs text-gray-500 mt-2">PDF or .txt up to 5MB</p>
                 </div>
               )}
             </div>
