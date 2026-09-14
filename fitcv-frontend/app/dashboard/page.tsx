@@ -12,9 +12,33 @@ import {
   MarketTrendsResponse,
 } from '@/lib/types';
 
+// Lo que devuelve GET /api/cv/profile tras el análisis del CV.
+interface CVProfile {
+  fullName: string | null;
+  yearsExperience: number | null;
+  summary: string | null;
+  education: Array<{
+    institution?: string;
+    degree?: string;
+    field?: string;
+    graduationDate?: string;
+  }>;
+  skills: Record<string, string[]>;
+  createdAt?: string;
+}
+
+const SKILL_GROUP_LABELS: Record<string, string> = {
+  programming: 'Lenguajes',
+  frameworks: 'Frameworks',
+  tools: 'Herramientas',
+  soft: 'Habilidades blandas',
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const { user, loading: authLoading, logout } = useAuth();
+  const [profile, setProfile] = useState<CVProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'keywords' | 'patterns' | 'skills' | 'recommendations' | 'trends'>('keywords');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +54,24 @@ export default function DashboardPage() {
       router.push('/login');
     }
   }, [authLoading, user, router]);
+
+  // El perfil se carga aparte de la analítica: sin CV subido la API responde
+  // 404, y eso no es un error que mostrar sino el estado inicial de todos.
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+    (async () => {
+      const res = await apiClient.get<CVProfile>('/cv/profile');
+      if (cancelled) return;
+      if (res.success && res.data) setProfile(res.data);
+      setProfileLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const loadData = async () => {
     if (!user) return;
@@ -137,6 +179,87 @@ export default function DashboardPage() {
           <div className="rounded-md bg-red-50 p-4 mb-4">
             <p className="text-sm font-medium text-red-800">{error}</p>
           </div>
+        )}
+
+        {/* Perfil extraído del CV: es el resultado del análisis y hasta ahora
+            no se mostraba en ninguna pantalla. */}
+        {!profileLoading && (
+          profile ? (
+            <section className="bg-white rounded-lg shadow mb-8 p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {profile.fullName || 'Tu perfil'}
+                  </h2>
+                  {profile.yearsExperience !== null && (
+                    <p className="text-sm text-gray-600">
+                      {profile.yearsExperience} años de experiencia
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => router.push('/cv')}
+                  className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50"
+                >
+                  Actualizar CV
+                </button>
+              </div>
+
+              {profile.summary && (
+                <p className="text-gray-700 mb-5">{profile.summary}</p>
+              )}
+
+              {Object.entries(profile.skills || {})
+                .filter(([, list]) => Array.isArray(list) && list.length > 0)
+                .map(([group, list]) => (
+                  <div key={group} className="mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
+                      {SKILL_GROUP_LABELS[group] || group}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {list.map((skill) => (
+                        <span
+                          key={skill}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-full text-sm"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+              {profile.education?.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                    Educación
+                  </p>
+                  {profile.education.map((ed, i) => (
+                    <p key={i} className="text-sm text-gray-700">
+                      {[ed.degree, ed.field].filter(Boolean).join(' — ')}
+                      {ed.institution ? `, ${ed.institution}` : ''}
+                      {ed.graduationDate ? ` (${ed.graduationDate})` : ''}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : (
+            <section className="bg-white rounded-lg shadow mb-8 p-6 text-center">
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                Todavía no has subido tu CV
+              </h2>
+              <p className="text-gray-600 mb-4">
+                La IA lo analiza y construye tu perfil automáticamente.
+              </p>
+              <button
+                onClick={() => router.push('/cv')}
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+              >
+                Subir mi CV
+              </button>
+            </section>
+          )
         )}
 
         {/* Tabs */}
