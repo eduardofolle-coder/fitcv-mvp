@@ -38,22 +38,37 @@ const claudeText = (payload: unknown) => ({
   usage: { input_tokens: 1200, output_tokens: 800 },
 });
 
+let lastVerifierPrompt = '';
+/** Veredicto del verificador de narrativa, que es una segunda llamada al modelo. */
+let verifierReply: { status: number; body: unknown } = {
+  status: 200,
+  body: claudeText({ success: true, highlights: [], statements: [] }),
+};
+
 function startStub(): Promise<void> {
   return new Promise(resolve => {
     stub = http.createServer((req, res) => {
       let body = '';
       req.on('data', c => (body += c));
       req.on('end', () => {
+        let prompt = '';
         try {
-          lastPrompt = JSON.parse(body).messages[0].content;
+          prompt = JSON.parse(body).messages[0].content;
         } catch {
-          lastPrompt = '';
+          prompt = '';
         }
+        // La verificación es una llamada aparte; se responde por separado para
+        // poder simular su veredicto o su caída.
+        const isVerifier = prompt.includes('CV Narrative Verifier');
+        if (isVerifier) lastVerifierPrompt = prompt;
+        else lastPrompt = prompt;
+
+        const reply = isVerifier ? verifierReply : stubReply;
         const send = () => {
-          res.writeHead(stubReply.status, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(stubReply.body));
+          res.writeHead(reply.status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(reply.body));
         };
-        if (stubReply.delayMs) setTimeout(send, stubReply.delayMs);
+        if (!isVerifier && stubReply.delayMs) setTimeout(send, stubReply.delayMs);
         else send();
       });
     });
@@ -299,6 +314,18 @@ describe('cv-adapter', () => {
       }),
     };
 
+    verifierReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        highlights: [{ id: 'exp-0#0', verdict: 'supported' }],
+        statements: [
+          { id: 'headline', verdict: 'supported' },
+          { id: 'summary', verdict: 'supported' },
+        ],
+      }),
+    };
+
     generated = await call('POST', `/postulations/${postulationId}/generate-cv`);
     expect(generated.status).toBe(200);
     expect(generated.data.data.atsScore).toBe(91);
@@ -308,6 +335,11 @@ describe('cv-adapter', () => {
     expect(lastPrompt).toContain('CV Narrative Adapter');
     expect(lastPrompt).toContain('Mercado Libre');
     expect(lastPrompt).not.toContain('+56 9 1234 5678');
+
+    // El verificador recibe el par original/reformulado, tampoco con contacto.
+    expect(lastVerifierPrompt).toContain('Microservicios en Node.js y TypeScript');
+    expect(lastVerifierPrompt).toContain('Diseñó microservicios en Node.js y TypeScript');
+    expect(lastVerifierPrompt).not.toContain('+56 9 1234 5678');
   }, 40_000);
 
   it('reports the narrative it refused because the CV does not support it', () => {
@@ -332,6 +364,93 @@ describe('cv-adapter', () => {
     // La narrativa también se guarda cifrada; si no se descifrara, no llegaría.
     expect(cv.data.data.narrative.headline).toContain('sistemas distribuidos');
   }, 30_000);
+});
+
+describe('narrative verifier', () => {
+  const adapterReply = {
+    success: true,
+    narrative: {
+      headline: 'Especialista en plataformas cloud',
+      summary: 'Ingeniero backend con experiencia en la nube.',
+      highlights: {
+        'exp-0': [
+          { text: 'Lideró la migración de monolito a AWS', sourceIndex: 1 },
+          { text: 'Diseñó microservicios en Node.js y TypeScript', sourceIndex: 0 },
+        ],
+      },
+      skillsFirst: [],
+      rationale: 'Enfoque en cloud.',
+    },
+    atsScore: 60,
+    keywordMatches: [],
+  };
+
+  const generateWith = async (verifier: { status: number; body: unknown }) => {
+    const created = await call('POST', '/postulations', { offerId, estado: 'Por revisar', prioridad: 'Media' });
+    const id = created.data.data.postulationId;
+    stubReply = { status: 200, body: claudeText(adapterReply) };
+    verifierReply = verifier;
+    const generated = await call('POST', `/postulations/${id}/generate-cv`);
+    const cv = await call('GET', `/postulations/${id}/cv`);
+    return { generated, cv };
+  };
+
+  it('restores the original wording when the verifier flags inflation', async () => {
+    const { generated, cv } = await generateWith({
+      status: 200,
+      body: claudeText({
+        success: true,
+        highlights: [
+          { id: 'exp-0#0', verdict: 'inflated', reason: 'Atribuye liderazgo de la migración que el CV no menciona' },
+          { id: 'exp-0#1', verdict: 'supported' },
+        ],
+        statements: [
+          { id: 'headline', verdict: 'supported' },
+          { id: 'summary', verdict: 'supported' },
+        ],
+      }),
+    });
+
+    expect(generated.status).toBe(200);
+    const content: string = cv.data.data.content;
+    expect(content).toContain('• Migracion de monolito a AWS');
+    expect(content).not.toContain('Lideró la migración');
+    expect(content).toContain('• Diseñó microservicios en Node.js y TypeScript');
+    expect(generated.data.data.adjustments.some((a: string) => a.includes('liderazgo'))).toBe(true);
+    // Los ajustes se guardan cifrados y vuelven legibles.
+    expect(cv.data.data.changes.some((a: string) => a.includes('liderazgo'))).toBe(true);
+  }, 40_000);
+
+  it('treats anything the verifier did not judge as unverified', async () => {
+    const { cv } = await generateWith({
+      status: 200,
+      body: claudeText({
+        success: true,
+        highlights: [{ id: 'exp-0#0', verdict: 'supported' }],
+        statements: [{ id: 'headline', verdict: 'supported' }],
+      }),
+    });
+
+    const content: string = cv.data.data.content;
+    expect(content).toContain('• Microservicios en Node.js y TypeScript');
+    expect(content).not.toContain('Diseñó microservicios');
+    expect(content).not.toContain('Ingeniero backend con experiencia en la nube');
+  }, 40_000);
+
+  it('fails closed when the verifier is unavailable', async () => {
+    const { generated, cv } = await generateWith({
+      status: 503,
+      body: { error: { message: 'overloaded' } },
+    });
+
+    // La adaptación no se cae: se entrega con la redacción original.
+    expect(generated.status).toBe(200);
+    const content: string = cv.data.data.content;
+    expect(content).toContain('• Migracion de monolito a AWS');
+    expect(content).toContain('• Microservicios en Node.js y TypeScript');
+    expect(content).not.toContain('Especialista en plataformas cloud');
+    expect(generated.data.data.adjustments.some((a: string) => a.includes('No se pudo verificar'))).toBe(true);
+  }, 40_000);
 });
 
 describe('cuando el modelo o el servicio fallan', () => {

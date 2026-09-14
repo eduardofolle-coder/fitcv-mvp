@@ -8,6 +8,7 @@ import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import { buildHardData, composeCV, hardDataForPrompt, sanitizeNarrative } from '../services/cvComposer.js';
+import { verifyNarrative } from '../services/narrativeVerifier.js';
 
 const router = Router();
 
@@ -294,7 +295,12 @@ router.post(
       throw new AppError(502, `Could not tailor the CV: ${agentResult.error ?? 'the AI returned an unusable response'}`);
     }
 
-    const { narrative, adjustments } = sanitizeNarrative(agentResult.output.narrative, hard);
+    // Primero lo estructural (a qué dato apunta cada logro), después el sentido
+    // (si la reformulación afirma más de lo que dice el original).
+    const sanitized = sanitizeNarrative(agentResult.output.narrative, hard);
+    const verified = await verifyNarrative(sanitized.narrative, hard, req.user.id);
+    const narrative = verified.narrative;
+    const adjustments = [...sanitized.adjustments, ...verified.adjustments];
     const content = composeCV(hard, narrative);
 
     const rawScore = Number(agentResult.output.atsScore);
@@ -303,8 +309,8 @@ router.post(
       ? agentResult.output.keywordMatches.filter((k: unknown): k is string => typeof k === 'string')
       : [];
 
-    // El contenido y la narrativa derivan del CV, así que ambos se guardan
-    // cifrados. Los ajustes no contienen datos personales.
+    // Contenido, narrativa y ajustes derivan del CV (los ajustes citan qué se
+    // corrigió y por qué), así que los tres se guardan cifrados.
     const cvId = uuidv4();
     await db.query(`
       INSERT INTO adapted_cvs (
@@ -317,7 +323,7 @@ router.post(
       postulation.offerId,
       EncryptionService.encrypt(content),
       atsScore,
-      JSON.stringify(adjustments),
+      EncryptionService.encrypt(JSON.stringify(adjustments)),
       EncryptionService.encrypt(JSON.stringify({ ...narrative, keywordMatches }))
     ]);
 
@@ -372,12 +378,22 @@ router.get(
       }
     }
 
+    // Los CVs adaptados antes de cifrar los ajustes los tienen como JSON plano.
+    let changes: unknown = [];
+    if (cv.changesHighlights) {
+      try {
+        changes = safeJsonParse(EncryptionService.decrypt(cv.changesHighlights), []);
+      } catch {
+        changes = safeJsonParse(cv.changesHighlights, []);
+      }
+    }
+
     res.json({
       success: true,
       data: {
         content: decryptedContent,
         atsScore: cv.atsScore,
-        changes: safeJsonParse(cv.changesHighlights, []),
+        changes,
         narrative,
         job: `${cv.title} at ${cv.company}`
       }

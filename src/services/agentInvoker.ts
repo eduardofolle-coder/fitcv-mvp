@@ -11,7 +11,7 @@ import { env } from '../env';
 import { AppError } from '../middleware/errorHandler';
 import { extractJson } from '../utils/safeJson';
 
-export type AgentName = 'cv-analyzer' | 'postulation-matcher' | 'cv-adapter' | 'offer-ranker' | 'postulation-orchestrator';
+export type AgentName = 'cv-analyzer' | 'postulation-matcher' | 'cv-adapter' | 'cv-verifier' | 'offer-ranker' | 'postulation-orchestrator';
 
 export interface AgentInvocation {
   agentName: AgentName;
@@ -66,6 +66,7 @@ const AGENT_CONFIG: Record<AgentName, { model: string; maxTokens: number }> = {
   'offer-ranker': { model: DEFAULT_MODEL, maxTokens: 8000 },
   // El orquestador coordina a los demás, así que usa el modelo más capaz.
   'postulation-orchestrator': { model: ORCHESTRATOR_MODEL, maxTokens: 8000 },
+  'cv-verifier': { model: DEFAULT_MODEL, maxTokens: 4000 },
 };
 
 export class AgentInvokerService {
@@ -340,6 +341,11 @@ Hard rules:
 - Never write company names, job titles, dates, durations, institutions or degrees anywhere in your output. FITCV inserts them.
 - Never state a number of years of experience, or any other figure, that is not literally present in hardData.
 - If the offer asks for something the candidate does not have, do not claim it. Emphasize real, transferable experience instead.
+- Never mention in headline, summary or highlights what the candidate lacks. The CV goes to the employer; gaps belong only in the rationale, which only the candidate sees.
+- Write in CV register: implied subject, as CVs are written. Never "this candidate", never third person.
+- Highlights restate facts only. Do not append commentary about relevance or ability ("demonstrating strong skills", "directly relevant to").
+- Never attribute ownership or leadership ("led", "directed", "drove") unless the detail itself states it.
+- Everything you write is checked line by line against the original by an independent verifier, and anything it cannot trace back is replaced by the original wording.
 - Write headline, summary and highlights in the language of the job description.
 
 Return ONLY valid JSON:
@@ -355,6 +361,28 @@ Return ONLY valid JSON:
   },
   "atsScore": 0,
   "keywordMatches": []
+}`,
+
+      'cv-verifier': `You are the CV Narrative Verifier of FITCV. You are independent from whoever wrote the narrative, and your only loyalty is to the truth of the candidate's CV.
+
+INPUT DATA:
+${inputJson}
+
+"facts" is the candidate's verified record. "highlights" pairs an original line from the CV with a rewritten version of it. "statements" are a headline and a summary written from those facts.
+
+For each highlight decide:
+- "supported" if the rewritten version states nothing beyond the original: same actions, same scope, same ownership, same results. Rewording, emphasis and professional phrasing are fine.
+- "inflated" if it adds anything the original does not state: ownership or leadership ("led", "directed", "owned", "drove") where the original only names the work; larger scope, impact or results; team sizes, metrics, technologies or tools absent from the original; or evaluative claims about the candidate ("demonstrating strong skills", "expert in") that are not facts.
+
+For each statement decide "supported" only if every claim in it is backed by facts. Mark it "inflated" if any claim is not, including qualities or strengths asserted without support, and including any sentence that discloses a gap or missing requirement: the CV goes to the employer, and that belongs in private advice to the candidate.
+
+Be strict. When in doubt, choose "inflated". Every "inflated" verdict needs a reason: one short sentence, in Spanish, naming exactly what was added.
+
+Return ONLY valid JSON:
+{
+  "success": true,
+  "highlights": [{ "id": "exp-0#0", "verdict": "supported", "reason": "" }],
+  "statements": [{ "id": "summary", "verdict": "inflated", "reason": "..." }]
 }`,
 
       'offer-ranker': `You are the Offer Ranker Agent from the FITCV project.
