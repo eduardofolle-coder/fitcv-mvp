@@ -23,3 +23,6 @@ boot.err.log
 restart.log
 restart.err.log
 tests/.tmp-agents/
+srv*.log
+srv*.err.log
+data/*.corrupto-*

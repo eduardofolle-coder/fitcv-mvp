@@ -34,10 +34,11 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // El análisis con IA puede tardar; sin límite, una request colgada dejaba
-    // la interfaz girando para siempre sin decir nada.
+    // El análisis con IA puede tardar más de un minuto (adaptar un CV entero
+    // son miles de tokens), así que el margen supera al del backend. Sin
+    // límite, una request colgada dejaba la interfaz girando sin decir nada.
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    const timeout = setTimeout(() => controller.abort(), 180_000);
 
     try {
       const response = await fetch(url, {

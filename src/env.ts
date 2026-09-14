@@ -16,6 +16,9 @@ export const env = {
 
   CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
   CLAUDE_API_URL: process.env.CLAUDE_API_URL || 'https://api.anthropic.com/v1/messages',
+  CLAUDE_MODEL: process.env.CLAUDE_MODEL || 'claude-sonnet-5',
+  CLAUDE_ORCHESTRATOR_MODEL: process.env.CLAUDE_ORCHESTRATOR_MODEL || 'claude-opus-5',
+  CLAUDE_TIMEOUT_MS: parseInt(process.env.CLAUDE_TIMEOUT_MS || '120000'),
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
 
   ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS || 'http://localhost:3001').split(','),

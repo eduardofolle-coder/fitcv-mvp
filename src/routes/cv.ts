@@ -65,7 +65,9 @@ router.post(
     const agentResult = await AgentInvokerService.invoke('cv-analyzer', { cvText: cvContent }, req.user.id);
 
     if (!agentResult.success || !agentResult.output) {
-      throw new AppError(500, 'Failed to analyze CV');
+      // El motivo importa: truncado, ilegible o rechazo del modelo son cosas
+      // distintas, y un 'Failed to analyze CV' pelado no permite distinguirlas.
+      throw new AppError(502, `Could not analyze the CV: ${agentResult.error ?? 'the AI returned an unusable response'}`);
     }
 
     const profile = agentResult.output.profile || agentResult.output;

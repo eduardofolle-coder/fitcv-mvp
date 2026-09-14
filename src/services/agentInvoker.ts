@@ -47,12 +47,25 @@ interface ClaudeAPIResponse {
 }
 
 // Agent configurations
+// Los identificadores de modelo caducan: los anteriores (Sonnet 3.5 de 2024)
+// fueron retirados y la API respondía "model: ..." aunque la clave fuera
+// válida. Se dejan configurables por entorno para que la próxima rotación sea
+// una variable y no un redespliegue.
+const DEFAULT_MODEL = env.CLAUDE_MODEL;
+const ORCHESTRATOR_MODEL = env.CLAUDE_ORCHESTRATOR_MODEL;
+
+// Los límites anteriores (1500-3000) eran menores que el JSON que los propios
+// prompts exigen: la respuesta se cortaba a mitad y llegaba como "no se pudo
+// parsear". El analizador debe emitir perfil, experiencia, educación, skills,
+// idiomas, certificaciones, calidad, gaps y recomendaciones; el adaptador
+// devuelve un CV completo dentro del JSON.
 const AGENT_CONFIG: Record<AgentName, { model: string; maxTokens: number }> = {
-  'cv-analyzer': { model: 'claude-3-5-sonnet-20241022', maxTokens: 2000 },
-  'postulation-matcher': { model: 'claude-3-5-sonnet-20241022', maxTokens: 1500 },
-  'cv-adapter': { model: 'claude-3-5-sonnet-20241022', maxTokens: 3000 },
-  'offer-ranker': { model: 'claude-3-5-sonnet-20241022', maxTokens: 2000 },
-  'postulation-orchestrator': { model: 'claude-opus-4-1-20250805', maxTokens: 4000 },
+  'cv-analyzer': { model: DEFAULT_MODEL, maxTokens: 8000 },
+  'postulation-matcher': { model: DEFAULT_MODEL, maxTokens: 4000 },
+  'cv-adapter': { model: DEFAULT_MODEL, maxTokens: 16000 },
+  'offer-ranker': { model: DEFAULT_MODEL, maxTokens: 8000 },
+  // El orquestador coordina a los demás, así que usa el modelo más capaz.
+  'postulation-orchestrator': { model: ORCHESTRATOR_MODEL, maxTokens: 8000 },
 };
 
 export class AgentInvokerService {
@@ -112,23 +125,66 @@ export class AgentInvokerService {
             'x-api-key': this.apiKey,
             'anthropic-version': '2023-06-01',
           },
-          timeout: 30000,
+          // 30s no alcanzaba: rankear varias ofertas o reescribir un CV
+          // completo tarda más, y el usuario recibía un timeout en vez de su
+          // resultado.
+          timeout: env.CLAUDE_TIMEOUT_MS,
         }
       );
 
-      // Extract response
-      const responseText = response.data.content[0].text;
+      // La respuesta trae una lista de bloques y no todos son texto: los
+      // modelos actuales pueden anteponer otros tipos. Tomar content[0].text a
+      // ciegas devolvía undefined y el fallo aparecía como "no se pudo parsear"
+      // sin ninguna pista de que el texto ni siquiera se había extraído.
+      const blocks = Array.isArray(response.data.content) ? response.data.content : [];
+      const responseText = blocks
+        .filter(b => b?.type === 'text' && typeof b.text === 'string')
+        .map(b => b.text)
+        .join('\n')
+        .trim();
+
+      if (!responseText) {
+        logger.error(`Agent response had no text block: ${agentName}`, {
+          userId,
+          agentName,
+          blockTypes: blocks.map(b => b?.type),
+        });
+      }
+
       const output = this.parseOutput(responseText);
 
       invocation.success = output.success !== false;
       invocation.output = output;
       invocation.costTokens = (response.data.usage?.input_tokens || 0) + (response.data.usage?.output_tokens || 0);
 
-      logger.info(`Agent invocation successful: ${agentName}`, {
-        userId,
-        agentName,
-        tokens: invocation.costTokens,
-      });
+      if (invocation.success) {
+        logger.info(`Agent invocation successful: ${agentName}`, {
+          userId,
+          agentName,
+          tokens: invocation.costTokens,
+          stopReason: (response.data as any).stop_reason,
+        });
+      } else {
+        // Antes se registraba "successful" igual, porque solo se miraba si la
+        // llamada HTTP había ido bien. Un modelo que devuelve algo ilegible
+        // quedaba indistinguible de uno que funcionó.
+        // Un JSON cortado a la mitad no es lo mismo que un modelo que no supo
+        // responder, y "no se pudo parsear" los confunde.
+        const truncated = (response.data as any).stop_reason === 'max_tokens';
+        invocation.error = truncated
+          ? `The AI response was cut off at the ${config.maxTokens} token limit before it finished.`
+          : String(output.error || 'Agent returned success: false');
+        logger.error(`Agent returned a failure: ${agentName}`, {
+          userId,
+          agentName,
+          reason: invocation.error,
+          // stop_reason === 'max_tokens' delata una respuesta truncada, que es
+          // la causa habitual de un JSON que no parsea.
+          stopReason: (response.data as any).stop_reason,
+          outputTokens: response.data.usage?.output_tokens,
+          rawResponse: String(output.rawResponse || '').slice(0, 400),
+        });
+      }
 
       return invocation;
     } catch (error) {
