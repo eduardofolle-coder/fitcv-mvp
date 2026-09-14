@@ -78,7 +78,8 @@ function startServer(): Promise<void> {
 }
 
 async function waitForHealth(): Promise<void> {
-  const deadline = Date.now() + 30_000;
+  // Arrancar PGlite en frío bajo carga puede superar con holgura los 30s.
+  const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`http://localhost:${PORT}/health`);
@@ -132,10 +133,30 @@ const ANALYZER_OK = {
   profile: {
     fullName: 'Juan Perez',
     email: 'juan.perez@example.com',
+    phone: '+56 9 1234 5678',
+    location: 'Santiago, Chile',
     summary: 'Ingeniero de software con 6 anos de experiencia.',
     yearsExperience: 6,
     education: [{ institution: 'Universidad de Chile', degree: 'Ingenieria Civil en Computacion' }],
     skills: { programming: ['TypeScript', 'JavaScript'], tools: ['Docker', 'AWS'] },
+    experience: [
+      {
+        company: 'Mercado Libre',
+        title: 'Senior Backend Engineer',
+        startDate: '2021-01',
+        endDate: '2024-06',
+        responsibilities: ['Microservicios en Node.js y TypeScript'],
+        achievements: ['Migracion de monolito a AWS'],
+      },
+      {
+        company: 'Falabella',
+        title: 'Backend Engineer',
+        startDate: '2018-03',
+        endDate: '2020-12',
+        responsibilities: ['APIs REST con Express y PostgreSQL'],
+      },
+    ],
+    languages: [{ language: 'Espanol', proficiency: 'Nativo' }],
   },
 };
 
@@ -153,7 +174,7 @@ beforeAll(async () => {
 
   const offers = await call('GET', '/offers');
   offerId = offers.data.data[0].id;
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
   server?.kill();
@@ -246,8 +267,9 @@ describe('offer-ranker', () => {
 
 describe('cv-adapter', () => {
   let postulationId = '';
+  let generated: { status: number; data: any } = { status: 0, data: null };
 
-  it('adapts the CV for a postulation and stores the result encrypted', async () => {
+  it('lets the model shape the story while FITCV copies every hard fact', async () => {
     const created = await call('POST', '/postulations', {
       offerId,
       estado: 'Por revisar',
@@ -260,30 +282,55 @@ describe('cv-adapter', () => {
       status: 200,
       body: claudeText({
         success: true,
-        adaptation: {
-          adaptedCV: 'JUAN PEREZ — CV adaptado para la oferta',
-          atsScore: 91,
-          keywordMatches: ['TypeScript', 'AWS'],
-          changes: ['Reordenadas las skills', 'Resumen enfocado al cargo'],
+        narrative: {
+          headline: 'Backend Engineer orientado a sistemas distribuidos',
+          summary: 'Ingeniero backend que ha llevado sistemas de un monolito a la nube.',
+          highlights: {
+            'exp-0': [
+              { text: 'Diseñó microservicios en Node.js y TypeScript', sourceIndex: 0 },
+              { text: 'Dirigió una organización de 50 personas', sourceIndex: 99 },
+            ],
+          },
+          skillsFirst: ['AWS', 'Salesforce'],
+          rationale: 'La oferta prioriza arquitectura distribuida.',
         },
+        atsScore: 91,
+        keywordMatches: ['TypeScript', 'AWS'],
       }),
     };
 
-    const generated = await call('POST', `/postulations/${postulationId}/generate-cv`);
+    generated = await call('POST', `/postulations/${postulationId}/generate-cv`);
     expect(generated.status).toBe(200);
     expect(generated.data.data.atsScore).toBe(91);
-    expect(generated.data.data.changes).toContain('Reordenadas las skills');
+    expect(generated.data.data.rationale).toContain('arquitectura distribuida');
 
-    // El CV original debe llegar al prompt descifrado.
-    expect(lastPrompt).toContain('CV Adapter Agent');
+    // El modelo recibe los datos duros estructurados, sin nombre ni contacto.
+    expect(lastPrompt).toContain('CV Narrative Adapter');
     expect(lastPrompt).toContain('Mercado Libre');
+    expect(lastPrompt).not.toContain('+56 9 1234 5678');
   }, 40_000);
 
-  it('returns the stored adapted CV', async () => {
+  it('reports the narrative it refused because the CV does not support it', () => {
+    const adjustments: string[] = generated.data.data.adjustments;
+    expect(adjustments.some(a => a.includes('no correspondía'))).toBe(true);
+    expect(adjustments.some(a => a.includes('Salesforce'))).toBe(true);
+  });
+
+  it('stores the assembled CV encrypted, with hard facts verbatim', async () => {
     const cv = await call('GET', `/postulations/${postulationId}/cv`);
     expect(cv.status).toBe(200);
-    // Se guarda cifrado; si el descifrado fallara, saldría ilegible o vacío.
-    expect(JSON.stringify(cv.data)).toContain('JUAN PEREZ');
+
+    const content: string = cv.data.data.content;
+    expect(content).toContain('Senior Backend Engineer — Mercado Libre');
+    expect(content).toContain('2021-01 – 2024-06');
+    expect(content).toContain('Backend Engineer — Falabella');
+    expect(content).toContain('Universidad de Chile');
+    expect(content).toContain('Diseñó microservicios en Node.js y TypeScript');
+    expect(content).not.toContain('50 personas');
+    expect(content).not.toContain('Salesforce');
+
+    // La narrativa también se guarda cifrada; si no se descifrara, no llegaría.
+    expect(cv.data.data.narrative.headline).toContain('sistemas distribuidos');
   }, 30_000);
 });
 

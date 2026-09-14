@@ -7,6 +7,7 @@ import { db } from '../db/client.js';
 import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { safeJsonParse } from '../utils/safeJson.js';
+import { buildHardData, composeCV, hardDataForPrompt, sanitizeNarrative } from '../services/cvComposer.js';
 
 const router = Router();
 
@@ -252,50 +253,72 @@ router.post(
       throw new AppError(404, 'Postulation not found');
     }
 
-    // ✅ Obtener CV original
-    const profile = await db.queryOne<any>(
-      'SELECT cvOriginalContent FROM candidate_profiles WHERE userId = $1 LIMIT 1',
-      [req.user.id]
-    );
+    // ✅ Datos duros del perfil: FITCV los copia tal cual, el modelo nunca los escribe.
+    const profile = await db.queryOne<any>(`
+      SELECT fullName, yearsExperience, education, skills, experience, languages, certifications, contactInfo
+      FROM candidate_profiles WHERE userId = $1 LIMIT 1
+    `, [req.user.id]);
 
     if (!profile) {
       throw new AppError(404, 'Profile not found. Please upload your CV first.');
     }
 
-    // ✅ Desencriptar CV
-    const cvContent = EncryptionService.decrypt(profile.cvOriginalContent);
+    // Un perfil analizado antes de guardar el historial estructurado no tiene de
+    // dónde copiar empresas y fechas; adaptarlo obligaría al modelo a
+    // reconstruirlas, que es justo lo que este flujo evita.
+    if (profile.experience === null || profile.experience === undefined) {
+      throw new AppError(409, 'Your CV was analyzed before FITCV stored your work history in structured form. Please upload it again to enable tailoring.');
+    }
 
-    // ✅ Adaptar CV con Agent
+    let contact: Record<string, unknown> = {};
+    if (profile.contactInfo) {
+      try {
+        contact = safeJsonParse(EncryptionService.decrypt(profile.contactInfo), {});
+      } catch {
+        contact = {};
+      }
+    }
+
+    const hard = buildHardData(profile, contact);
+
     const agentResult = await AgentInvokerService.invoke('cv-adapter', {
-      originalCV: cvContent,
-      jobDescription: postulation.description,
-      jobTitle: postulation.title,
-      company: postulation.company
+      hardData: hardDataForPrompt(hard),
+      job: {
+        title: postulation.title,
+        company: postulation.company,
+        description: postulation.description
+      }
     }, req.user.id);
 
     if (!agentResult.success || !agentResult.output) {
-      throw new AppError(500, 'Failed to adapt CV');
+      throw new AppError(502, `Could not tailor the CV: ${agentResult.error ?? 'the AI returned an unusable response'}`);
     }
 
-    const adaptation = agentResult.output.adaptation || agentResult.output;
+    const { narrative, adjustments } = sanitizeNarrative(agentResult.output.narrative, hard);
+    const content = composeCV(hard, narrative);
 
-    // ✅ Encriptar CV adaptado
-    const encryptedAdaptedCV = EncryptionService.encrypt(adaptation.adaptedCV);
+    const rawScore = Number(agentResult.output.atsScore);
+    const atsScore = Number.isFinite(rawScore) ? Math.max(0, Math.min(100, Math.round(rawScore))) : null;
+    const keywordMatches: string[] = Array.isArray(agentResult.output.keywordMatches)
+      ? agentResult.output.keywordMatches.filter((k: unknown): k is string => typeof k === 'string')
+      : [];
 
-    // ✅ Guardar CV adaptado
+    // El contenido y la narrativa derivan del CV, así que ambos se guardan
+    // cifrados. Los ajustes no contienen datos personales.
     const cvId = uuidv4();
     await db.query(`
       INSERT INTO adapted_cvs (
-        id, postulationId, userId, offerId, htmlContent, atsScore, changesHighlights, createdAt
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+        id, postulationId, userId, offerId, htmlContent, atsScore, changesHighlights, narrative, createdAt
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
     `, [
       cvId,
       id,
       req.user.id,
       postulation.offerId,
-      encryptedAdaptedCV,
-      adaptation.atsScore,
-      JSON.stringify(adaptation.changes)
+      EncryptionService.encrypt(content),
+      atsScore,
+      JSON.stringify(adjustments),
+      EncryptionService.encrypt(JSON.stringify({ ...narrative, keywordMatches }))
     ]);
 
     // ✅ Actualizar postulación con referencia a CV adaptado
@@ -307,9 +330,11 @@ router.post(
       success: true,
       data: {
         cvId,
-        atsScore: adaptation.atsScore,
-        changes: adaptation.changes,
-        keywords: adaptation.keywords
+        atsScore,
+        keywordMatches,
+        rationale: narrative.rationale,
+        adjustments,
+        changes: [narrative.rationale, ...adjustments].filter(Boolean)
       }
     });
   })
@@ -324,7 +349,7 @@ router.get(
 
     // ✅ Obtener CV adaptado
     const cv = await db.queryOne<any>(`
-      SELECT ac.htmlContent, ac.atsScore, ac.changesHighlights, o.title, o.company
+      SELECT ac.htmlContent, ac.atsScore, ac.changesHighlights, ac.narrative, o.title, o.company
       FROM adapted_cvs ac
       JOIN postulations p ON ac.postulationId = p.id
       JOIN offers o ON p.offerId = o.id
@@ -338,12 +363,22 @@ router.get(
     // ✅ Desencriptar
     const decryptedContent = EncryptionService.decrypt(cv.htmlContent);
 
+    let narrative: unknown = null;
+    if (cv.narrative) {
+      try {
+        narrative = safeJsonParse(EncryptionService.decrypt(cv.narrative), null);
+      } catch {
+        narrative = null;
+      }
+    }
+
     res.json({
       success: true,
       data: {
         content: decryptedContent,
         atsScore: cv.atsScore,
         changes: safeJsonParse(cv.changesHighlights, []),
+        narrative,
         job: `${cv.title} at ${cv.company}`
       }
     });

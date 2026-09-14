@@ -26,3 +26,4 @@ tests/.tmp-agents/
 srv*.log
 srv*.err.log
 data/*.corrupto-*
+tests/.tmp-*/

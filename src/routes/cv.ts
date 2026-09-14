@@ -6,6 +6,7 @@ import { db } from '../db/client.js';
 import { EncryptionService } from '../services/encryption.js';
 import { ProfileAnalyzerService, type ProfileAnalysisResult } from '../services/profileAnalyzer.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
+import { normalizeExperience, normalizeLanguages, normalizeCertifications } from '../services/cvComposer.js';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
@@ -80,6 +81,16 @@ router.post(
       ? profile.yearsExperience
       : 0;
 
+    // Datos duros: el adaptador los copia tal cual en cada CV que arma.
+    const experience = normalizeExperience(profile.experience);
+    const languages = normalizeLanguages(profile.languages);
+    const certifications = normalizeCertifications(profile.certifications);
+    const contactInfo = EncryptionService.encrypt(JSON.stringify({
+      email: typeof profile.email === 'string' ? profile.email : '',
+      phone: typeof profile.phone === 'string' ? profile.phone : '',
+      location: typeof profile.location === 'string' ? profile.location : '',
+    }));
+
     // ✅ Guardar en BD. userId es UNIQUE: volver a subir el CV debe reemplazar
     // el perfil existente, no fallar con un constraint error.
     const existing = await db.queryOne<{ id: string }>(
@@ -90,8 +101,9 @@ router.post(
 
     await db.query(`
       INSERT INTO candidate_profiles (
-        id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent, createdAt, updatedAt
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent,
+        experience, languages, certifications, contactInfo, createdAt, updatedAt
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(userId) DO UPDATE SET
         fullName = excluded.fullName,
         yearsExperience = excluded.yearsExperience,
@@ -99,6 +111,10 @@ router.post(
         skills = excluded.skills,
         summary = excluded.summary,
         cvOriginalContent = excluded.cvOriginalContent,
+        experience = excluded.experience,
+        languages = excluded.languages,
+        certifications = excluded.certifications,
+        contactInfo = excluded.contactInfo,
         updatedAt = CURRENT_TIMESTAMP
     `, [
       profileId,
@@ -108,7 +124,11 @@ router.post(
       JSON.stringify(education),
       JSON.stringify(skills),
       profile.summary || null,
-      encryptedCV
+      encryptedCV,
+      JSON.stringify(experience),
+      JSON.stringify(languages),
+      JSON.stringify(certifications),
+      contactInfo
     ]);
 
     res.json({

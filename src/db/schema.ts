@@ -250,5 +250,15 @@ export async function initializeSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_postulation_outcomes_outcome ON postulation_outcomes(outcome);
   `);
 
+  // Datos duros estructurados. El historial laboral se extraía del CV y se
+  // descartaba, así que el adaptador no tenía de dónde copiar empresas y fechas.
+  await db.exec(`
+    ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS experience TEXT;
+    ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS languages TEXT;
+    ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS certifications TEXT;
+    ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS contactInfo TEXT;
+    ALTER TABLE adapted_cvs ADD COLUMN IF NOT EXISTS narrative TEXT;
+  `);
+
   console.log('✅ Database schema initialized');
 }

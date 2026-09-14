@@ -45,7 +45,9 @@ function startServer(): Promise<void> {
   return waitForHealth();
 }
 
-async function waitForHealth(timeoutMs = 30_000): Promise<void> {
+// Arrancar PGlite en frío bajo carga (otra suite en paralelo, un runner de CI
+// lento) puede superar con holgura los 30s.
+async function waitForHealth(timeoutMs = 90_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -99,7 +101,7 @@ beforeAll(async () => {
   fs.rmSync(DB_DIR, { recursive: true, force: true });
   fs.mkdirSync(DB_DIR, { recursive: true });
   await startServer();
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
   await stopServer();
@@ -166,7 +168,7 @@ describe('persistence', () => {
     expect(after.data.data.email).toBe(email);
 
     token = after.data.data.accessToken;
-  }, 60_000);
+  }, 200_000);
 });
 
 describe('offers', () => {
