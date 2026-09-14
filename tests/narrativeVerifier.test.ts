@@ -6,6 +6,8 @@ import { describe, it, expect } from 'vitest';
 import { buildHardData, sanitizeNarrative } from '../src/services/cvComposer.js';
 import {
   applyVerdicts,
+  factsCorpus,
+  judgeStatement,
   mechanicalCheck,
   ungroundedNumbers,
   verifierInput,
@@ -33,6 +35,8 @@ const hard = buildHardData(
 );
 
 const narrate = (raw: unknown) => sanitizeNarrative(raw, hard).narrative;
+
+const backed = (claim: string, supportedBy: string) => ({ claim, supportedBy, verdict: 'supported' });
 
 describe('ungroundedNumbers', () => {
   it('flags figures the source does not contain', () => {
@@ -104,6 +108,75 @@ describe('verifierInput', () => {
   });
 });
 
+describe('judgeStatement', () => {
+  const corpus = factsCorpus(hard);
+
+  it('accepts a statement whose every claim quotes a real fact', () => {
+    const judgment = judgeStatement(
+      { statements: [{ id: 's', verdict: 'supported', claims: [backed('Migró un monolito a AWS', 'Migración de monolito a AWS')] }] },
+      's',
+      corpus
+    );
+
+    expect(judgment).toMatchObject({ supported: true, unsupportedClaims: [] });
+  });
+
+  it('rejects support quoted from text the CV does not contain', () => {
+    // El caso real: el verificador dio por buena la autoría de la migración.
+    const judgment = judgeStatement(
+      { statements: [{ id: 's', verdict: 'supported', claims: [backed('Lideró la migración', 'Lideró la migración a AWS')] }] },
+      's',
+      corpus
+    );
+
+    expect(judgment.supported).toBe(false);
+    expect(judgment.unsupportedClaims).toEqual(['Lideró la migración']);
+  });
+
+  it('rejects a relationship between facts the CV keeps separate', () => {
+    const judgment = judgeStatement(
+      {
+        statements: [
+          {
+            id: 's',
+            verdict: 'inflated',
+            claims: [{ claim: 'Lideró el equipo durante la migración', supportedBy: null, verdict: 'inflated' }],
+          },
+        ],
+      },
+      's',
+      corpus
+    );
+
+    expect(judgment.supported).toBe(false);
+    expect(judgment.unsupportedClaims).toEqual(['Lideró el equipo durante la migración']);
+  });
+
+  it('does not accept "supported" without the claims broken down', () => {
+    expect(judgeStatement({ statements: [{ id: 's', verdict: 'supported' }] }, 's', corpus).supported).toBe(false);
+  });
+
+  it('matches quotes regardless of accents, case and spacing', () => {
+    const judgment = judgeStatement(
+      { statements: [{ id: 's', verdict: 'supported', claims: [backed('x', 'MIGRACION  DE monolito a aws')] }] },
+      's',
+      corpus
+    );
+
+    expect(judgment.supported).toBe(true);
+  });
+
+  it('ignores quotes too short to prove anything', () => {
+    const judgment = judgeStatement(
+      { statements: [{ id: 's', verdict: 'supported', claims: [backed('Experto en todo', 'a')] }] },
+      's',
+      corpus
+    );
+
+    expect(judgment.supported).toBe(false);
+  });
+});
+
 describe('applyVerdicts', () => {
   const narrative = narrate({
     headline: 'Backend orientado a cloud',
@@ -116,29 +189,38 @@ describe('applyVerdicts', () => {
     },
   });
 
+  const headlineBacked = {
+    id: 'headline',
+    verdict: 'supported',
+    claims: [backed('Backend', 'Senior Backend Engineer'), backed('orientado a cloud', 'Migración de monolito a AWS')],
+  };
+  const summaryBacked = {
+    id: 'summary',
+    verdict: 'supported',
+    claims: [backed('Ingeniero backend', 'Senior Backend Engineer')],
+  };
+
   it('keeps what the verifier supports and restores what it flags', () => {
     const { narrative: out, adjustments } = applyVerdicts(narrative, hard, {
       highlights: [
         { id: 'exp-0#0', verdict: 'inflated', reason: 'Atribuye liderazgo que el CV no menciona.' },
         { id: 'exp-0#1', verdict: 'supported' },
       ],
-      statements: [
-        { id: 'headline', verdict: 'supported' },
-        { id: 'summary', verdict: 'supported' },
-      ],
+      statements: [headlineBacked, summaryBacked],
     });
 
     expect(out.highlights['exp-0'][0].text).toBe('Migración de monolito a AWS');
     expect(out.highlights['exp-0'][1].text).toBe('Formó y lideró a 4 ingenieros');
     expect(out.headline).toBe('Backend orientado a cloud');
+    expect(out.summary).toBe('Ingeniero backend.');
     expect(adjustments).toHaveLength(1);
-    expect(adjustments[0]).toContain('Atribuye liderazgo que el CV no menciona.');
+    expect(adjustments[0]).toContain('Atribuye liderazgo que el CV no menciona');
   });
 
   it('treats a missing verdict as not verified', () => {
     const { narrative: out } = applyVerdicts(narrative, hard, {
       highlights: [{ id: 'exp-0#0', verdict: 'supported' }],
-      statements: [{ id: 'headline', verdict: 'supported' }],
+      statements: [headlineBacked],
     });
 
     expect(out.highlights['exp-0'][1].text).toBe('Lideró un equipo de 4 ingenieros');
@@ -158,5 +240,18 @@ describe('applyVerdicts', () => {
     expect(out.highlights['exp-0'][0].text).toBe('Migración de monolito a AWS');
     expect(out.highlights['exp-0'][1].text).toBe('Formó y lideró a 4 ingenieros');
     expect(out.headline).toBe('');
+  });
+
+  it('removes a summary backed by a quote the CV does not contain', () => {
+    const { narrative: out, adjustments } = applyVerdicts(narrative, hard, {
+      highlights: [],
+      statements: [
+        headlineBacked,
+        { id: 'summary', verdict: 'supported', claims: [backed('Ingeniero de plataformas a gran escala', 'plataformas a gran escala')] },
+      ],
+    });
+
+    expect(out.summary).toBe('');
+    expect(adjustments.some(a => a.includes('Ingeniero de plataformas a gran escala'))).toBe(true);
   });
 });

@@ -320,8 +320,22 @@ describe('cv-adapter', () => {
         success: true,
         highlights: [{ id: 'exp-0#0', verdict: 'supported' }],
         statements: [
-          { id: 'headline', verdict: 'supported' },
-          { id: 'summary', verdict: 'supported' },
+          {
+            id: 'headline',
+            verdict: 'supported',
+            claims: [
+              { claim: 'Backend Engineer', supportedBy: 'Senior Backend Engineer', verdict: 'supported' },
+              { claim: 'sistemas distribuidos', supportedBy: 'Microservicios en Node.js y TypeScript', verdict: 'supported' },
+            ],
+          },
+          {
+            id: 'summary',
+            verdict: 'supported',
+            claims: [
+              { claim: 'Ingeniero backend', supportedBy: 'Senior Backend Engineer', verdict: 'supported' },
+              { claim: 'de un monolito a la nube', supportedBy: 'Migracion de monolito a AWS', verdict: 'supported' },
+            ],
+          },
         ],
       }),
     };
@@ -405,8 +419,19 @@ describe('narrative verifier', () => {
           { id: 'exp-0#1', verdict: 'supported' },
         ],
         statements: [
-          { id: 'headline', verdict: 'supported' },
-          { id: 'summary', verdict: 'supported' },
+          {
+            id: 'headline',
+            verdict: 'supported',
+            claims: [{ claim: 'plataformas cloud', supportedBy: 'Migracion de monolito a AWS', verdict: 'supported' }],
+          },
+          {
+            id: 'summary',
+            verdict: 'supported',
+            claims: [
+              { claim: 'Ingeniero backend', supportedBy: 'Senior Backend Engineer', verdict: 'supported' },
+              { claim: 'experiencia en la nube', supportedBy: 'Migracion de monolito a AWS', verdict: 'supported' },
+            ],
+          },
         ],
       }),
     });
@@ -451,6 +476,139 @@ describe('narrative verifier', () => {
     expect(content).not.toContain('Especialista en plataformas cloud');
     expect(generated.data.data.adjustments.some((a: string) => a.includes('No se pudo verificar'))).toBe(true);
   }, 40_000);
+});
+
+describe('application fields', () => {
+  const fields = [
+    { id: 'email', label: 'Correo electrónico', type: 'email' },
+    { id: 'salary', label: 'Pretensión de renta líquida', type: 'text' },
+    { id: 'aws', label: '¿Tienes experiencia en AWS?', type: 'radio', options: ['Sí', 'No'] },
+    { id: 'sf', label: '¿Tienes experiencia en Salesforce?', type: 'radio', options: ['Sí', 'No'] },
+    { id: 'exp', label: 'Describe un proyecto técnico relevante', type: 'textarea' },
+    { id: 'why', label: '¿Por qué quieres trabajar con nosotros?', type: 'textarea' },
+  ];
+
+  const byId = (res: { data: any }) =>
+    Object.fromEntries(res.data.data.resolutions.map((r: any) => [r.fieldId, r]));
+
+  it('fills what the CV supports, drafts for approval, and leaves decisions to the candidate', async () => {
+    stubReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        answers: [
+          { id: 'sf', answerable: false, text: '' },
+          { id: 'exp', answerable: true, text: 'Diseñé microservicios en Node.js y TypeScript en Mercado Libre.' },
+          { id: 'why', answerable: true, text: 'Me apasiona su misión y quiero crecer con ustedes.' },
+        ],
+      }),
+    };
+    verifierReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        highlights: [],
+        statements: [
+          {
+            id: 'exp',
+            verdict: 'supported',
+            claims: [
+              { claim: 'Diseñé microservicios en Node.js y TypeScript', supportedBy: 'Microservicios en Node.js y TypeScript', verdict: 'supported' },
+              { claim: 'en Mercado Libre', supportedBy: 'Mercado Libre', verdict: 'supported' },
+            ],
+          },
+          {
+            id: 'why',
+            verdict: 'inflated',
+            reason: 'Afirma una pasión que el CV no muestra',
+            claims: [{ claim: 'Me apasiona su misión', supportedBy: null, verdict: 'inflated' }],
+          },
+        ],
+      }),
+    };
+
+    const res = await call('POST', '/applications/resolve-fields', {
+      fields,
+      job: { title: 'Backend Engineer', company: 'NotCo', description: 'Node.js y AWS' },
+    });
+    expect(res.status).toBe(200);
+    const r = byId(res);
+
+    expect(r.email).toMatchObject({ status: 'filled', value: 'juan.perez@example.com' });
+    expect(r.salary).toMatchObject({ status: 'needs-user', category: 'personal-decision' });
+    expect(r.aws).toMatchObject({ status: 'filled', value: 'Sí' });
+    expect(r.sf.status).toBe('needs-user');
+    expect(r.sf.reason).toContain('salesforce');
+    expect(r.exp).toMatchObject({
+      status: 'filled',
+      value: 'Diseñé microservicios en Node.js y TypeScript en Mercado Libre.',
+    });
+    expect(r.why.status).toBe('needs-approval');
+    expect(r.why.reason).toContain('pasión');
+
+    // Lo que no requiere redacción nunca llega al modelo.
+    expect(lastPrompt).toContain('Application Answer Writer');
+    expect(lastPrompt).not.toContain('Pretensión');
+    expect(lastPrompt).not.toContain('juan.perez@example.com');
+  }, 60_000);
+
+  it('does not auto-fill an answer whose support the CV does not contain', async () => {
+    stubReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        answers: [
+          { id: 'sf', answerable: false, text: '' },
+          { id: 'exp', answerable: true, text: 'Lideré la migración de monolito a AWS en Mercado Libre.' },
+          { id: 'why', answerable: false, text: '' },
+        ],
+      }),
+    };
+    // Un verificador indulgente: dice "supported" y cita un respaldo que el CV no tiene.
+    verifierReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        highlights: [],
+        statements: [
+          {
+            id: 'exp',
+            verdict: 'supported',
+            claims: [
+              { claim: 'Migración de monolito a AWS', supportedBy: 'Migracion de monolito a AWS', verdict: 'supported' },
+              { claim: 'Lideré la migración', supportedBy: 'Lideré la migración', verdict: 'supported' },
+            ],
+          },
+        ],
+      }),
+    };
+
+    const res = await call('POST', '/applications/resolve-fields', { fields });
+    expect(res.status).toBe(200);
+    const r = byId(res);
+
+    // No se envía sola: queda como borrador con lo dudoso señalado.
+    expect(r.exp.status).toBe('needs-approval');
+    expect(r.exp.reason).toContain('Lideré la migración');
+  }, 60_000);
+
+  it('fails closed when the writer is unavailable', async () => {
+    stubReply = { status: 503, body: { error: { message: 'overloaded' } } };
+
+    const res = await call('POST', '/applications/resolve-fields', { fields });
+    expect(res.status).toBe(200);
+    const r = byId(res);
+
+    expect(r.email.status).toBe('filled');
+    expect(r.aws.status).toBe('filled');
+    expect(r.exp.status).toBe('needs-user');
+    expect(r.why.status).toBe('needs-user');
+  }, 60_000);
+
+  it('rejects a request without fields', async () => {
+    const res = await call('POST', '/applications/resolve-fields', { fields: [] });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('cuando el modelo o el servicio fallan', () => {

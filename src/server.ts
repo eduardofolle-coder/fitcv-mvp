@@ -14,6 +14,7 @@ import postulationsRoutes from './routes/postulations.js';
 import postulationsAgentRoutes from './routes/postulations-agent.js';
 import offersRoutes from './routes/offers.js';
 import learningRoutes from './routes/learning.js';
+import applicationsRoutes from './routes/applications.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
@@ -86,6 +87,7 @@ app.use('/api/postulations', postulationsAgentRoutes);
 app.use('/api/postulations', postulationsRoutes);
 app.use('/api/offers', offersRoutes);
 app.use('/api/learning', learningRoutes); // Continuous learning routes
+app.use('/api/applications', applicationsRoutes);
 
 // ✅ 404 handler
 app.use((req, res) => {

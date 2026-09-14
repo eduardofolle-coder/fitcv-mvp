@@ -11,7 +11,7 @@ import { env } from '../env';
 import { AppError } from '../middleware/errorHandler';
 import { extractJson } from '../utils/safeJson';
 
-export type AgentName = 'cv-analyzer' | 'postulation-matcher' | 'cv-adapter' | 'cv-verifier' | 'offer-ranker' | 'postulation-orchestrator';
+export type AgentName = 'cv-analyzer' | 'postulation-matcher' | 'cv-adapter' | 'cv-verifier' | 'answer-writer' | 'offer-ranker' | 'postulation-orchestrator';
 
 export interface AgentInvocation {
   agentName: AgentName;
@@ -66,7 +66,9 @@ const AGENT_CONFIG: Record<AgentName, { model: string; maxTokens: number }> = {
   'offer-ranker': { model: DEFAULT_MODEL, maxTokens: 8000 },
   // El orquestador coordina a los demás, así que usa el modelo más capaz.
   'postulation-orchestrator': { model: ORCHESTRATOR_MODEL, maxTokens: 8000 },
-  'cv-verifier': { model: DEFAULT_MODEL, maxTokens: 4000 },
+  // Desglosa cada texto en afirmaciones con su cita: con 4000 se cortaba.
+  'cv-verifier': { model: DEFAULT_MODEL, maxTokens: 12000 },
+  'answer-writer': { model: DEFAULT_MODEL, maxTokens: 4000 },
 };
 
 export class AgentInvokerService {
@@ -368,21 +370,55 @@ Return ONLY valid JSON:
 INPUT DATA:
 ${inputJson}
 
-"facts" is the candidate's verified record. "highlights" pairs an original line from the CV with a rewritten version of it. "statements" are a headline and a summary written from those facts.
+"facts" is the candidate's verified record. "highlights" pairs an original line from the CV with a rewritten version of it. "statements" are texts written from those facts: a headline, a summary, or answers to application questions.
 
 For each highlight decide:
 - "supported" if the rewritten version states nothing beyond the original: same actions, same scope, same ownership, same results. Rewording, emphasis and professional phrasing are fine.
 - "inflated" if it adds anything the original does not state: ownership or leadership ("led", "directed", "owned", "drove") where the original only names the work; larger scope, impact or results; team sizes, metrics, technologies or tools absent from the original; or evaluative claims about the candidate ("demonstrating strong skills", "expert in") that are not facts.
 
-For each statement decide "supported" only if every claim in it is backed by facts. Mark it "inflated" if any claim is not, including qualities or strengths asserted without support, and including any sentence that discloses a gap or missing requirement: the CV goes to the employer, and that belongs in private advice to the candidate.
+For each statement, break it into every individual claim it makes and judge each one separately. A claim is anything asserted about the candidate: an action, a skill, a result, a quality, a scale or impact, and also any relationship between facts ("during", "while", "as part of", "which allowed me", "leading the team through"). For each claim give "supportedBy": text copied exactly, character for character, from ONE single entry of facts that states that claim, or null if no single entry states it.
+- A relationship between two facts is supported only if one single entry states that relationship. Two separate entries do not support a claim that links them.
+- Words about scale, impact or quality ("large-scale", "high-traffic", "production-grade", "strong") need an entry that states them.
+- Ownership or leadership needs an entry that states it for that specific work.
+The statement is "supported" only if every claim is. Mark it "inflated" if any claim is not, including qualities asserted without support, and including any sentence that discloses a gap or missing requirement: the CV goes to the employer, and that belongs in private advice to the candidate.
+Your quotes are checked against the record by code. A quote that does not appear in it counts as no support.
 
 Be strict. When in doubt, choose "inflated". Every "inflated" verdict needs a reason: one short sentence, in Spanish, naming exactly what was added.
+
+Keep the output compact: each "claim" is a few words, not a copy of the sentence; "supportedBy" is the shortest exact fragment that states the claim; leave "reason" empty for supported items; write the JSON without indentation.
 
 Return ONLY valid JSON:
 {
   "success": true,
   "highlights": [{ "id": "exp-0#0", "verdict": "supported", "reason": "" }],
-  "statements": [{ "id": "summary", "verdict": "inflated", "reason": "..." }]
+  "statements": [{ "id": "summary", "verdict": "inflated", "reason": "...", "claims": [{ "claim": "...", "supportedBy": "exact text from one fact, or null", "verdict": "supported" }] }]
+}`,
+
+      'answer-writer': `You are the Application Answer Writer of FITCV.
+
+A job application asks the candidate some questions. Write the candidate's answers using ONLY the facts in their verified record. You answer on the candidate's behalf, so write in first person, as they would, in the language of each question.
+
+INPUT DATA:
+${inputJson}
+
+"facts" is the verified record. "job" is the offer, when known. Each item in "questions" has an "id", the question "text", a "kind" and an optional "maxLength" in characters.
+
+By kind:
+- "experience": answer with concrete facts from the record that genuinely address the question. If the record contains nothing that answers it, do not stretch unrelated experience to fit: return "answerable": false.
+- "capability": the question asks whether the candidate has something. If the record genuinely shows it, return "answerable": true and, as text, one sentence citing the fact that proves it. If it does not, return "answerable": false. Never infer a yes beyond what the record states.
+- "motivation": write a short, sincere draft connecting the candidate's real experience to the offer. The candidate approves it before anything is sent. Do not invent personal reasons, feelings, values or knowledge of the company that the record does not show.
+
+Hard rules:
+- Never state a fact, figure, technology, employer, date, scope or result that is not in the record.
+- Never claim ownership or leadership the record does not state.
+- Never mention salary, availability, relocation, visas, or anything personal the record does not contain.
+- Respect maxLength when given.
+- Everything you write is checked against the record by an independent verifier, and answers it cannot support are discarded.
+
+Return ONLY valid JSON:
+{
+  "success": true,
+  "answers": [{ "id": "...", "answerable": true, "text": "..." }]
 }`,
 
       'offer-ranker': `You are the Offer Ranker Agent from the FITCV project.
