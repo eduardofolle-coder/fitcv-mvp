@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>FITCV</title>
+    <style>
+      body { width: 320px; margin: 0; font: 13px/1.45 system-ui, sans-serif; color: #111827; }
+      header { padding: 12px 14px; background: #1e3a8a; color: #fff; font-weight: 700; font-size: 15px; }
+      section { padding: 12px 14px; border-bottom: 1px solid #e5e7eb; }
+      label { display: block; margin: 6px 0 2px; color: #4b5563; font-size: 12px; }
+      input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+      button { margin-top: 8px; padding: 7px 10px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+      button.secondary { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
+      button:disabled { opacity: .5; cursor: default; }
+      .muted { color: #6b7280; font-size: 12px; }
+      .error { color: #b91c1c; margin-top: 6px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      ul { list-style: none; margin: 6px 0 0; padding: 0; max-height: 180px; overflow-y: auto; }
+      li { padding: 4px 0; border-top: 1px solid #f3f4f6; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <header>FITCV</header>
+
+    <section id="pairing" hidden>
+      <p class="muted">En FITCV, abre tu tablero y genera un código para la extensión. Escríbelo aquí.</p>
+      <label for="api">Dirección de FITCV</label>
+      <input id="api" value="http://localhost:3000/api" />
+      <label for="code">Código</label>
+      <input id="code" placeholder="ABCD-2345" autocomplete="off" />
+      <button id="pair">Vincular</button>
+      <p id="pair-error" class="error" hidden></p>
+    </section>
+
+    <section id="paired" hidden>
+      <p>Vinculada a <strong id="email"></strong></p>
+      <p id="state" class="muted"></p>
+      <div class="row">
+        <button id="start">Iniciar envío</button>
+        <button id="stop" class="secondary">Detener</button>
+      </div>
+      <div class="row">
+        <button id="capture" class="secondary">Agregar esta oferta a la cola</button>
+      </div>
+      <p id="action-error" class="error" hidden></p>
+      <p class="muted">FITCV solo envía solo lo que tu CV respalda. Ante un CAPTCHA, un login o un sitio de empresa, se detiene y te avisa.</p>
+      <button id="unpair" class="secondary">Desvincular</button>
+    </section>
+
+    <section>
+      <strong>Actividad</strong>
+      <ul id="log"></ul>
+    </section>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

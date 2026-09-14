@@ -126,7 +126,8 @@ export function mapGetOnBoardJob(job: unknown, countryCode: string): ExternalOff
     description,
     requirements: [],
     url,
-    applyUrl: url,
+    // El botón "postular" de Get on Board lleva a este formulario en su propio sitio.
+    applyUrl: `${url.replace(/\/+$/, '')}/applications/new`,
     country: countryCode.toUpperCase(),
     remoteModality: modality,
     publishedAt:

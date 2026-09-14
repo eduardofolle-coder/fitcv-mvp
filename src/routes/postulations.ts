@@ -8,6 +8,7 @@ import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import { getAdaptedCv, tailorCv } from '../services/cvTailoring.js';
+import { asciiFileName, pdfFileName, renderCvPdf } from '../services/cvPdf.js';
 import { getApplicationEvents, transitionApplication } from '../services/applicationQueue.js';
 
 const router = Router();
@@ -285,6 +286,26 @@ router.post(
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
     res.json({ success: true, data: await tailorCv(req.params.id, req.user.id) });
+  })
+);
+
+// GET /api/postulations/:id/cv.pdf - CV adaptado como PDF para descargar
+router.get(
+  '/:id/cv.pdf',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const cv = await getAdaptedCv(req.params.id, req.user.id);
+    if (!cv) {
+      throw new AppError(404, 'Adapted CV not found. Please generate it first.');
+    }
+
+    const fileName = pdfFileName(cv.content);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${asciiFileName(fileName)}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
+    res.send(renderCvPdf(cv.content, { title: cv.job }));
   })
 );
 

@@ -35,6 +35,7 @@ import {
 } from '../services/applicationQueue.js';
 import { parseFields, resolveFields } from '../services/fieldResolver.js';
 import { getAdaptedCv, tailorCv } from '../services/cvTailoring.js';
+import { pdfFileName, renderCvPdf } from '../services/cvPdf.js';
 import { upsertOffers } from '../services/offerSync.js';
 import { offerIdFor, type ExternalOffer } from '../services/sources/getOnBoard.js';
 
@@ -187,15 +188,14 @@ router.post(
       { title: row.title ?? '', company: row.company ?? '', description: row.description ?? '' },
       req.user.id
     );
-    const autoSendable = qualifiesForAutoSend(result.resolutions);
-
-    await recordResolution(req.params.id, req.user.id, {
-      autoSendable,
+    const record = await recordResolution(req.params.id, req.user.id, {
+      autoSendable: qualifiesForAutoSend(result.resolutions, fields),
       fieldCount: fields.length,
       summary: result.summary,
     });
 
-    res.json({ success: true, data: { ...result, autoSendable } });
+    // autoSendable es el acumulado de todos los pasos del formulario, no solo de este.
+    res.json({ success: true, data: { ...result, autoSendable: record.autoSendable } });
   })
 );
 
@@ -214,7 +214,16 @@ router.post(
     }
     if (!cv) throw new AppError(500, 'The CV was tailored but could not be loaded.');
 
-    res.json({ success: true, data: { ...cv, generated } });
+    // Los portales piden un archivo: la extensión sube este PDF.
+    res.json({
+      success: true,
+      data: {
+        ...cv,
+        generated,
+        fileName: pdfFileName(cv.content),
+        pdfBase64: renderCvPdf(cv.content, { title: cv.job }).toString('base64'),
+      },
+    });
   })
 );
 

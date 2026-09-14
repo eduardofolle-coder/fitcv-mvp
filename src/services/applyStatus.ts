@@ -77,6 +77,44 @@ export const canTransition = (from: ApplyStatus, to: ApplyStatus): boolean =>
  * Solo se envía sin que el candidato mire lo que FITCV resolvió solo: datos
  * duros y respuestas verificadas contra el CV. Un borrador por aprobar o una
  * decisión personal bastan para que no califique.
+ *
+ * La excepción son los campos que el formulario marca como opcionales: si el
+ * CV no los responde, quedan en blanco en vez de llenarse con algo dudoso. Un
+ * campo sin esa marca se trata como obligatorio.
  */
-export const qualifiesForAutoSend = (resolutions: ReadonlyArray<{ status: string }>): boolean =>
-  resolutions.every(r => r.status === 'filled' || r.status === 'use-adapted-cv');
+export const qualifiesForAutoSend = (
+  resolutions: ReadonlyArray<{ fieldId?: string; status: string }>,
+  fields: ReadonlyArray<{ id: string; required?: boolean }> = []
+): boolean => {
+  const optional = new Set(fields.filter(f => f.required === false).map(f => f.id));
+  return resolutions.every(
+    r => r.status === 'filled' || r.status === 'use-adapted-cv' || (r.fieldId !== undefined && optional.has(r.fieldId))
+  );
+};
+
+export interface ResolutionRecord {
+  autoSendable: boolean;
+  fieldCount: number;
+  summary: Record<string, number>;
+  steps: number;
+}
+
+/** Un formulario de varios pasos califica solo si todos sus pasos calificaron. */
+export function mergeResolution(
+  previous: Partial<ResolutionRecord> | null,
+  next: { autoSendable: boolean; fieldCount: number; summary: Record<string, number> }
+): ResolutionRecord {
+  if (!previous) return { ...next, summary: { ...next.summary }, steps: 1 };
+
+  const summary = { ...(previous.summary ?? {}) };
+  for (const [status, count] of Object.entries(next.summary)) {
+    summary[status] = (summary[status] ?? 0) + count;
+  }
+
+  return {
+    autoSendable: previous.autoSendable === true && next.autoSendable,
+    fieldCount: (previous.fieldCount ?? 0) + next.fieldCount,
+    summary,
+    steps: (previous.steps ?? 1) + 1,
+  };
+}

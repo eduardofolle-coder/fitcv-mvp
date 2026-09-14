@@ -55,7 +55,7 @@ describe('mapGetOnBoardJob', () => {
       country: 'CL',
       remoteModality: 'hybrid',
       url: job.links.public_url,
-      applyUrl: job.links.public_url,
+      applyUrl: `${job.links.public_url}/applications/new`,
       publishedAt: '2026-09-03T18:42:05.000Z',
     });
   });

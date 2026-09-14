@@ -15,8 +15,10 @@ import {
   CLAIM_LEASE_MINUTES,
   canTransition,
   isApplyStatus,
+  mergeResolution,
   type ApplyMode,
   type ApplyStatus,
+  type ResolutionRecord,
 } from './applyStatus.js';
 
 export interface TransitionRequest {
@@ -162,21 +164,38 @@ export async function claimQueuedApplications(userId: string, limit: number): Pr
   }));
 }
 
-/** Guarda qué resolvió FITCV para el formulario que la extensión está por enviar. */
+/**
+ * Guarda qué resolvió FITCV para el formulario que la extensión está por
+ * enviar. Cada paso de un formulario largo se suma al anterior.
+ */
 export async function recordResolution(
   postulationId: string,
   userId: string,
-  resolution: { autoSendable: boolean; fieldCount: number; summary: Record<string, number> }
-): Promise<void> {
+  step: { autoSendable: boolean; fieldCount: number; summary: Record<string, number> }
+): Promise<ResolutionRecord> {
+  const notSending = () =>
+    new AppError(409, 'Only an application the extension is sending can have its form resolved.');
+
+  const row = await db.queryOne<{ applyStatus: string; applyResolution: string | null }>(
+    'SELECT applyStatus, applyResolution FROM postulations WHERE id = $1 AND userId = $2',
+    [postulationId, userId]
+  );
+  if (!row || row.applyStatus !== 'enviando') throw notSending();
+
+  const previous = row.applyResolution
+    ? safeJsonParse(row.applyResolution, null as Partial<ResolutionRecord> | null)
+    : null;
+  const merged = mergeResolution(previous, step);
+
+  // Si otro paso escribió entretanto, no se pisa su resultado.
   const saved = await db.queryOne<{ id: string }>(`
     UPDATE postulations SET applyResolution = $1, applyUpdatedAt = CURRENT_TIMESTAMP
-    WHERE id = $2 AND userId = $3 AND applyStatus = 'enviando'
+    WHERE id = $2 AND userId = $3 AND applyStatus = 'enviando' AND applyResolution IS NOT DISTINCT FROM $4
     RETURNING id
-  `, [JSON.stringify({ ...resolution, at: new Date().toISOString() }), postulationId, userId]);
+  `, [JSON.stringify({ ...merged, at: new Date().toISOString() }), postulationId, userId, row.applyResolution]);
 
-  if (!saved) {
-    throw new AppError(409, 'Only an application the extension is sending can have its form resolved.');
-  }
+  if (!saved) throw notSending();
+  return merged;
 }
 
 export async function getApplicationEvents(postulationId: string, userId: string) {

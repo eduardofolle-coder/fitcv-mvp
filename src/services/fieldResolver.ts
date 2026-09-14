@@ -39,7 +39,10 @@ export interface FieldResolution {
 
 type Pending = { field: ApplicationField; classification: Classification };
 
-export function parseFields(raw: unknown, options: { allowEmpty?: boolean } = {}): ApplicationField[] {
+/** Campo tal como llega de un formulario real: puede indicar si es obligatorio. */
+export type ParsedField = ApplicationField & { required?: boolean };
+
+export function parseFields(raw: unknown, options: { allowEmpty?: boolean } = {}): ParsedField[] {
   if (!Array.isArray(raw) || (raw.length === 0 && !options.allowEmpty)) {
     throw new AppError(400, 'Provide at least one field.');
   }
@@ -68,6 +71,7 @@ export function parseFields(raw: unknown, options: { allowEmpty?: boolean } = {}
         typeof o.maxLength === 'number' && Number.isInteger(o.maxLength) && o.maxLength > 0
           ? Math.min(o.maxLength, 5000)
           : undefined,
+      required: typeof o.required === 'boolean' ? o.required : undefined,
     };
   });
 }

@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "FITCV — Postulación con tu CV adaptado",
+  "version": "0.1.0",
+  "description": "Envía tus postulaciones con tu CV adaptado y respuestas verificadas contra tu CV. Nunca inventa datos.",
+  "permissions": ["storage", "tabs", "scripting", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "FITCV",
+    "default_popup": "popup.html"
+  }
+}

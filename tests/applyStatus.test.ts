@@ -8,6 +8,7 @@ import {
   canTransition,
   isApplyStatus,
   isAttentionReason,
+  mergeResolution,
   qualifiesForAutoSend,
 } from '../src/services/applyStatus.js';
 
@@ -55,5 +56,36 @@ describe('qualifiesForAutoSend', () => {
   it('rejects a form with a draft to approve or a personal decision', () => {
     expect(qualifiesForAutoSend([{ status: 'filled' }, { status: 'needs-approval' }])).toBe(false);
     expect(qualifiesForAutoSend([{ status: 'needs-user' }])).toBe(false);
+  });
+
+  it('leaves an optional field blank instead of blocking the send', () => {
+    const resolutions = [
+      { fieldId: 'name', status: 'filled' },
+      { fieldId: 'letter', status: 'needs-approval' },
+    ];
+    expect(qualifiesForAutoSend(resolutions, [{ id: 'name', required: true }, { id: 'letter', required: false }])).toBe(true);
+  });
+
+  it('treats a field without an optional mark as required', () => {
+    const resolutions = [{ fieldId: 'salary', status: 'needs-user' }];
+    expect(qualifiesForAutoSend(resolutions, [{ id: 'salary' }])).toBe(false);
+  });
+});
+
+describe('mergeResolution', () => {
+  const ok = { autoSendable: true, fieldCount: 2, summary: { filled: 2 } };
+  const blocked = { autoSendable: false, fieldCount: 1, summary: { 'needs-user': 1 } };
+
+  it('starts a record on the first step', () => {
+    expect(mergeResolution(null, ok)).toEqual({ ...ok, steps: 1 });
+  });
+
+  it('does not let a later clean step erase an earlier blocked one', () => {
+    const merged = mergeResolution(mergeResolution(null, blocked), ok);
+    expect(merged).toEqual({ autoSendable: false, fieldCount: 3, summary: { 'needs-user': 1, filled: 2 }, steps: 2 });
+  });
+
+  it('keeps qualifying when every step qualifies', () => {
+    expect(mergeResolution(mergeResolution(null, ok), ok).autoSendable).toBe(true);
   });
 });
