@@ -68,12 +68,24 @@ export function mechanicalCheck(narrative: Narrative, hard: HardData): Repair {
       if (original === undefined) return h;
 
       const added = ungroundedNumbers(h.text, original);
-      if (added.length === 0) return h;
+      if (added.length > 0) {
+        adjustments.push(
+          `Se restauró la redacción original de un logro: la versión adaptada agregaba cifras que el CV no contiene (${added.join(', ')}).`
+        );
+        return { text: original, sourceIndex: h.sourceIndex };
+      }
 
-      adjustments.push(
-        `Se restauró la redacción original de un logro: la versión adaptada agregaba cifras que el CV no contiene (${added.join(', ')}).`
-      );
-      return { text: original, sourceIndex: h.sourceIndex };
+      // Orientar no es achicar: "lideré un equipo de 4" convertido en "trabajé
+      // en un equipo" no miente, pero le quita al candidato un logro real.
+      const dropped = ungroundedNumbers(original, h.text);
+      if (dropped.length > 0) {
+        adjustments.push(
+          `Se restauró la redacción original de un logro: la versión adaptada omitía cifras que tu CV sí tiene (${dropped.join(', ')}).`
+        );
+        return { text: original, sourceIndex: h.sourceIndex };
+      }
+
+      return h;
     });
   }
 
@@ -207,8 +219,11 @@ export function applyVerdicts(narrative: Narrative, hard: HardData, result: unkn
       if (isSupported(judged)) return h;
 
       const reason = reasonOf(judged);
+      const weakened = typeof judged?.verdict === 'string' && judged.verdict.trim().toLowerCase() === 'weakened';
       adjustments.push(
-        `Se restauró la redacción original de un logro porque la versión adaptada afirmaba más de lo que dice el CV${reason ? `: ${reason}` : ''}.`
+        `Se restauró la redacción original de un logro porque la versión adaptada ${
+          weakened ? 'omitía algo que tu CV sí dice' : 'afirmaba más de lo que dice el CV'
+        }${reason ? `: ${reason}` : ''}.`
       );
       return { text: originalOf(hard, experienceId, h) ?? h.text, sourceIndex: h.sourceIndex };
     });

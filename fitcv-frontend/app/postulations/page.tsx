@@ -21,6 +21,7 @@ type Estado = (typeof ESTADOS)[number];
 
 interface Postulation {
   id: string;
+  offerId: string;
   title: string;
   company: string;
   estado: Estado;
@@ -29,13 +30,28 @@ interface Postulation {
   notes?: string | null;
 }
 
+interface Offer {
+  id: string;
+  title: string;
+  company: string;
+  level?: string;
+  location?: string;
+  salaryMin?: number;
+  salaryMax?: number;
+}
+
+const clp = (n?: number) => (typeof n === 'number' ? `$${n.toLocaleString('es-CL')}` : '');
+
 export default function PostulationsPage() {
   const router = useRouter();
   const { user, initializing } = useAuth();
   const [postulations, setPostulations] = useState<Postulation[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | Estado>('all');
+  const [creating, setCreating] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Todos los hooks van antes de cualquier return: la versión anterior salía
   // temprano mientras cargaba la sesión y declaraba el useEffect después, así
@@ -46,7 +62,10 @@ export default function PostulationsPage() {
 
     let cancelled = false;
     (async () => {
-      const res = await apiClient.get<Postulation[]>('/postulations');
+      const [res, offersRes] = await Promise.all([
+        apiClient.get<Postulation[]>('/postulations'),
+        apiClient.get<Offer[]>('/offers'),
+      ]);
       if (cancelled) return;
 
       if (res.success && Array.isArray(res.data)) {
@@ -54,6 +73,8 @@ export default function PostulationsPage() {
       } else {
         setError(res.error || 'No se pudieron cargar tus postulaciones');
       }
+      // Sin ofertas la página sigue sirviendo para ver lo ya postulado.
+      if (offersRes.success && Array.isArray(offersRes.data)) setOffers(offersRes.data);
       setLoading(false);
     })();
 
@@ -72,9 +93,29 @@ export default function PostulationsPage() {
 
   if (!user) return null;
 
+  const createPostulation = async (offerId: string) => {
+    setCreating(offerId);
+    setCreateError(null);
+
+    const res = await apiClient.post<{ postulationId: string }>('/postulations', {
+      offerId,
+      estado: 'Preparar postulación',
+      prioridad: 'Media',
+    });
+
+    if (res.success && res.data?.postulationId) {
+      router.push(`/postulations/${res.data.postulationId}`);
+      return;
+    }
+    setCreateError(res.error || 'No se pudo crear la postulación');
+    setCreating(null);
+  };
+
   const filteredPostulations = postulations.filter(
     (p) => filter === 'all' || p.estado === filter
   );
+
+  const availableOffers = offers.filter((o) => !postulations.some((p) => p.offerId === o.id));
 
   const statusColors: Record<Estado, string> = {
     'Por revisar': 'bg-gray-100 text-gray-800',
@@ -186,14 +227,56 @@ export default function PostulationsPage() {
                     </p>
                   </div>
                   <div className="ml-4">
-                    <button className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 border border-blue-600 rounded hover:bg-blue-50">
-                      View Details
+                    <button
+                      onClick={() => router.push(`/postulations/${post.id}`)}
+                      className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 border border-blue-600 rounded hover:bg-blue-50"
+                    >
+                      Ver CV adaptado
                     </button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+        )}
+
+        {/* Ofertas disponibles: hasta que llegue la búsqueda en portales, es la
+            única forma de crear una postulación desde la web. */}
+        {!loading && availableOffers.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Ofertas disponibles</h2>
+            <p className="text-gray-600 mb-4">Crea una postulación y adapta tu CV a la oferta.</p>
+
+            {createError && (
+              <div className="rounded-md bg-red-50 p-4 mb-4">
+                <p className="text-sm font-medium text-red-800">{createError}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {availableOffers.map((offer) => (
+                <div key={offer.id} className="bg-white rounded-lg shadow p-5 flex flex-col">
+                  <h3 className="font-semibold text-gray-900">{offer.title}</h3>
+                  <p className="text-gray-600 text-sm">
+                    {offer.company}
+                    {offer.location ? ` · ${offer.location}` : ''}
+                  </p>
+                  {offer.salaryMin !== undefined && offer.salaryMax !== undefined && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {clp(offer.salaryMin)} – {clp(offer.salaryMax)}
+                    </p>
+                  )}
+                  <button
+                    onClick={() => createPostulation(offer.id)}
+                    disabled={creating !== null}
+                    className="mt-4 self-start px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {creating === offer.id ? 'Creando...' : 'Crear postulación'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

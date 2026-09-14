@@ -347,6 +347,7 @@ Hard rules:
 - Write in CV register: implied subject, as CVs are written. Never "this candidate", never third person.
 - Highlights restate facts only. Do not append commentary about relevance or ability ("demonstrating strong skills", "directly relevant to").
 - Never attribute ownership or leadership ("led", "directed", "drove") unless the detail itself states it.
+- Never weaken a detail either: keep the leadership, ownership, team sizes, figures and results it states. "Led a team of 4 engineers" must not become "worked within a team". Write figures as digits, exactly as in the detail.
 - Everything you write is checked line by line against the original by an independent verifier, and anything it cannot trace back is replaced by the original wording.
 - Write headline, summary and highlights in the language of the job description.
 
@@ -375,6 +376,7 @@ ${inputJson}
 For each highlight decide:
 - "supported" if the rewritten version states nothing beyond the original: same actions, same scope, same ownership, same results. Rewording, emphasis and professional phrasing are fine.
 - "inflated" if it adds anything the original does not state: ownership or leadership ("led", "directed", "owned", "drove") where the original only names the work; larger scope, impact or results; team sizes, metrics, technologies or tools absent from the original; or evaluative claims about the candidate ("demonstrating strong skills", "expert in") that are not facts.
+- "weakened" if it drops something the original does state: leadership or ownership ("led a team" turned into "worked in a team"), team sizes, figures, scope or results. Understating the candidate is also a distortion.
 
 For each statement, break it into every individual claim it makes and judge each one separately. A claim is anything asserted about the candidate: an action, a skill, a result, a quality, a scale or impact, and also any relationship between facts ("during", "while", "as part of", "which allowed me", "leading the team through"). For each claim give "supportedBy": text copied exactly, character for character, from ONE single entry of facts that states that claim, or null if no single entry states it.
 - A relationship between two facts is supported only if one single entry states that relationship. Two separate entries do not support a claim that links them.
@@ -383,7 +385,7 @@ For each statement, break it into every individual claim it makes and judge each
 The statement is "supported" only if every claim is. Mark it "inflated" if any claim is not, including qualities asserted without support, and including any sentence that discloses a gap or missing requirement: the CV goes to the employer, and that belongs in private advice to the candidate.
 Your quotes are checked against the record by code. A quote that does not appear in it counts as no support.
 
-Be strict. When in doubt, choose "inflated". Every "inflated" verdict needs a reason: one short sentence, in Spanish, naming exactly what was added.
+Be strict. When in doubt, choose "inflated". Every "inflated" or "weakened" verdict needs a reason: one short sentence, in Spanish, naming exactly what was added or dropped.
 
 Keep the output compact: each "claim" is a few words, not a copy of the sentence; "supportedBy" is the shortest exact fragment that states the claim; leave "reason" empty for supported items; write the JSON without indentation.
 

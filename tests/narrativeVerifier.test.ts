@@ -59,6 +59,19 @@ describe('mechanicalCheck', () => {
     expect(adjustments[0]).toContain('15');
   });
 
+  it('restores the original wording when a highlight drops a figure', () => {
+    // El caso real: "Lideré un equipo de 4 ingenieros" terminó como "Worked within a team of engineers".
+    const { narrative, adjustments } = mechanicalCheck(
+      narrate({ highlights: { 'exp-0': [{ text: 'Worked within a team of engineers', sourceIndex: 1 }] } }),
+      hard
+    );
+
+    expect(narrative.highlights['exp-0'][0].text).toBe('Lideró un equipo de 4 ingenieros');
+    expect(adjustments).toHaveLength(1);
+    expect(adjustments[0]).toContain('omitía');
+    expect(adjustments[0]).toContain('4');
+  });
+
   it('keeps a highlight whose figures all come from the original', () => {
     const { narrative, adjustments } = mechanicalCheck(
       narrate({ highlights: { 'exp-0': [{ text: 'Formó y lideró a 4 ingenieros', sourceIndex: 1 }] } }),
