@@ -9,73 +9,67 @@ import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = Router();
 
+// Escapa los comodines de LIKE para que un "%" tipeado se busque literal.
+const likePattern = (value: string): string => `%${value.replace(/[\\%_]/g, m => `\\${m}`)}%`;
+
+const textParam = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim().slice(0, 200) : null;
+
 // ✅ GET /api/offers - Listar ofertas (con filtros)
+// Las ofertas viven en la BD: las de ejemplo y las que traen las fuentes reales.
 router.get(
   '/',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const {
-      page = 1,
-      limit = 20,
-      level,
-      company,
-      location,
-      minSalary,
-      maxSalary,
-      search
-    } = req.query;
+    const where: string[] = [];
+    const params: any[] = [];
+    const add = (condition: (n: number) => string, value: unknown) => {
+      params.push(value);
+      where.push(condition(params.length));
+    };
 
-    // ✅ MVP: Use seed data directly (bypass DB for reliability)
-    // Seed offers count: 5 (Amazon, Cornershop, Despegar, NotCo, Banco Estado)
-    let offers = [...SEED_OFFERS];
+    const level = textParam(req.query.level);
+    const company = textParam(req.query.company);
+    const location = textParam(req.query.location);
+    const source = textParam(req.query.source);
+    const country = textParam(req.query.country);
+    const search = textParam(req.query.search);
+    const minSalary = Number(req.query.minSalary);
+    const maxSalary = Number(req.query.maxSalary);
 
-    // ✅ Apply filters
-    if (level) {
-      offers = offers.filter(o => o.level === level);
-    }
+    if (level) add(n => `level = $${n}`, level);
+    if (company) add(n => `company ILIKE $${n}`, likePattern(company));
+    if (location) add(n => `location ILIKE $${n}`, likePattern(location));
+    if (source) add(n => `source = $${n}`, source);
+    if (country) add(n => `country = $${n}`, country.toUpperCase());
+    if (search) add(n => `(title ILIKE $${n} OR description ILIKE $${n})`, likePattern(search));
+    if (Number.isFinite(minSalary) && req.query.minSalary !== undefined) add(n => `salaryMin >= $${n}`, minSalary);
+    if (Number.isFinite(maxSalary) && req.query.maxSalary !== undefined) add(n => `salaryMax <= $${n}`, maxSalary);
 
-    if (company) {
-      offers = offers.filter(o => o.company.toLowerCase().includes(company.toLowerCase()));
-    }
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const limitNum = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+    const pageNum = Math.max(Number(req.query.page) || 1, 1);
 
-    if (location) {
-      offers = offers.filter(o => o.location?.toLowerCase().includes(location.toLowerCase()));
-    }
+    const countRow = await db.queryOne<{ count: string }>(`SELECT COUNT(*) AS count FROM offers ${whereSql}`, params);
+    const total = Number(countRow?.count ?? 0);
 
-    if (minSalary) {
-      offers = offers.filter(o => o.salaryMin >= Number(minSalary));
-    }
-
-    if (maxSalary) {
-      offers = offers.filter(o => o.salaryMax <= Number(maxSalary));
-    }
-
-    if (search) {
-      offers = offers.filter(o =>
-        o.title.toLowerCase().includes(search.toLowerCase()) ||
-        o.description.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-
-    const count = offers.length;
-
-    // ✅ Paginate
-    const pageNum = Number(page);
-    const limitNum = Number(limit);
-    const offset = (pageNum - 1) * limitNum;
-    const paginatedOffers = offers.slice(offset, offset + limitNum);
+    const offers = (await db.query(`
+      SELECT * FROM offers ${whereSql}
+      ORDER BY publishedAt DESC NULLS LAST, createdAt DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `, [...params, limitNum, (pageNum - 1) * limitNum])).rows;
 
     res.json({
       success: true,
-      data: paginatedOffers.map((o: any) => ({
+      data: offers.map((o: any) => ({
         ...o,
         requirements: safeJsonParse(o.requirements, [])
       })),
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: count,
-        totalPages: Math.ceil(count / limitNum)
+        total,
+        totalPages: Math.ceil(total / limitNum)
       }
     });
   })
@@ -86,29 +80,17 @@ router.get(
   '/stats/summary',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    // ✅ MVP: Use seed data directly
-    const totalOffers = SEED_OFFERS.length;
+    const totalRow = await db.queryOne<{ count: string }>('SELECT COUNT(*) AS count FROM offers');
+    const totalOffers = Number(totalRow?.count ?? 0);
 
-    // ✅ Por nivel
-    const byLevel = Object.entries(
-      SEED_OFFERS.reduce((acc, o) => {
-        acc[o.level] = (acc[o.level] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
-    ).map(([level, count]) => ({ level, count }));
+    const byLevel = (await db.query<{ level: string; count: string }>(
+      'SELECT level, COUNT(*) AS count FROM offers GROUP BY level ORDER BY count DESC'
+    )).rows.map(r => ({ level: r.level, count: Number(r.count) }));
 
-    // ✅ Por empresa
-    const byCompany = Object.entries(
-      SEED_OFFERS.reduce((acc, o) => {
-        acc[o.company] = (acc[o.company] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
-    )
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([company, count]) => ({ company, count }));
+    const topCompanies = (await db.query<{ company: string; count: string }>(
+      'SELECT company, COUNT(*) AS count FROM offers GROUP BY company ORDER BY count DESC LIMIT 5'
+    )).rows.map(r => ({ company: r.company, count: Number(r.count) }));
 
-    // ✅ Por usuario
     const userCount = await db.queryOne<{ count: string }>(
       'SELECT COUNT(*) as count FROM postulations WHERE userId = $1',
       [req.user.id]
@@ -120,7 +102,7 @@ router.get(
       data: {
         totalOffers,
         byLevel,
-        topCompanies: byCompany,
+        topCompanies,
         userPostulations,
         stats: {
           totalOffers,

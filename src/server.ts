@@ -15,6 +15,8 @@ import postulationsAgentRoutes from './routes/postulations-agent.js';
 import offersRoutes from './routes/offers.js';
 import learningRoutes from './routes/learning.js';
 import applicationsRoutes from './routes/applications.js';
+import extensionRoutes from './routes/extension.js';
+import { startOfferSync } from './services/offerSync.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
@@ -88,6 +90,7 @@ app.use('/api/postulations', postulationsRoutes);
 app.use('/api/offers', offersRoutes);
 app.use('/api/learning', learningRoutes); // Continuous learning routes
 app.use('/api/applications', applicationsRoutes);
+app.use('/api/extension', extensionRoutes);
 
 // ✅ 404 handler
 app.use((req, res) => {
@@ -156,6 +159,8 @@ initializeDatabase()
       console.log(`🚀 FITCV API running on http://localhost:${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
+      // Apagado salvo que se configure: los tests y CI no deben salir a internet.
+      startOfferSync(env.GETONBRD_SYNC_MINUTES);
     });
   })
   .catch(err => {

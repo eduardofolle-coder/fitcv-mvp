@@ -260,5 +260,73 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE adapted_cvs ADD COLUMN IF NOT EXISTS narrative TEXT;
   `);
 
+  // Ofertas reales: cada fuente trae su propio id, y la misma oferta vuelve en
+  // cada sincronización, así que se identifica por fuente + id externo.
+  await db.exec(`
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS externalId TEXT;
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS applyUrl TEXT;
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS country TEXT;
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS remoteModality TEXT;
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS publishedAt TIMESTAMPTZ;
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS lastSeenAt TIMESTAMPTZ;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_offers_source_externalId ON offers(source, externalId) WHERE externalId IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_offers_publishedAt ON offers(publishedAt);
+  `);
+
+  // Envío de postulaciones por la extensión. applyStatus sigue el envío;
+  // estado sigue el proceso con el reclutador.
+  await db.exec(`
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyStatus TEXT NOT NULL DEFAULT 'pendiente';
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyReason TEXT;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyDetail TEXT;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyUrl TEXT;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyResolution TEXT;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyAttempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyQueuedAt TIMESTAMPTZ;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyClaimedAt TIMESTAMPTZ;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyUpdatedAt TIMESTAMPTZ;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS sentAt TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS idx_postulations_apply ON postulations(userId, applyStatus);
+
+    CREATE TABLE IF NOT EXISTS application_events (
+      id TEXT PRIMARY KEY,
+      postulationId TEXT NOT NULL REFERENCES postulations(id) ON DELETE CASCADE,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      fromStatus TEXT,
+      toStatus TEXT NOT NULL,
+      mode TEXT,
+      reason TEXT,
+      detail TEXT,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_application_events_postulationId ON application_events(postulationId);
+
+    CREATE TABLE IF NOT EXISTS extension_pairing_codes (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      codeHash TEXT NOT NULL UNIQUE,
+      expiresAt TIMESTAMPTZ NOT NULL,
+      usedAt TIMESTAMPTZ,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS extension_tokens (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tokenHash TEXT NOT NULL UNIQUE,
+      deviceName TEXT,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      lastUsedAt TIMESTAMPTZ,
+      revokedAt TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_extension_tokens_userId ON extension_tokens(userId);
+
+    CREATE TABLE IF NOT EXISTS apply_preferences (
+      userId TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      autoSendLinkedIn BOOLEAN NOT NULL DEFAULT FALSE,
+      updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   console.log('✅ Database schema initialized');
 }

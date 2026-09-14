@@ -7,8 +7,8 @@ import { db } from '../db/client.js';
 import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { safeJsonParse } from '../utils/safeJson.js';
-import { buildHardData, composeCV, hardDataForPrompt, sanitizeNarrative } from '../services/cvComposer.js';
-import { verifyNarrative } from '../services/narrativeVerifier.js';
+import { getAdaptedCv, tailorCv } from '../services/cvTailoring.js';
+import { getApplicationEvents, transitionApplication } from '../services/applicationQueue.js';
 
 const router = Router();
 
@@ -75,7 +75,7 @@ router.get(
     // $n se numeran sobre la marcha en vez de estar fijos en el texto.
     const params: any[] = [req.user.id];
     let query = `
-      SELECT p.*, o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location
+      SELECT p.*, o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location, o.source
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
       WHERE p.userId = $1
@@ -127,7 +127,7 @@ router.get(
     const { id } = req.params;
 
     const postulation = await db.queryOne<any>(`
-      SELECT p.*, o.title, o.company, o.level, o.description, o.requirements
+      SELECT p.*, o.title, o.company, o.level, o.description, o.requirements, o.source, o.url
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
       WHERE p.id = $1 AND p.userId = $2
@@ -235,169 +235,69 @@ router.delete(
   })
 );
 
+// POST /api/postulations/:id/queue - Dejar la postulación lista para que la extensión la envíe
+router.post(
+  '/:id/queue',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const result = await transitionApplication({ postulationId: req.params.id, userId: req.user.id, to: 'en-cola' });
+    res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// POST /api/postulations/:id/unqueue - Sacarla de la cola
+router.post(
+  '/:id/unqueue',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const result = await transitionApplication({ postulationId: req.params.id, userId: req.user.id, to: 'pendiente' });
+    res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// POST /api/postulations/:id/mark-sent - El candidato postuló por su cuenta
+router.post(
+  '/:id/mark-sent',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const result = await transitionApplication({
+      postulationId: req.params.id,
+      userId: req.user.id,
+      to: 'enviada',
+      mode: 'manual',
+    });
+    res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// GET /api/postulations/:id/events - Historial de envío
+router.get(
+  '/:id/events',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    res.json({ success: true, data: await getApplicationEvents(req.params.id, req.user.id) });
+  })
+);
+
 // ✅ POST /api/postulations/:id/generate-cv - Generar CV adaptado
 router.post(
   '/:id/generate-cv',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const { id } = req.params;
-
-    // ✅ Obtener postulación
-    const postulation = await db.queryOne<any>(`
-      SELECT p.*, o.title, o.company, o.description
-      FROM postulations p
-      JOIN offers o ON p.offerId = o.id
-      WHERE p.id = $1 AND p.userId = $2
-    `, [id, req.user.id]);
-
-    if (!postulation) {
-      throw new AppError(404, 'Postulation not found');
-    }
-
-    // ✅ Datos duros del perfil: FITCV los copia tal cual, el modelo nunca los escribe.
-    const profile = await db.queryOne<any>(`
-      SELECT fullName, yearsExperience, education, skills, experience, languages, certifications, contactInfo
-      FROM candidate_profiles WHERE userId = $1 LIMIT 1
-    `, [req.user.id]);
-
-    if (!profile) {
-      throw new AppError(404, 'Profile not found. Please upload your CV first.');
-    }
-
-    // Un perfil analizado antes de guardar el historial estructurado no tiene de
-    // dónde copiar empresas y fechas; adaptarlo obligaría al modelo a
-    // reconstruirlas, que es justo lo que este flujo evita.
-    if (profile.experience === null || profile.experience === undefined) {
-      throw new AppError(409, 'Your CV was analyzed before FITCV stored your work history in structured form. Please upload it again to enable tailoring.');
-    }
-
-    let contact: Record<string, unknown> = {};
-    if (profile.contactInfo) {
-      try {
-        contact = safeJsonParse(EncryptionService.decrypt(profile.contactInfo), {});
-      } catch {
-        contact = {};
-      }
-    }
-
-    const hard = buildHardData(profile, contact);
-
-    const agentResult = await AgentInvokerService.invoke('cv-adapter', {
-      hardData: hardDataForPrompt(hard),
-      job: {
-        title: postulation.title,
-        company: postulation.company,
-        description: postulation.description
-      }
-    }, req.user.id);
-
-    if (!agentResult.success || !agentResult.output) {
-      throw new AppError(502, `Could not tailor the CV: ${agentResult.error ?? 'the AI returned an unusable response'}`);
-    }
-
-    // Primero lo estructural (a qué dato apunta cada logro), después el sentido
-    // (si la reformulación afirma más de lo que dice el original).
-    const sanitized = sanitizeNarrative(agentResult.output.narrative, hard);
-    const verified = await verifyNarrative(sanitized.narrative, hard, req.user.id);
-    const narrative = verified.narrative;
-    const adjustments = [...sanitized.adjustments, ...verified.adjustments];
-    const content = composeCV(hard, narrative);
-
-    const rawScore = Number(agentResult.output.atsScore);
-    const atsScore = Number.isFinite(rawScore) ? Math.max(0, Math.min(100, Math.round(rawScore))) : null;
-    const keywordMatches: string[] = Array.isArray(agentResult.output.keywordMatches)
-      ? agentResult.output.keywordMatches.filter((k: unknown): k is string => typeof k === 'string')
-      : [];
-
-    // Contenido, narrativa y ajustes derivan del CV (los ajustes citan qué se
-    // corrigió y por qué), así que los tres se guardan cifrados.
-    const cvId = uuidv4();
-    await db.query(`
-      INSERT INTO adapted_cvs (
-        id, postulationId, userId, offerId, htmlContent, atsScore, changesHighlights, narrative, createdAt
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
-    `, [
-      cvId,
-      id,
-      req.user.id,
-      postulation.offerId,
-      EncryptionService.encrypt(content),
-      atsScore,
-      EncryptionService.encrypt(JSON.stringify(adjustments)),
-      EncryptionService.encrypt(JSON.stringify({ ...narrative, keywordMatches }))
-    ]);
-
-    // ✅ Actualizar postulación con referencia a CV adaptado
-    await db.query(`
-      UPDATE postulations SET cvAdaptedId = $1, updatedAt = CURRENT_TIMESTAMP WHERE id = $2
-    `, [cvId, id]);
-
-    res.json({
-      success: true,
-      data: {
-        cvId,
-        atsScore,
-        keywordMatches,
-        rationale: narrative.rationale,
-        adjustments,
-        changes: [narrative.rationale, ...adjustments].filter(Boolean)
-      }
-    });
+    res.json({ success: true, data: await tailorCv(req.params.id, req.user.id) });
   })
 );
 
-// ✅ GET /api/postulations/:id/cv - Descargar CV adaptado
+// ✅ GET /api/postulations/:id/cv - CV adaptado más reciente
 router.get(
   '/:id/cv',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const { id } = req.params;
-
-    // ✅ Obtener CV adaptado
-    const cv = await db.queryOne<any>(`
-      SELECT ac.htmlContent, ac.atsScore, ac.changesHighlights, ac.narrative, o.title, o.company
-      FROM adapted_cvs ac
-      JOIN postulations p ON ac.postulationId = p.id
-      JOIN offers o ON p.offerId = o.id
-      WHERE p.id = $1 AND p.userId = $2
-    `, [id, req.user.id]);
-
+    const cv = await getAdaptedCv(req.params.id, req.user.id);
     if (!cv) {
       throw new AppError(404, 'Adapted CV not found. Please generate it first.');
     }
-
-    // ✅ Desencriptar
-    const decryptedContent = EncryptionService.decrypt(cv.htmlContent);
-
-    let narrative: unknown = null;
-    if (cv.narrative) {
-      try {
-        narrative = safeJsonParse(EncryptionService.decrypt(cv.narrative), null);
-      } catch {
-        narrative = null;
-      }
-    }
-
-    // Los CVs adaptados antes de cifrar los ajustes los tienen como JSON plano.
-    let changes: unknown = [];
-    if (cv.changesHighlights) {
-      try {
-        changes = safeJsonParse(EncryptionService.decrypt(cv.changesHighlights), []);
-      } catch {
-        changes = safeJsonParse(cv.changesHighlights, []);
-      }
-    }
-
-    res.json({
-      success: true,
-      data: {
-        content: decryptedContent,
-        atsScore: cv.atsScore,
-        changes,
-        narrative,
-        job: `${cv.title} at ${cv.company}`
-      }
-    });
+    res.json({ success: true, data: cv });
   })
 );
 

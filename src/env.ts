@@ -23,6 +23,9 @@ export const env = {
 
   ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS || 'http://localhost:3001').split(','),
 
+  // Cada cuántos minutos traer ofertas de Get on Board. 0 = apagado.
+  GETONBRD_SYNC_MINUTES: parseInt(process.env.GETONBRD_SYNC_MINUTES || '0'),
+
   LOG_LEVEL: process.env.LOG_LEVEL || 'info'
 } as const;
 

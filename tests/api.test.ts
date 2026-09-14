@@ -240,6 +240,163 @@ describe('postulations', () => {
   });
 });
 
+describe('applications sent by the extension', () => {
+  let extToken = '';
+  let appId = '';
+
+  const asExtension = async (method: string, endpoint: string, body?: unknown, bearer = extToken) => {
+    const res = await fetch(`${API}${endpoint}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+    return { status: res.status, data };
+  };
+
+  const newPostulation = async () => {
+    const offers = await call('GET', '/offers?limit=100');
+    const mine = await call('GET', '/postulations?limit=100');
+    const used = new Set(mine.data.data.map((p: any) => p.offerId));
+    const free = offers.data.data.find((o: any) => !used.has(o.id));
+    const created = await call('POST', '/postulations', { offerId: free.id, estado: 'Preparar postulación', prioridad: 'Media' });
+    expect(created.status).toBe(201);
+    return { id: created.data.data.postulationId as string, offer: free };
+  };
+
+  it('pairs the extension with a one-time code, never the password', async () => {
+    const created = await call('POST', '/extension/pairing-codes');
+    expect(created.status).toBe(201);
+    const code: string = created.data.data.code;
+    expect(code).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+
+    const paired = await asExtension('POST', '/extension/pair', { code: code.toLowerCase(), deviceName: 'Chrome de prueba' }, '');
+    expect(paired.status).toBe(201);
+    extToken = paired.data.data.token;
+    expect(extToken.startsWith('fitcv_ext_')).toBe(true);
+
+    const reused = await asExtension('POST', '/extension/pair', { code }, '');
+    expect(reused.status).toBe(400);
+  });
+
+  it('keeps extension and web credentials apart', async () => {
+    expect((await asExtension('GET', '/extension/me')).status).toBe(200);
+    expect((await asExtension('GET', '/cv/profile')).status).toBe(401);
+    expect((await call('GET', '/extension/me')).status).toBe(401);
+  });
+
+  it('hands queued applications to the extension exactly once', async () => {
+    const { id, offer } = await newPostulation();
+    appId = id;
+
+    const queued = await call('POST', `/postulations/${appId}/queue`);
+    expect(queued.status).toBe(200);
+    expect(queued.data.data.applyStatus).toBe('en-cola');
+
+    const { status, data } = await asExtension('GET', '/extension/queue?limit=10');
+    expect(status).toBe(200);
+    const item = data.data.find((i: any) => i.postulationId === appId);
+    expect(item).toBeTruthy();
+    expect(item.offer.title).toBe(offer.title);
+    // LinkedIn no se envía solo salvo que el candidato lo active.
+    expect(item.autoSend).toBe(offer.source !== 'linkedin');
+
+    const again = await asExtension('GET', '/extension/queue?limit=10');
+    expect(again.data.data.some((i: any) => i.postulationId === appId)).toBe(false);
+  });
+
+  it('refuses to record an automatic send without a verified form', async () => {
+    const { status, data } = await asExtension('POST', `/extension/postulations/${appId}/report`, { outcome: 'enviada', mode: 'auto' });
+    expect(status).toBe(409);
+    expect(String(data.error)).toMatch(/could not verify/i);
+  });
+
+  it('records a verified automatic send and moves the postulation to Aplicado', async () => {
+    const resolved = await asExtension('POST', `/extension/postulations/${appId}/resolve-fields`, { fields: [] });
+    expect(resolved.status).toBe(200);
+    expect(resolved.data.data.autoSendable).toBe(true);
+
+    const sent = await asExtension('POST', `/extension/postulations/${appId}/report`, { outcome: 'enviada', mode: 'auto' });
+    expect(sent.status).toBe(200);
+
+    const { data } = await call('GET', `/postulations/${appId}`);
+    expect(data.data.applyStatus).toBe('enviada');
+    expect(data.data.estado).toBe('Aplicado');
+    expect(data.data.sentAt).toBeTruthy();
+
+    const events = await call('GET', `/postulations/${appId}/events`);
+    expect(events.data.data.map((e: any) => e.toStatus)).toEqual(['en-cola', 'enviada']);
+    expect(events.data.data[1].mode).toBe('auto');
+
+    // Una postulación enviada no vuelve a enviarse.
+    const repeat = await asExtension('POST', `/extension/postulations/${appId}/report`, { outcome: 'enviada', mode: 'auto' });
+    expect(repeat.status).toBe(409);
+  });
+
+  it('parks an application that needs the candidate, only with a known reason', async () => {
+    const { id } = await newPostulation();
+    await call('POST', `/postulations/${id}/queue`);
+    await asExtension('GET', '/extension/queue?limit=10');
+
+    const invented = await asExtension('POST', `/extension/postulations/${id}/report`, { outcome: 'requiere-atencion', reason: 'saltar-captcha' });
+    expect(invented.status).toBe(400);
+
+    const parked = await asExtension('POST', `/extension/postulations/${id}/report`, {
+      outcome: 'requiere-atencion',
+      reason: 'sitio-empresa',
+      applyUrl: 'https://careers.example.com/jobs/42',
+    });
+    expect(parked.status).toBe(200);
+
+    const { data } = await call('GET', `/postulations/${id}`);
+    expect(data.data.applyStatus).toBe('requiere-atencion');
+    expect(data.data.applyReason).toBe('sitio-empresa');
+    expect(data.data.applyUrl).toBe('https://careers.example.com/jobs/42');
+
+    // El candidato postuló por su cuenta en el sitio de la empresa.
+    const manual = await call('POST', `/postulations/${id}/mark-sent`);
+    expect(manual.status).toBe(200);
+  });
+
+  it('captures an offer seen while browsing and queues it', async () => {
+    const { status, data } = await asExtension('POST', '/extension/offers', {
+      url: 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-analista-ABC123?utm=x',
+      title: 'Analista de Datos',
+      company: 'Empresa Ejemplo',
+      description: 'SQL y Python',
+      queue: true,
+    });
+    expect(status).toBe(201);
+    expect(data.data.applyStatus).toBe('en-cola');
+
+    const offer = await call('GET', `/offers/${data.data.offerId}`);
+    expect(offer.data.data.source).toBe('computrabajo');
+    expect(offer.data.data.externalId).toBe('https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-analista-ABC123');
+  });
+
+  it('requires an explicit acknowledgement to auto-send on LinkedIn', async () => {
+    expect((await call('PUT', '/applications/preferences', { autoSendLinkedIn: true })).status).toBe(400);
+    const enabled = await call('PUT', '/applications/preferences', { autoSendLinkedIn: true, acknowledgeLinkedInRisk: true });
+    expect(enabled.status).toBe(200);
+    expect(enabled.data.data.autoSendLinkedIn).toBe(true);
+  });
+
+  it('stops accepting a disconnected extension', async () => {
+    const tokens = await call('GET', '/extension/tokens');
+    expect(tokens.status).toBe(200);
+    for (const t of tokens.data.data) {
+      expect((await call('DELETE', `/extension/tokens/${t.id}`)).status).toBe(200);
+    }
+    expect((await asExtension('GET', '/extension/me')).status).toBe(401);
+  });
+});
+
 describe('learning endpoints stay up with an empty profile', () => {
   const endpoints = [
     '/learning/top-keywords',
