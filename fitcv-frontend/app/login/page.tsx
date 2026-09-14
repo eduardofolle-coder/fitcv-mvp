@@ -10,7 +10,7 @@ import { Card, CardContent } from '@/lib/components/Card';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loading, error } = useAuth();
+  const { login, submitting, error } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export default function LoginPage() {
                 type="submit"
                 fullWidth
                 size="lg"
-                loading={loading}
+                loading={submitting}
               >
                 Sign In
               </Button>

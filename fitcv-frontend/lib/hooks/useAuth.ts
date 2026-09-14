@@ -8,7 +8,12 @@ export type AuthResult = { ok: boolean; error?: string };
 
 export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Dos esperas distintas: `initializing` es la lectura del token al montar,
+  // que usan los guards de ruta; `submitting` es el envío del formulario.
+  // Compartían un mismo flag, así que el botón de registro aparecía como
+  // "Creating account..." y deshabilitado antes de que el usuario tocara nada.
+  const [initializing, setInitializing] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -16,7 +21,7 @@ export function useAuth() {
     if (token) {
       setUser({ id: '', email: '', accessToken: token });
     }
-    setLoading(false);
+    setInitializing(false);
   }, []);
 
   // Devuelve el mensaje de error además de setearlo: el estado `error` no está
@@ -26,7 +31,7 @@ export function useAuth() {
     credentials: LoginRequest | RegisterRequest,
     fallbackMessage: string
   ): Promise<AuthResult> => {
-    setLoading(true);
+    setSubmitting(true);
     setError(null);
 
     const response = await apiClient.post<AuthResponse['data']>(
@@ -41,13 +46,13 @@ export function useAuth() {
         email: response.data.email,
         accessToken: response.data.accessToken,
       });
-      setLoading(false);
+      setSubmitting(false);
       return { ok: true };
     }
 
     const message = response.error || fallbackMessage;
     setError(message);
-    setLoading(false);
+    setSubmitting(false);
     return { ok: false, error: message };
   };
 
@@ -62,5 +67,6 @@ export function useAuth() {
     setUser(null);
   };
 
-  return { user, loading, error, login, register, logout };
+  // `loading` se mantiene como alias de `initializing` para los guards.
+  return { user, initializing, submitting, loading: initializing, error, login, register, logout };
 }
