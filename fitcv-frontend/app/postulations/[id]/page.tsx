@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api-client';
+import { ApplyPanel } from './ApplyPanel';
 
 interface PostulationDetail {
   id: string;
@@ -347,6 +348,8 @@ export default function PostulationDetailPage() {
             </div>
           )}
         </section>
+
+        <ApplyPanel postulationId={detail.id} hasCv={Boolean(cv)} />
 
         {/* Preguntas del formulario */}
         <section className="bg-white rounded-lg shadow p-6">

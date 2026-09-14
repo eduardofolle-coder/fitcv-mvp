@@ -41,6 +41,8 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  // Sin exponerlo, la web no puede leer el nombre del PDF del CV que descarga.
+  exposedHeaders: ['Content-Disposition'],
   maxAge: 86400
 }));
 

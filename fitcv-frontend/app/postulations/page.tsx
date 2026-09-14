@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
+import { APPLY_STATUS_LABELS, APPLY_STATUS_STYLES, applyStatusOf } from '@/lib/applyStatus';
 
 // Los estados los define el backend en español; traducirlos a un juego propio
 // obligaba a inventar equivalencias que no existen ('offer' no es un estado
@@ -28,6 +29,7 @@ interface Postulation {
   prioridad: string;
   createdAt: string;
   notes?: string | null;
+  applyStatus?: string;
 }
 
 interface Offer {
@@ -36,11 +38,13 @@ interface Offer {
   company: string;
   level?: string;
   location?: string;
-  salaryMin?: number;
-  salaryMax?: number;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
 }
 
-const clp = (n?: number) => (typeof n === 'number' ? `$${n.toLocaleString('es-CL')}` : '');
+const money = (n: number, currency?: string | null) =>
+  currency === 'USD' ? `US$${n.toLocaleString('es-CL')}` : `$${n.toLocaleString('es-CL')}`;
 
 export default function PostulationsPage() {
   const router = useRouter();
@@ -52,6 +56,9 @@ export default function PostulationsPage() {
   const [filter, setFilter] = useState<'all' | Estado>('all');
   const [creating, setCreating] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [queueing, setQueueing] = useState(false);
+  const [queueMessage, setQueueMessage] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Todos los hooks van antes de cualquier return: la versión anterior salía
   // temprano mientras cargaba la sesión y declaraba el useEffect después, así
@@ -63,8 +70,8 @@ export default function PostulationsPage() {
     let cancelled = false;
     (async () => {
       const [res, offersRes] = await Promise.all([
-        apiClient.get<Postulation[]>('/postulations'),
-        apiClient.get<Offer[]>('/offers'),
+        apiClient.get<Postulation[]>('/postulations?limit=100'),
+        apiClient.get<Offer[]>('/offers?limit=50'),
       ]);
       if (cancelled) return;
 
@@ -81,7 +88,7 @@ export default function PostulationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [initializing, user]);
+  }, [initializing, user, reloadKey]);
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -111,6 +118,26 @@ export default function PostulationsPage() {
     setCreating(null);
   };
 
+  const pendingToSend = postulations.filter((p) => applyStatusOf(p.applyStatus) === 'pendiente');
+
+  // Más postulaciones, más oportunidades: dejar todas las pendientes listas de una vez.
+  const queueAll = async () => {
+    setQueueing(true);
+    setQueueMessage(null);
+    let queued = 0;
+    for (const p of pendingToSend) {
+      const res = await apiClient.post(`/postulations/${p.id}/queue`);
+      if (res.success) queued += 1;
+    }
+    setQueueMessage(
+      queued === pendingToSend.length
+        ? `${queued} postulaciones en cola. La extensión de Chrome las enviará.`
+        : `${queued} de ${pendingToSend.length} quedaron en cola; revisa las demás.`
+    );
+    setQueueing(false);
+    setReloadKey((k) => k + 1);
+  };
+
   const filteredPostulations = postulations.filter(
     (p) => filter === 'all' || p.estado === filter
   );
@@ -130,13 +157,28 @@ export default function PostulationsPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Postulations</h1>
-          <p className="text-gray-600">Track your job applications and their status</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">My Postulations</h1>
+            <p className="text-gray-600">Track your job applications and their status</p>
+          </div>
+          <button
+            onClick={queueAll}
+            disabled={queueing || pendingToSend.length === 0}
+            className="shrink-0 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {queueing ? 'Poniendo en cola...' : `Enviar ${pendingToSend.length} pendientes con la extensión`}
+          </button>
         </div>
 
+        {queueMessage && (
+          <div className="rounded-md bg-blue-50 p-4 mb-6">
+            <p className="text-sm text-blue-900">{queueMessage}</p>
+          </div>
+        )}
+
         {/* Filters */}
-        <div className="mb-6 flex gap-2">
+        <div className="mb-6 flex gap-2 flex-wrap">
           {(['all', ...ESTADOS] as const).map((estado) => (
             <button
               key={estado}
@@ -159,28 +201,21 @@ export default function PostulationsPage() {
             <p className="text-3xl font-bold text-gray-900">{postulations.length}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-600">En revisión</p>
+            <p className="text-sm text-gray-600">Enviadas</p>
+            <p className="text-3xl font-bold text-green-600">
+              {postulations.filter((p) => applyStatusOf(p.applyStatus) === 'enviada').length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <p className="text-sm text-gray-600">Requieren tu atención</p>
             <p className="text-3xl font-bold text-yellow-600">
-              {postulations.filter((p) => p.estado === 'En revisión').length}
+              {postulations.filter((p) => applyStatusOf(p.applyStatus) === 'requiere-atencion').length}
             </p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-600">Entrevistas</p>
-            <p className="text-3xl font-bold text-green-600">
-              {postulations.filter((p) => p.estado === 'Entrevista').length}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-600">Activas</p>
             <p className="text-3xl font-bold text-blue-600">
-              {/* Sin postulaciones esto dividía por cero y mostraba "NaN%". */}
-              {postulations.length === 0
-                ? '—'
-                : `${Math.round(
-                    (postulations.filter((p) => p.estado !== 'Descartado').length /
-                      postulations.length) *
-                      100
-                  )}%`}
+              {postulations.filter((p) => p.estado === 'Entrevista').length}
             </p>
           </div>
         </div>
@@ -202,46 +237,52 @@ export default function PostulationsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredPostulations.map((post) => (
-              <div key={post.id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{post.title}</h3>
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          statusColors[post.estado] ?? 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {post.estado}
-                      </span>
-                    </div>
-                    <p className="text-gray-600 mb-3">{post.company}</p>
-                    {post.notes && (
-                      <p className="text-sm text-gray-600 mb-2">
-                        <strong>Notes:</strong> {post.notes}
+            {filteredPostulations.map((post) => {
+              const applyStatus = applyStatusOf(post.applyStatus);
+              return (
+                <div key={post.id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <h3 className="text-lg font-semibold text-gray-900">{post.title}</h3>
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            statusColors[post.estado] ?? 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {post.estado}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${APPLY_STATUS_STYLES[applyStatus]}`}>
+                          {APPLY_STATUS_LABELS[applyStatus]}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 mb-3">{post.company}</p>
+                      {post.notes && (
+                        <p className="text-sm text-gray-600 mb-2">
+                          <strong>Notes:</strong> {post.notes}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        Creada el {new Date(post.createdAt).toLocaleDateString()}
                       </p>
-                    )}
-                    <p className="text-xs text-gray-500">
-                      Creada el {new Date(post.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="ml-4">
-                    <button
-                      onClick={() => router.push(`/postulations/${post.id}`)}
-                      className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 border border-blue-600 rounded hover:bg-blue-50"
-                    >
-                      Ver CV adaptado
-                    </button>
+                    </div>
+                    <div className="ml-4">
+                      <button
+                        onClick={() => router.push(`/postulations/${post.id}`)}
+                        className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 border border-blue-600 rounded hover:bg-blue-50"
+                      >
+                        {applyStatus === 'requiere-atencion' ? 'Revisar' : 'Ver CV adaptado'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        {/* Ofertas disponibles: hasta que llegue la búsqueda en portales, es la
-            única forma de crear una postulación desde la web. */}
+        {/* Ofertas disponibles: las que trae FITCV de los portales y las que
+            agregas desde la extensión. */}
         {!loading && availableOffers.length > 0 && (
           <section className="mt-10">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Ofertas disponibles</h2>
@@ -261,9 +302,9 @@ export default function PostulationsPage() {
                     {offer.company}
                     {offer.location ? ` · ${offer.location}` : ''}
                   </p>
-                  {offer.salaryMin !== undefined && offer.salaryMax !== undefined && (
+                  {typeof offer.salaryMin === 'number' && typeof offer.salaryMax === 'number' && (
                     <p className="text-xs text-gray-500 mt-1">
-                      {clp(offer.salaryMin)} – {clp(offer.salaryMax)}
+                      {money(offer.salaryMin, offer.salaryCurrency)} – {money(offer.salaryMax, offer.salaryCurrency)}
                     </p>
                   )}
                   <button
