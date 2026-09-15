@@ -5,6 +5,8 @@ import { validateRequest, schemas } from '../middleware/validation.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import rateLimit from 'express-rate-limit';
+import Joi from 'joi';
+import { requestPasswordReset, resetPassword } from '../services/passwordReset.js';
 
 const router = Router();
 
@@ -170,7 +172,7 @@ router.post(
 
     // ✅ Obtener userId del token
     const payload = AuthService.verifyToken(refreshToken);
-    if (!payload) {
+    if (!payload || payload.type !== 'refresh') {
       throw new AppError(401, 'Invalid refresh token');
     }
 
@@ -203,6 +205,48 @@ router.post(
     });
 
     res.json({accessToken, expiresIn});
+  })
+);
+
+// Recuperar contraseña: cada IP tiene un presupuesto propio para no convertir
+// el formulario en una forma de mandar correos a terceros.
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {error: 'Too many password reset requests, please try again later'}
+});
+
+// POST /api/auth/forgot-password
+router.post(
+  '/forgot-password',
+  passwordResetLimiter,
+  validateRequest(Joi.object({ email: Joi.string().email().lowercase().max(254).required() })),
+  asyncHandler(async (req: any, res: any) => {
+    const devResetUrl = await requestPasswordReset(req.body.email);
+    // La misma respuesta exista o no la cuenta: no se revela qué correos están registrados.
+    res.json({
+      success: true,
+      message: 'If an account exists for that email, we sent a link to reset the password.',
+      ...(devResetUrl ? { devResetUrl } : {})
+    });
+  })
+);
+
+// POST /api/auth/reset-password
+router.post(
+  '/reset-password',
+  passwordResetLimiter,
+  validateRequest(Joi.object({
+    token: Joi.string().min(20).max(200).required(),
+    password: schemas.register.extract('password')
+  })),
+  asyncHandler(async (req: any, res: any) => {
+    if (!(await resetPassword(req.body.token, req.body.password))) {
+      throw new AppError(400, 'This reset link is invalid or expired. Request a new one.');
+    }
+    res.json({ success: true, message: 'Password updated. You can sign in now.' });
   })
 );
 

@@ -152,6 +152,64 @@ describe('auth', () => {
   });
 });
 
+describe('session tokens and password recovery', () => {
+  const cookieToken = (res: Response): string =>
+    (res.headers.get('set-cookie') ?? '').match(/refreshToken=([^;]+)/)?.[1] ?? '';
+
+  it('accepts only the access token on protected routes, and only the refresh token to renew', async () => {
+    const res = await fetch(`${API}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: unique(), password: PASSWORD }),
+    });
+    const { data } = await res.json();
+    const refresh = cookieToken(res);
+    expect(refresh).not.toBe('');
+
+    const withBearer = (bearer: string) =>
+      fetch(`${API}/applications/preferences`, { headers: { Authorization: `Bearer ${bearer}` } });
+    expect((await withBearer(data.accessToken)).status).toBe(200);
+    // El token de renovación dura 7 días: no puede servir como token de acceso.
+    expect((await withBearer(refresh)).status).toBe(401);
+
+    const renew = (value: string) =>
+      fetch(`${API}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: value }),
+      });
+    expect((await renew(data.accessToken)).status).toBe(401);
+    const renewed = await renew(refresh);
+    expect(renewed.status).toBe(200);
+    expect(typeof (await renewed.json()).accessToken).toBe('string');
+  });
+
+  it('resets a forgotten password with a one-time link', async () => {
+    const email = unique();
+    const NEW_PASSWORD = 'OtraClaveSegura456!';
+    await call('POST', '/auth/register', { email, password: PASSWORD }, false);
+
+    // La respuesta es igual exista o no la cuenta.
+    const unknown = await call('POST', '/auth/forgot-password', { email: unique() }, false);
+    expect(unknown.status).toBe(200);
+    expect(unknown.data.devResetUrl).toBeUndefined();
+
+    const requested = await call('POST', '/auth/forgot-password', { email }, false);
+    expect(requested.status).toBe(200);
+    // Sin proveedor de correo, en desarrollo el enlace se devuelve para poder usarlo.
+    const resetToken = new URL(requested.data.devResetUrl).searchParams.get('token');
+    expect(resetToken).toBeTruthy();
+
+    expect((await call('POST', '/auth/reset-password', { token: resetToken, password: 'debil' }, false)).status).toBe(400);
+    expect((await call('POST', '/auth/reset-password', { token: resetToken, password: NEW_PASSWORD }, false)).status).toBe(200);
+    // Un solo uso.
+    expect((await call('POST', '/auth/reset-password', { token: resetToken, password: NEW_PASSWORD }, false)).status).toBe(400);
+
+    expect((await call('POST', '/auth/login', { email, password: NEW_PASSWORD }, false)).status).toBe(200);
+    expect((await call('POST', '/auth/login', { email, password: PASSWORD }, false)).status).toBe(401);
+  });
+});
+
 describe('persistence', () => {
   // El bug nº1: la BD era 100% en memoria y cada reinicio borraba a todos.
   it('keeps users across a full server restart', async () => {

@@ -27,7 +27,18 @@ export const env = {
   // GETONBRD_SYNC_MINUTES es el nombre anterior y se sigue aceptando.
   OFFER_SYNC_MINUTES: parseInt(process.env.OFFER_SYNC_MINUTES || process.env.GETONBRD_SYNC_MINUTES || '0'),
 
-  LOG_LEVEL: process.env.LOG_LEVEL || 'info'
+  LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+
+  // Dirección pública de la web: arma los enlaces de los correos.
+  APP_URL: process.env.APP_URL || 'http://localhost:3001',
+
+  // Correo transaccional (Resend). Sin estas dos no se envían correos.
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || '',
+
+  // Con varias instancias del servidor, las tareas programadas (lectura de
+  // portales, análisis diario) deben correr en una sola: en las demás, false.
+  RUN_SCHEDULERS: process.env.RUN_SCHEDULERS !== 'false'
 } as const;
 
 // Validation
@@ -62,6 +73,13 @@ if (env.NODE_ENV === 'production') {
 
   if (env.ALLOWED_ORIGINS.some(o => o.includes('localhost'))) {
     console.warn('⚠️  ALLOWED_ORIGINS still contains localhost in production.');
+  }
+
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+    console.warn('⚠️  RESEND_API_KEY / EMAIL_FROM are not set: password reset emails will not be sent.');
+  }
+  if (env.APP_URL.includes('localhost')) {
+    console.warn('⚠️  APP_URL still points to localhost in production: email links will be broken.');
   }
 }
 

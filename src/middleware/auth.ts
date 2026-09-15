@@ -37,7 +37,9 @@ export const requireAuth = asyncHandler(async (req: Request, res: Response, next
   }
 
   const payload = AuthService.verifyToken(token);
-  if (!payload) {
+  // Solo el token de acceso (15 min) abre las rutas: el de renovación dura 7
+  // días y, si se filtra, no debe servir como credencial de uso diario.
+  if (!payload || payload.type !== 'access') {
     await AuditLogger.logSecurityEvent({
       eventType: 'UNAUTHORIZED_ACCESS',
       ipAddress: req.ip,

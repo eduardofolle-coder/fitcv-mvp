@@ -18,9 +18,33 @@ class ApiClient {
     localStorage.removeItem('accessToken');
   }
 
+  private refreshing: Promise<boolean> | null = null;
+
+  // El token de acceso dura 15 minutos: al vencer se renueva con la cookie
+  // httpOnly de la sesión. Varias requests que vencen a la vez comparten una
+  // sola renovación.
+  private refreshSession(): Promise<boolean> {
+    if (!this.refreshing) {
+      this.refreshing = fetch(`${API_URL}/auth/refresh`, { method: 'POST', credentials: 'include' })
+        .then(async res => {
+          if (!res.ok) return false;
+          const data = await res.json().catch(() => ({}));
+          if (typeof data.accessToken !== 'string') return false;
+          this.setToken(data.accessToken);
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => {
+          this.refreshing = null;
+        });
+    }
+    return this.refreshing;
+  }
+
   async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retried = false
   ): Promise<ApiResponse<T>> {
     const url = `${API_URL}${endpoint}`;
     const token = this.getToken();
@@ -44,6 +68,8 @@ class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers,
+        // Para que el navegador guarde y envíe la cookie de sesión (renovación).
+        credentials: 'include',
         signal: controller.signal,
       });
 
@@ -63,6 +89,10 @@ class ApiClient {
         // borraría el error antes de que el usuario pueda leerlo.
         const isAuthAttempt =
           endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/register');
+
+        if (response.status === 401 && !isAuthAttempt && token && !retried && (await this.refreshSession())) {
+          return this.request<T>(endpoint, options, true);
+        }
 
         if (response.status === 401 && !isAuthAttempt) {
           this.clearToken();

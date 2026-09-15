@@ -80,6 +80,10 @@ export const SEED_OFFERS = [
 ];
 
 export async function initializeSeedData() {
+  // Las ofertas de ejemplo son para desarrollo y pruebas: en producción las
+  // ofertas vienen de los portales, y una oferta falsa sería postulable.
+  if (process.env.NODE_ENV === 'production') return;
+
   console.log('🌱 Initializing seed data...');
 
   // Check if offers already exist

@@ -385,5 +385,17 @@ export async function initializeSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(userId, createdAt);
   `);
 
+  // Recuperar contraseña: enlaces de un solo uso, guardados como hash.
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tokenHash TEXT NOT NULL UNIQUE,
+      expiresAt TIMESTAMPTZ NOT NULL,
+      usedAt TIMESTAMPTZ,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   console.log('✅ Database schema initialized');
 }

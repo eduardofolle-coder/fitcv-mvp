@@ -195,9 +195,11 @@ initializeDatabase()
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
       // Apagado salvo que se configure: los tests y CI no deben salir a internet.
-      startOfferSync(env.OFFER_SYNC_MINUTES);
-      // Solo trabaja para candidatos que eligieron una hora: sin eso no hace nada.
-      startDailyAnalysis();
+      if (env.RUN_SCHEDULERS) {
+        startOfferSync(env.OFFER_SYNC_MINUTES);
+        // Solo trabaja para candidatos que eligieron una hora: sin eso no hace nada.
+        startDailyAnalysis();
+      }
     });
   })
   .catch(err => {
