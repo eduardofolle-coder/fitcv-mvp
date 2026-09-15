@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api-client';
+import { MATCH_TIERS, MATCH_TIER_LABELS, MATCH_TIER_STYLES, type MatchTier, type TierCounts } from '@/lib/matchTier';
 
 interface Offer {
   id: string;
@@ -17,7 +18,7 @@ interface Offer {
   salaryMin?: number | null;
   salaryMax?: number | null;
   salaryCurrency?: string | null;
-  match?: { score: number; reasons: string[] };
+  match?: { score: number; tier: MatchTier; reasons: string[] };
 }
 
 interface OffersResponse {
@@ -27,6 +28,7 @@ interface OffersResponse {
   pagination?: { page: number; totalPages: number; total: number };
   needsProfile?: boolean;
   profileTerms?: string[];
+  tierCounts?: TierCounts;
 }
 
 interface Postulation {
@@ -57,8 +59,6 @@ const sourceLabel = (source: string) => SOURCE_LABELS[source] ?? source;
 const money = (n: number, currency?: string | null) =>
   currency === 'USD' ? `US$${n.toLocaleString('es-CL')}` : `$${n.toLocaleString('es-CL')}`;
 
-const affinityStyle = (score: number) =>
-  score >= 60 ? 'bg-green-100 text-green-800' : score >= 35 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700';
 
 export default function OffersPage() {
   const router = useRouter();
@@ -69,6 +69,8 @@ export default function OffersPage() {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [profileTerms, setProfileTerms] = useState<string[]>([]);
   const [needsProfile, setNeedsProfile] = useState(false);
+  const [tier, setTier] = useState<'' | MatchTier>('');
+  const [tierCounts, setTierCounts] = useState<TierCounts>({ alto: 0, medio: 0, bajo: 0 });
   const [bySource, setBySource] = useState<Array<{ source: string; count: number }>>([]);
   const [applied, setApplied] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
@@ -111,6 +113,7 @@ export default function OffersPage() {
       setError(null);
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (mode === 'profile') params.set('match', 'profile');
+      if (mode === 'profile' && tier) params.set('tier', tier);
       if (search) params.set('search', search);
       if (source) params.set('source', source);
 
@@ -121,6 +124,7 @@ export default function OffersPage() {
         if (res.pagination) setPagination(res.pagination);
         setNeedsProfile(res.needsProfile === true);
         setProfileTerms(res.profileTerms ?? []);
+        if (res.tierCounts) setTierCounts(res.tierCounts);
       } else {
         setError(res.error || 'No se pudieron cargar las ofertas');
       }
@@ -129,7 +133,7 @@ export default function OffersPage() {
     return () => {
       cancelled = true;
     };
-  }, [initializing, user, mode, page, search, source]);
+  }, [initializing, user, mode, page, search, source, tier]);
 
   if (initializing) {
     return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
@@ -221,6 +225,33 @@ export default function OffersPage() {
           </p>
         )}
 
+        {mode === 'profile' && !needsProfile && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {(['', ...MATCH_TIERS] as const).map(value => {
+              const count = value ? tierCounts[value] : tierCounts.alto + tierCounts.medio + tierCounts.bajo;
+              const active = tier === value;
+              return (
+                <button
+                  key={value || 'todos'}
+                  onClick={() => {
+                    setTier(value);
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold transition border ${
+                    active
+                      ? value
+                        ? `${MATCH_TIER_STYLES[value]} border-current`
+                        : 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {value ? MATCH_TIER_LABELS[value] : 'Todos los calces'} · {count.toLocaleString('es-CL')}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <form onSubmit={submitSearch} className="flex gap-2 mb-4">
           <input
             value={query}
@@ -305,8 +336,8 @@ export default function OffersPage() {
                       </p>
                       {offer.match && (
                         <p className="text-xs text-gray-600 mt-2">
-                          <span className={`px-2 py-0.5 rounded-full font-semibold ${affinityStyle(offer.match.score)}`}>
-                            Afinidad {offer.match.score}%
+                          <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${MATCH_TIER_STYLES[offer.match.tier]}`}>
+                            {MATCH_TIER_LABELS[offer.match.tier]} · {offer.match.score}%
                           </span>
                           {offer.match.reasons.length > 0 && <span className="ml-2">Coincide con: {offer.match.reasons.join(', ')}</span>}
                         </p>

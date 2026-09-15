@@ -356,5 +356,34 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS salaryAuthorized BOOLEAN NOT NULL DEFAULT FALSE;
   `);
 
+  // Análisis diario de ofertas: la hora la elige el candidato (hora de Chile);
+  // cada corrida deja un resumen por calce y un aviso.
+  await db.exec(`
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS dailyAnalysisHour INTEGER;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS lastAnalysisDate TEXT;
+
+    CREATE TABLE IF NOT EXISTS offer_digests (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      runDate TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_offer_digests_user ON offer_digests(userId, createdAt);
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      link TEXT,
+      data TEXT,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      readAt TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(userId, createdAt);
+  `);
+
   console.log('✅ Database schema initialized');
 }

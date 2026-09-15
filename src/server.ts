@@ -19,6 +19,8 @@ import learningRoutes from './routes/learning.js';
 import applicationsRoutes from './routes/applications.js';
 import extensionRoutes from './routes/extension.js';
 import { backfillOfferSearch, startOfferSync } from './services/offerSync.js';
+import { startDailyAnalysis } from './services/dailyAnalysis.js';
+import notificationsRoutes from './routes/notifications.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
@@ -97,6 +99,7 @@ app.use('/api/offers', offersRoutes);
 app.use('/api/learning', learningRoutes); // Continuous learning routes
 app.use('/api/applications', applicationsRoutes);
 app.use('/api/extension', extensionRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // ✅ 404 handler
 app.use((req, res) => {
@@ -193,6 +196,8 @@ initializeDatabase()
       console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
       // Apagado salvo que se configure: los tests y CI no deben salir a internet.
       startOfferSync(env.OFFER_SYNC_MINUTES);
+      // Solo trabaja para candidatos que eligieron una hora: sin eso no hace nada.
+      startDailyAnalysis();
     });
   })
   .catch(err => {

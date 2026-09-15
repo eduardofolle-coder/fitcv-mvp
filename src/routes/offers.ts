@@ -6,12 +6,21 @@ import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { SEED_OFFERS } from '../db/seedData.js';
 import { safeJsonParse } from '../utils/safeJson.js';
+import rateLimit from 'express-rate-limit';
 import { loadMatchingProfile } from '../services/candidateProfile.js';
-import { likePatterns, scoreOffer, searchable } from '../services/offerMatching.js';
+import { isMatchTier, searchable } from '../services/offerMatching.js';
+import { countByTier, rankOffersForProfile } from '../services/profileOffers.js';
+import { runOfferAnalysis } from '../services/dailyAnalysis.js';
 
-// Ofertas candidatas que se puntúan por consulta: las más recientes que
-// mencionan algún término del perfil.
-const MAX_MATCH_CANDIDATES = 3000;
+// Cada análisis puntúa miles de ofertas: se limita el "analizar ahora".
+const analysisLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || req.ip,
+  message: { error: 'You have reached the limit of offer analyses for this hour.' },
+});
 
 const router = Router();
 
@@ -62,39 +71,33 @@ router.get(
       const profile = await loadMatchingProfile(req.user.id);
       const empty = { page: pageNum, limit: limitNum, total: 0, totalPages: 0 };
       if (!profile) {
-        return res.json({ success: true, data: [], needsProfile: true, profileTerms: [], pagination: empty });
+        return res.json({
+          success: true,
+          data: [],
+          needsProfile: true,
+          profileTerms: [],
+          tierCounts: { alto: 0, medio: 0, bajo: 0 },
+          pagination: empty,
+        });
       }
 
-      const patterns = likePatterns(profile);
-      const termFilter = patterns.map(pattern => {
-        params.push(pattern);
-        return `searchText LIKE $${params.length}`;
-      });
-      const matchWhere = `WHERE ${[...where, `(${termFilter.join(' OR ')})`].join(' AND ')}`;
+      const ranked = await rankOffersForProfile(profile, where, params);
+      const tier = isMatchTier(req.query.tier) ? req.query.tier : null;
+      const shown = tier ? ranked.filter(item => item.match.tier === tier) : ranked;
 
-      const candidates = (await db.query(`
-        SELECT * FROM offers ${matchWhere}
-        ORDER BY publishedAt DESC NULLS LAST, createdAt DESC
-        LIMIT ${MAX_MATCH_CANDIDATES}
-      `, params)).rows;
-
-      const time = (o: any) => (o.publishedAt ? new Date(o.publishedAt).getTime() : 0);
-      const ranked = candidates
-        .map((o: any) => ({ offer: o, match: scoreOffer(o, profile) }))
-        .filter(item => item.match.recommended)
-        .sort((a, b) => b.match.score - a.match.score || time(b.offer) - time(a.offer));
-
-      const total = ranked.length;
-      const pageItems = ranked.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+      const total = shown.length;
+      const pageItems = shown.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
       return res.json({
         success: true,
         data: pageItems.map(({ offer, match }) => ({
           ...offer,
           requirements: safeJsonParse(offer.requirements, []),
-          match: { score: match.score, reasons: match.reasons },
+          match: { score: match.score, tier: match.tier, reasons: match.reasons },
         })),
         profileTerms: profile.terms.slice(0, 8).map(t => t.display),
+        // Los totales por calce son de todas las afines, sin el filtro de calce.
+        tierCounts: countByTier(ranked),
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
       });
     }
@@ -123,6 +126,20 @@ router.get(
         totalPages: Math.ceil(total / limitNum)
       }
     });
+  })
+);
+
+// POST /api/offers/analysis/run - Correr ahora el análisis de ofertas del perfil
+router.post(
+  '/analysis/run',
+  requireAuth,
+  analysisLimiter,
+  asyncHandler(async (req: any, res: any) => {
+    const digest = await runOfferAnalysis(req.user.id);
+    if (!digest) {
+      throw new AppError(409, 'Upload your CV first so FITCV can analyse offers for your profile.');
+    }
+    res.json({ success: true, data: digest });
   })
 );
 

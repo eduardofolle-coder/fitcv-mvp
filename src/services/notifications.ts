@@ -1,0 +1,63 @@
+/**
+ * Avisos al candidato. Hoy se muestran en el tablero; los canales externos
+ * (WhatsApp, correo) se conectan en createNotification cuando existan.
+ */
+import { v4 as uuidv4 } from 'uuid';
+import { db } from '../db/client.js';
+import { safeJsonParse } from '../utils/safeJson.js';
+
+export interface NotificationInput {
+  userId: string;
+  kind: string;
+  title: string;
+  body: string;
+  link?: string | null;
+  data?: unknown;
+}
+
+export async function createNotification(input: NotificationInput): Promise<string> {
+  const id = uuidv4();
+  await db.query(`
+    INSERT INTO notifications (id, userId, kind, title, body, link, data, createdAt)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+  `, [
+    id,
+    input.userId,
+    input.kind,
+    input.title.slice(0, 200),
+    input.body.slice(0, 2000),
+    input.link ?? null,
+    input.data === undefined ? null : JSON.stringify(input.data),
+  ]);
+  return id;
+}
+
+export async function listNotifications(userId: string, limit = 20) {
+  const rows = (await db.query<any>(`
+    SELECT id, kind, title, body, link, data, createdAt, readAt
+    FROM notifications WHERE userId = $1
+    ORDER BY createdAt DESC LIMIT $2
+  `, [userId, limit])).rows;
+
+  const unread = await db.queryOne<{ count: string }>(
+    'SELECT COUNT(*) AS count FROM notifications WHERE userId = $1 AND readAt IS NULL',
+    [userId]
+  );
+
+  return {
+    items: rows.map(row => ({ ...row, data: row.data ? safeJsonParse(row.data, null) : null })),
+    unread: Number(unread?.count ?? 0),
+  };
+}
+
+export async function markNotificationRead(userId: string, id: string): Promise<boolean> {
+  const row = await db.queryOne<{ id: string }>(
+    'UPDATE notifications SET readAt = COALESCE(readAt, CURRENT_TIMESTAMP) WHERE id = $1 AND userId = $2 RETURNING id',
+    [id, userId]
+  );
+  return row !== null;
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  await db.query('UPDATE notifications SET readAt = CURRENT_TIMESTAMP WHERE userId = $1 AND readAt IS NULL', [userId]);
+}

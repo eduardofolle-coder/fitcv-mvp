@@ -84,6 +84,11 @@ describe('scoreOffer', () => {
     expect(backend.recommended).toBe(false);
   });
 
+  it('labels each match high, medium or low', () => {
+    expect(['alto', 'medio', 'bajo']).toContain(jefe.tier);
+    expect(jefe.tier).toBe(jefe.score >= 60 ? 'alto' : jefe.score >= 35 ? 'medio' : 'bajo');
+  });
+
   it('ranks a title that names several areas of the CV first, and says why', () => {
     expect(jefe.score).toBeGreaterThan(analyst.score);
     expect(jefe.reasons).toEqual(expect.arrayContaining(['logística', 'abastecimiento']));

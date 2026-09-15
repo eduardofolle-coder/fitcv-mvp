@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 import { ExtensionCard } from './ExtensionCard';
+import { DailyAnalysisCard } from './DailyAnalysisCard';
 import {
   TopKeywordsResponse,
   PatternsResponse,
@@ -274,6 +275,8 @@ export default function DashboardPage() {
             </section>
           )
         )}
+
+        {profile && <DailyAnalysisCard />}
 
         <ExtensionCard />
 

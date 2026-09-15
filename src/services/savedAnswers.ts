@@ -10,6 +10,8 @@ import type { SavedAnswers } from './fieldClassifier.js';
 export interface AnswerPreferences extends SavedAnswers {
   autoSendLinkedIn: boolean;
   acceptPortalTermsAt: string | null;
+  /** Hora de Chile (0-23) del análisis diario de ofertas; null si no la eligió. */
+  dailyAnalysisHour: number | null;
 }
 
 const EMPTY: AnswerPreferences = {
@@ -29,6 +31,7 @@ const EMPTY: AnswerPreferences = {
   workPermit: null,
   acceptPortalTerms: false,
   acceptPortalTermsAt: null,
+  dailyAnalysisHour: null,
 };
 
 const decrypt = (value: unknown): string | null => {
@@ -88,6 +91,7 @@ export async function loadAnswerPreferences(userId: string): Promise<AnswerPrefe
     workPermit: bool(row.workPermit),
     acceptPortalTerms: row.acceptPortalTerms === true,
     acceptPortalTermsAt: row.acceptPortalTermsAt ? new Date(row.acceptPortalTermsAt).toISOString() : null,
+    dailyAnalysisHour: int(row.dailyAnalysisHour),
   };
 }
 
@@ -157,6 +161,14 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.acceptPortalTerms = body.acceptPortalTerms;
   }
 
+  if (has('dailyAnalysisHour')) {
+    const value = body.dailyAnalysisHour;
+    if (value !== null && !(typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 23)) {
+      throw new AppError(400, 'dailyAnalysisHour must be a whole hour from 0 to 23, or null.');
+    }
+    next.dailyAnalysisHour = value as number | null;
+  }
+
   if (has('autoSendLinkedIn')) {
     if (typeof body.autoSendLinkedIn !== 'boolean') throw new AppError(400, 'autoSendLinkedIn must be true or false.');
     // LinkedIn prohíbe los plugins que automatizan actividad: activarlo es una
@@ -173,8 +185,9 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
   await db.query(`
     INSERT INTO apply_preferences (
       userId, autoSendLinkedIn, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
-      driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt, updatedAt
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+      driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt,
+      dailyAnalysisHour, updatedAt
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP)
     ON CONFLICT (userId) DO UPDATE SET
       autoSendLinkedIn = EXCLUDED.autoSendLinkedIn,
       salaryMin = EXCLUDED.salaryMin,
@@ -192,6 +205,7 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
       workPermit = EXCLUDED.workPermit,
       acceptPortalTerms = EXCLUDED.acceptPortalTerms,
       acceptPortalTermsAt = EXCLUDED.acceptPortalTermsAt,
+      dailyAnalysisHour = EXCLUDED.dailyAnalysisHour,
       updatedAt = CURRENT_TIMESTAMP
   `, [
     userId,
@@ -211,6 +225,7 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.workPermit,
     next.acceptPortalTerms,
     next.acceptPortalTermsAt,
+    next.dailyAnalysisHour,
   ]);
 
   return loadAnswerPreferences(userId);

@@ -115,7 +115,9 @@ export default function CVUploadPage() {
       }
 
       setSuccess('CV analyzed successfully. Redirecting...');
-      router.push('/dashboard');
+      // Con el CV cargado, se le pide elegir la hora del análisis diario si aún no la tiene.
+      const prefs = await apiClient.get<{ dailyAnalysisHour: number | null }>('/applications/preferences');
+      router.push(prefs.success && prefs.data?.dailyAnalysisHour === null ? '/preferences?primera=1' : '/dashboard');
     } catch (err) {
       setSuccess(null);
       setError(err instanceof Error ? err.message : 'Failed to upload CV');

@@ -199,9 +199,24 @@ export function buildMatchingProfile(input: ProfileInput): MatchingProfile {
   };
 }
 
+export type MatchTier = 'alto' | 'medio' | 'bajo';
+
+export const MATCH_TIERS: readonly MatchTier[] = ['alto', 'medio', 'bajo'];
+
+export const isMatchTier = (value: unknown): value is MatchTier =>
+  typeof value === 'string' && (MATCH_TIERS as readonly string[]).includes(value);
+
+/**
+ * Calce de una oferta afín. Alto: el cargo es del área del candidato y la
+ * oferta pide varias cosas que tiene. Medio: calza en lo principal. Bajo: es de
+ * su área pero con poca coincidencia.
+ */
+export const matchTier = (score: number): MatchTier => (score >= 60 ? 'alto' : score >= 35 ? 'medio' : 'bajo');
+
 export interface OfferMatch {
   score: number;
   recommended: boolean;
+  tier: MatchTier;
   reasons: string[];
 }
 
@@ -244,6 +259,7 @@ export function scoreOffer(offer: { title?: string | null; description?: string 
   return {
     score,
     recommended,
+    tier: matchTier(score),
     reasons: [...titleHits, ...bodyHits].slice(0, 5).map(t => t.display),
   };
 }

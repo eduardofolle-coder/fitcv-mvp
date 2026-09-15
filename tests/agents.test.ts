@@ -686,6 +686,37 @@ describe('application fields', () => {
   });
 });
 
+describe('daily offer analysis for a candidate with a CV', () => {
+  it('counts profile offers by match tier and leaves a notification', async () => {
+    const offers = await call('GET', '/offers?match=profile&limit=100');
+    expect(offers.status).toBe(200);
+    const counts = offers.data.tierCounts;
+    expect(Object.keys(counts).sort()).toEqual(['alto', 'bajo', 'medio']);
+    for (const offer of offers.data.data) {
+      expect(['alto', 'medio', 'bajo']).toContain(offer.match.tier);
+    }
+
+    const first = await call('POST', '/offers/analysis/run');
+    expect(first.status).toBe(200);
+    const total = first.data.data.total;
+    expect(total.alto + total.medio + total.bajo).toBe(counts.alto + counts.medio + counts.bajo);
+
+    // Nada nuevo entre dos análisis seguidos.
+    const second = await call('POST', '/offers/analysis/run');
+    expect(second.data.data.fresh).toEqual({ alto: 0, medio: 0, bajo: 0 });
+    expect(second.data.data.total).toEqual(total);
+
+    const notes = await call('GET', '/notifications');
+    expect(notes.data.data.items[0]).toMatchObject({ kind: 'offer-digest', link: '/offers', readAt: null });
+    expect(notes.data.data.unread).toBeGreaterThanOrEqual(2);
+
+    const read = await call('POST', `/notifications/${notes.data.data.items[0].id}/read`);
+    expect(read.status).toBe(200);
+    expect((await call('POST', '/notifications/read-all')).status).toBe(200);
+    expect((await call('GET', '/notifications')).data.data.unread).toBe(0);
+  }, 60_000);
+});
+
 describe('cuando el modelo o el servicio fallan', () => {
   // El límite de subidas es por usuario, así que este bloque usa uno propio en
   // vez de gastar el presupuesto del usuario de los tests anteriores.

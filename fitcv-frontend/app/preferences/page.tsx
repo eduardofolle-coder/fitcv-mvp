@@ -23,6 +23,7 @@ interface Preferences {
   workPermit: boolean | null;
   acceptPortalTerms: boolean;
   acceptPortalTermsAt: string | null;
+  dailyAnalysisHour: number | null;
 }
 
 type YesNo = '' | 'si' | 'no';
@@ -64,6 +65,9 @@ export default function PreferencesPage() {
   const [workPermit, setWorkPermit] = useState<YesNo>('');
   const [acceptPortalTerms, setAcceptPortalTerms] = useState(false);
   const [acceptedAt, setAcceptedAt] = useState<string | null>(null);
+  const [analysisHour, setAnalysisHour] = useState('');
+  // Llega desde la subida del CV, cuando todavía no eligió la hora del análisis.
+  const [firstTime, setFirstTime] = useState(false);
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -73,6 +77,7 @@ export default function PreferencesPage() {
     if (initializing || !user) return;
     let cancelled = false;
     (async () => {
+      setFirstTime(new URLSearchParams(window.location.search).has('primera'));
       const res = await apiClient.get<Preferences>('/applications/preferences');
       if (cancelled) return;
       if (res.success && res.data) {
@@ -92,6 +97,7 @@ export default function PreferencesPage() {
         setWorkPermit(toYesNo(p.workPermit));
         setAcceptPortalTerms(p.acceptPortalTerms);
         setAcceptedAt(p.acceptPortalTermsAt);
+        setAnalysisHour(p.dailyAnalysisHour === null ? '' : String(p.dailyAnalysisHour));
       } else {
         setError(res.error || 'No se pudieron cargar tus respuestas');
       }
@@ -136,6 +142,7 @@ export default function PreferencesPage() {
       relocation: fromYesNo(relocation),
       workPermit: fromYesNo(workPermit),
       acceptPortalTerms,
+      dailyAnalysisHour: analysisHour === '' ? null : Number(analysisHour),
     });
 
     if (res.success && res.data) {
@@ -176,7 +183,37 @@ export default function PreferencesPage() {
           te preguntará en cada postulación.
         </p>
 
+        {firstTime && (
+          <div className="rounded-md bg-blue-50 p-4 mb-6">
+            <p className="text-sm text-blue-900">
+              Tu CV quedó analizado. Ahora elige a qué hora quieres que FITCV revise cada día las ofertas de tu perfil y
+              completa tus respuestas frecuentes.
+            </p>
+          </div>
+        )}
+
         <form onSubmit={save} className="space-y-6">
+          <section className="bg-white rounded-lg shadow p-6 space-y-3">
+            <h2 className="text-lg font-semibold text-gray-900">Análisis diario de ofertas</h2>
+            <p className="text-sm text-gray-600">
+              Cada día, a esta hora, FITCV revisa las ofertas de tu perfil y te avisa cuántas hay de calce alto, medio y
+              bajo, destacando las nuevas.
+            </p>
+            <div className="max-w-xs">
+              <label htmlFor="analysisHour" className={label}>
+                Hora del análisis (hora de Chile)
+              </label>
+              <select id="analysisHour" value={analysisHour} onChange={e => setAnalysisHour(e.target.value)} className={input}>
+                <option value="">Sin análisis diario</option>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, '0')}:00
+                  </option>
+                ))}
+              </select>
+            </div>
+          </section>
+
           <section className="bg-white rounded-lg shadow p-6 space-y-4">
             <h2 className="text-lg font-semibold text-gray-900">Pretensión de renta líquida</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

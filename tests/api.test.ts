@@ -451,6 +451,25 @@ describe('saved answers and salary authorisation', () => {
     expect(res.data.data.acceptPortalTermsAt).toBeTruthy();
   });
 
+  it('saves the hour of the daily offer analysis, and only a valid hour', async () => {
+    const saved = await call('PUT', '/applications/preferences', { dailyAnalysisHour: 7 });
+    expect(saved.status).toBe(200);
+    expect(saved.data.data.dailyAnalysisHour).toBe(7);
+    expect((await call('PUT', '/applications/preferences', { dailyAnalysisHour: 24 })).status).toBe(400);
+    expect((await call('PUT', '/applications/preferences', { dailyAnalysisHour: 7.5 })).status).toBe(400);
+  });
+
+  it('asks for a CV before analysing offers, and starts with no notifications', async () => {
+    expect((await call('POST', '/offers/analysis/run')).status).toBe(409);
+
+    const notes = await call('GET', '/notifications');
+    expect(notes.status).toBe(200);
+    expect(notes.data.data).toEqual({ items: [], unread: 0 });
+
+    const profileOffers = await call('GET', '/offers?match=profile');
+    expect(profileOffers.data.tierCounts).toEqual({ alto: 0, medio: 0, bajo: 0 });
+  });
+
   it('holds an offer that pays below the range until the candidate authorises it', async () => {
     // Las ofertas de ejemplo pagan como máximo $7.000.000; el rango parte en $8.000.000.
     const offers = await call('GET', '/offers?limit=100');
