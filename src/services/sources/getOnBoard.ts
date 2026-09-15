@@ -31,6 +31,8 @@ export interface ExternalOffer {
   country: string;
   remoteModality: string | null;
   publishedAt: string | null;
+  /** Hasta cuándo recibe postulaciones, si el portal lo informa. */
+  validThrough?: string | null;
 }
 
 const ENTITIES: Record<string, string> = {
@@ -45,6 +47,7 @@ const ENTITIES: Record<string, string> = {
 /** Texto legible desde el HTML de la oferta, conservando párrafos y viñetas. */
 export function htmlToText(html: string): string {
   return html
+    .replace(/\r\n?/g, '\n')
     .replace(/<\s*br\s*\/?>/gi, '\n')
     .replace(/<li[^>]*>/gi, '\n• ')
     // </li> no agrega salto: el <li> siguiente ya abre su propia línea.
@@ -52,6 +55,7 @@ export function htmlToText(html: string): string {
     .replace(/<[^>]+>/g, '')
     .replace(/&(nbsp|lt|gt|quot|#39|apos);/g, m => ENTITIES[m] ?? m)
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     // &amp; al final: decodificarlo antes convertiría "&amp;lt;" en "<".
     .replace(/&amp;/g, '&')
     .replace(/[ \t]+\n/g, '\n')

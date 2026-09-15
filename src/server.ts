@@ -1,4 +1,6 @@
 import express from 'express';
+import { existsSync, unlinkSync } from 'fs';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -117,8 +119,16 @@ function shutdown(code: number): void {
   if (shuttingDown) return;
   shuttingDown = true;
 
+  // Cerrar la BD antes de salir: PGlite escribe en disco y un corte a medias
+  // puede dejar el directorio de datos inservible. La promesa nunca rechaza.
+  const exit = () => {
+    db.close()
+      .catch(err => console.error('Error closing the database:', err))
+      .finally(() => process.exit(code));
+  };
+
   if (!server) {
-    process.exit(code);
+    exit();
     return;
   }
 
@@ -128,8 +138,26 @@ function shutdown(code: number): void {
 
   server.close(() => {
     clearTimeout(force);
-    process.exit(code);
+    exit();
   });
+}
+
+// En Windows no hay forma práctica de mandarle SIGINT a un proceso sin consola,
+// y matarlo a la fuerza arriesga la BD. En desarrollo, crear este archivo pide
+// un cierre ordenado.
+if (env.NODE_ENV !== 'production') {
+  const shutdownFile = path.resolve('data', `.shutdown-${PORT}`);
+  const watcher = setInterval(() => {
+    if (!existsSync(shutdownFile)) return;
+    try {
+      unlinkSync(shutdownFile);
+    } catch {
+      // Si no se pudo borrar igual se cierra; al arrancar de nuevo se ignora.
+    }
+    console.log('🛑 Shutdown requested through', shutdownFile);
+    shutdown(0);
+  }, 1000);
+  watcher.unref();
 }
 
 // Un throw fuera de un handler de Express mataba el proceso sin dejar rastro ni
@@ -162,7 +190,7 @@ initializeDatabase()
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`📋 Available offers: ${SEED_OFFERS.length}`);
       // Apagado salvo que se configure: los tests y CI no deben salir a internet.
-      startOfferSync(env.GETONBRD_SYNC_MINUTES);
+      startOfferSync(env.OFFER_SYNC_MINUTES);
     });
   })
   .catch(err => {

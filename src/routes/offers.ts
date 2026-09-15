@@ -21,7 +21,8 @@ router.get(
   '/',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const where: string[] = [];
+    // Una oferta vencida ya no recibe postulaciones: no se muestra.
+    const where: string[] = ['(validThrough IS NULL OR validThrough > CURRENT_TIMESTAMP)'];
     const params: any[] = [];
     const add = (condition: (n: number) => string, value: unknown) => {
       params.push(value);
@@ -87,6 +88,12 @@ router.get(
       'SELECT level, COUNT(*) AS count FROM offers GROUP BY level ORDER BY count DESC'
     )).rows.map(r => ({ level: r.level, count: Number(r.count) }));
 
+    const bySource = (await db.query<{ source: string; count: string }>(
+      `SELECT source, COUNT(*) AS count FROM offers
+       WHERE validThrough IS NULL OR validThrough > CURRENT_TIMESTAMP
+       GROUP BY source ORDER BY count DESC`
+    )).rows.map(r => ({ source: r.source, count: Number(r.count) }));
+
     const topCompanies = (await db.query<{ company: string; count: string }>(
       'SELECT company, COUNT(*) AS count FROM offers GROUP BY company ORDER BY count DESC LIMIT 5'
     )).rows.map(r => ({ company: r.company, count: Number(r.count) }));
@@ -102,6 +109,7 @@ router.get(
       data: {
         totalOffers,
         byLevel,
+        bySource,
         topCompanies,
         userPostulations,
         stats: {

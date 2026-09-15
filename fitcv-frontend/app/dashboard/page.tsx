@@ -170,6 +170,12 @@ export default function DashboardPage() {
             >
               📝 My Applications
             </button>
+            <button
+              onClick={() => router.push('/offers')}
+              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded"
+            >
+              💼 Ofertas
+            </button>
           </nav>
         </div>
       </header>
