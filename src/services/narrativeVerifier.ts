@@ -36,7 +36,7 @@ const NUMBER = /\d+(?:[.,]\d+)?/g;
 // Una cita más corta que esto calza en cualquier parte y no prueba nada.
 const MIN_QUOTE_LENGTH = 3;
 
-const normalizeForQuote = (s: string): string =>
+export const normalizeForQuote = (s: string): string =>
   s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 /** Cifras del texto que no aparecen en la fuente. */

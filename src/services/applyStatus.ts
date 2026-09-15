@@ -12,6 +12,7 @@ export const APPLY_STATUSES = [
   'enviando',
   'enviada',
   'requiere-atencion',
+  'requiere-autorizacion',
   'error',
 ] as const;
 
@@ -23,6 +24,7 @@ export const APPLY_STATUS_LABELS: Record<ApplyStatus, string> = {
   enviando: 'Enviando',
   enviada: 'Enviada',
   'requiere-atencion': 'Requiere tu atención',
+  'requiere-autorizacion': 'Requiere tu autorización',
   error: 'Error',
 };
 
@@ -33,6 +35,7 @@ export const ATTENTION_REASONS = [
   'sitio-empresa',
   'formulario-no-reconocido',
   'envio-automatico-desactivado',
+  'renta-bajo-rango',
   'otro',
 ] as const;
 
@@ -45,19 +48,23 @@ export const ATTENTION_REASON_LABELS: Record<AttentionReason, string> = {
   'sitio-empresa': 'La oferta te lleva al sitio de la empresa para postular.',
   'formulario-no-reconocido': 'FITCV no reconoció el formulario de postulación.',
   'envio-automatico-desactivado': 'El envío automático está desactivado para este portal.',
+  'renta-bajo-rango': 'La oferta paga menos que el mínimo de tu rango de renta: autoriza si igual quieres postular.',
   otro: 'Necesita tu revisión.',
 };
 
 export type ApplyMode = 'auto' | 'manual';
 
 // Una postulación enviada no vuelve atrás: lo que pase después lo sigue `estado`.
+// "requiere-autorizacion": la oferta paga bajo el rango del candidato y no se
+// postula hasta que él lo autorice.
 const TRANSITIONS: Record<ApplyStatus, readonly ApplyStatus[]> = {
-  pendiente: ['en-cola', 'enviada'],
+  pendiente: ['en-cola', 'requiere-autorizacion', 'enviada'],
   'en-cola': ['enviando', 'pendiente', 'enviada'],
   enviando: ['enviada', 'requiere-atencion', 'error', 'en-cola'],
   enviada: [],
-  'requiere-atencion': ['en-cola', 'enviada', 'pendiente'],
-  error: ['en-cola', 'enviada', 'pendiente'],
+  'requiere-atencion': ['en-cola', 'requiere-autorizacion', 'enviada', 'pendiente'],
+  'requiere-autorizacion': ['en-cola', 'pendiente', 'enviada'],
+  error: ['en-cola', 'requiere-autorizacion', 'enviada', 'pendiente'],
 };
 
 // Si la extensión toma una postulación y no reporta (se cerró el navegador),
@@ -88,7 +95,12 @@ export const qualifiesForAutoSend = (
 ): boolean => {
   const optional = new Set(fields.filter(f => f.required === false).map(f => f.id));
   return resolutions.every(
-    r => r.status === 'filled' || r.status === 'use-adapted-cv' || (r.fieldId !== undefined && optional.has(r.fieldId))
+    r =>
+      r.status === 'filled' ||
+      r.status === 'use-adapted-cv' ||
+      // Una casilla de publicidad se deja sin marcar a propósito.
+      r.status === 'leave-blank' ||
+      (r.fieldId !== undefined && optional.has(r.fieldId))
   );
 };
 

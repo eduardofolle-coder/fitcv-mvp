@@ -32,7 +32,7 @@ interface AdaptedCv {
   job: string;
 }
 
-type ResolutionStatus = 'filled' | 'needs-approval' | 'needs-user' | 'use-adapted-cv' | 'needs-generation';
+type ResolutionStatus = 'filled' | 'needs-approval' | 'needs-user' | 'use-adapted-cv' | 'needs-generation' | 'leave-blank';
 
 interface Resolution {
   fieldId: string;
@@ -50,6 +50,7 @@ const STATUS_STYLE: Record<ResolutionStatus, { label: string; className: string 
   'needs-user': { label: 'Te toca a ti', className: 'bg-gray-100 text-gray-800' },
   'use-adapted-cv': { label: 'Sube el CV adaptado', className: 'bg-indigo-100 text-indigo-800' },
   'needs-generation': { label: 'Pendiente', className: 'bg-gray-100 text-gray-800' },
+  'leave-blank': { label: 'Se deja sin marcar', className: 'bg-gray-100 text-gray-600' },
 };
 
 const scoreColor = (score: number) =>

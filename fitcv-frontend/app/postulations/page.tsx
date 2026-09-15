@@ -126,14 +126,21 @@ export default function PostulationsPage() {
     setQueueing(true);
     setQueueMessage(null);
     let queued = 0;
+    let needAuthorization = 0;
     for (const p of pendingToSend) {
-      const res = await apiClient.post(`/postulations/${p.id}/queue`);
-      if (res.success) queued += 1;
+      const res = await apiClient.post<{ applyStatus: string }>(`/postulations/${p.id}/queue`);
+      if (res.success && res.data?.applyStatus === 'requiere-autorizacion') needAuthorization += 1;
+      else if (res.success) queued += 1;
     }
+    const failed = pendingToSend.length - queued - needAuthorization;
     setQueueMessage(
-      queued === pendingToSend.length
-        ? `${queued} postulaciones en cola. La extensión de Chrome las enviará.`
-        : `${queued} de ${pendingToSend.length} quedaron en cola; revisa las demás.`
+      [
+        `${queued} postulaciones en cola: la extensión de Chrome las enviará.`,
+        needAuthorization > 0 ? `${needAuthorization} pagan menos que tu rango de renta y esperan tu autorización.` : '',
+        failed > 0 ? `${failed} no se pudieron poner en cola.` : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
     );
     setQueueing(false);
     setReloadKey((k) => k + 1);
@@ -210,7 +217,11 @@ export default function PostulationsPage() {
           <div className="bg-white rounded-lg shadow p-4">
             <p className="text-sm text-gray-600">Requieren tu atención</p>
             <p className="text-3xl font-bold text-yellow-600">
-              {postulations.filter((p) => applyStatusOf(p.applyStatus) === 'requiere-atencion').length}
+              {
+                postulations.filter((p) =>
+                  ['requiere-atencion', 'requiere-autorizacion'].includes(applyStatusOf(p.applyStatus))
+                ).length
+              }
             </p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">

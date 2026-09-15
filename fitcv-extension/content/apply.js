@@ -131,7 +131,10 @@
       const resolution = byId.get(field.id);
       let done = false;
 
-      if (resolution && resolution.status === 'filled') {
+      if (resolution && resolution.status === 'leave-blank') {
+        // Casilla de publicidad: se deja sin marcar a propósito.
+        done = true;
+      } else if (resolution && resolution.status === 'filled') {
         done = form.fillField(doc, field.id, resolution.value);
       } else if (resolution && resolution.status === 'use-adapted-cv' && field.type === 'file') {
         pdf = pdf || (await send({ type: 'fitcv:cv' }));

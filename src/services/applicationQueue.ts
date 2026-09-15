@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { safeJsonParse } from '../utils/safeJson.js';
+import { formatClp, payBelowMinimum } from './fieldClassifier.js';
 import {
   APPLY_STATUS_LABELS,
   CLAIM_LEASE_MINUTES,
@@ -227,11 +228,7 @@ export async function createPostulationForOffer(userId: string, offerId: string)
   return { id, created: true };
 }
 
-export interface ApplyPreferences {
-  autoSendLinkedIn: boolean;
-}
-
-export async function getApplyPreferences(userId: string): Promise<ApplyPreferences> {
+export async function getApplyPreferences(userId: string): Promise<{ autoSendLinkedIn: boolean }> {
   const row = await db.queryOne<{ autoSendLinkedIn: boolean }>(
     'SELECT autoSendLinkedIn FROM apply_preferences WHERE userId = $1',
     [userId]
@@ -239,11 +236,54 @@ export async function getApplyPreferences(userId: string): Promise<ApplyPreferen
   return { autoSendLinkedIn: row?.autoSendLinkedIn === true };
 }
 
-export async function setApplyPreferences(userId: string, prefs: ApplyPreferences): Promise<ApplyPreferences> {
-  await db.query(`
-    INSERT INTO apply_preferences (userId, autoSendLinkedIn, updatedAt)
-    VALUES ($1, $2, CURRENT_TIMESTAMP)
-    ON CONFLICT (userId) DO UPDATE SET autoSendLinkedIn = EXCLUDED.autoSendLinkedIn, updatedAt = CURRENT_TIMESTAMP
-  `, [userId, prefs.autoSendLinkedIn]);
-  return getApplyPreferences(userId);
+/**
+ * Deja una postulación lista para enviar. Si la oferta paga menos que el mínimo
+ * del rango del candidato, no entra a la cola: queda esperando su autorización.
+ */
+export async function queueApplication(postulationId: string, userId: string): Promise<{ from: ApplyStatus; to: ApplyStatus }> {
+  const row = await db.queryOne<any>(`
+    SELECT p.salaryAuthorized, o.salaryMin, o.salaryMax, o.salaryCurrency
+    FROM postulations p
+    JOIN offers o ON o.id = p.offerId
+    WHERE p.id = $1 AND p.userId = $2
+  `, [postulationId, userId]);
+  if (!row) throw new AppError(404, 'Postulation not found');
+
+  const prefs = await db.queryOne<{ salaryMin: number | null }>('SELECT salaryMin FROM apply_preferences WHERE userId = $1', [userId]);
+  const below = payBelowMinimum(
+    { salaryMin: row.salaryMin, salaryMax: row.salaryMax, salaryCurrency: row.salaryCurrency },
+    prefs?.salaryMin === null || prefs?.salaryMin === undefined ? null : Number(prefs.salaryMin)
+  );
+
+  if (below && row.salaryAuthorized !== true) {
+    return transitionApplication({
+      postulationId,
+      userId,
+      to: 'requiere-autorizacion',
+      reason: 'renta-bajo-rango',
+      detail: `La oferta paga hasta ${formatClp(below.offer)}; tu rango parte en ${formatClp(below.minimum)}.`,
+    });
+  }
+
+  return transitionApplication({ postulationId, userId, to: 'en-cola' });
+}
+
+/** El candidato acepta postular aunque la oferta pague bajo su rango. */
+export async function authorizeApplication(postulationId: string, userId: string) {
+  const updated = await db.queryOne<{ id: string }>(
+    'UPDATE postulations SET salaryAuthorized = TRUE, updatedAt = CURRENT_TIMESTAMP WHERE id = $1 AND userId = $2 RETURNING id',
+    [postulationId, userId]
+  );
+  if (!updated) throw new AppError(404, 'Postulation not found');
+  return transitionApplication({ postulationId, userId, to: 'en-cola', mode: 'manual' });
+}
+
+/** El candidato no quiere postular a esta oferta. */
+export async function declineApplication(postulationId: string, userId: string) {
+  const result = await transitionApplication({ postulationId, userId, to: 'pendiente', mode: 'manual' });
+  await db.query(
+    `UPDATE postulations SET estado = 'Descartado', updatedAt = CURRENT_TIMESTAMP WHERE id = $1 AND userId = $2`,
+    [postulationId, userId]
+  );
+  return result;
 }

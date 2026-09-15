@@ -53,7 +53,7 @@ export function ApplyPanel({ postulationId, hasCv }: { postulationId: string; ha
     return () => clearInterval(timer);
   }, [status, load]);
 
-  const act = async (action: 'queue' | 'unqueue' | 'mark-sent') => {
+  const act = async (action: 'queue' | 'unqueue' | 'mark-sent' | 'authorize' | 'decline') => {
     setBusy(true);
     setError(null);
     const res = await apiClient.post(`/postulations/${postulationId}/${action}`);
@@ -122,6 +122,31 @@ export function ApplyPanel({ postulationId, hasCv }: { postulationId: string; ha
               Ir a postular
             </a>
           )}
+        </div>
+      )}
+
+      {status === 'requiere-autorizacion' && (
+        <div className="rounded-md bg-orange-50 p-4 mb-4">
+          <p className="text-sm text-orange-900">
+            {(state.applyReason && ATTENTION_REASON_LABELS[state.applyReason]) || 'Necesita tu autorización para postular.'}
+          </p>
+          {state.applyDetail && <p className="text-xs text-orange-800 mt-1">{state.applyDetail}</p>}
+          <div className="flex flex-wrap gap-2 mt-3">
+            <button
+              onClick={() => act('authorize')}
+              disabled={busy}
+              className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded hover:bg-orange-700 disabled:opacity-50"
+            >
+              Autorizar y postular
+            </button>
+            <button
+              onClick={() => act('decline')}
+              disabled={busy}
+              className="px-4 py-2 text-sm font-medium text-orange-700 border border-orange-600 rounded hover:bg-orange-100 disabled:opacity-50"
+            >
+              No postular
+            </button>
+          </div>
         </div>
       )}
 

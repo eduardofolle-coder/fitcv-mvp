@@ -30,6 +30,7 @@ import {
   claimQueuedApplications,
   createPostulationForOffer,
   getApplyPreferences,
+  queueApplication,
   recordResolution,
   transitionApplication,
 } from '../services/applicationQueue.js';
@@ -171,7 +172,7 @@ router.post(
     const fields = parseFields(req.body?.fields, { allowEmpty: true });
 
     const row = await db.queryOne<any>(`
-      SELECT p.applyStatus, o.title, o.company, o.description
+      SELECT p.applyStatus, p.salaryAuthorized, o.title, o.company, o.description, o.salaryMin, o.salaryMax, o.salaryCurrency
       FROM postulations p
       JOIN offers o ON o.id = p.offerId
       WHERE p.id = $1 AND p.userId = $2
@@ -185,7 +186,15 @@ router.post(
 
     const result = await resolveFields(
       fields,
-      { title: row.title ?? '', company: row.company ?? '', description: row.description ?? '' },
+      {
+        title: row.title ?? '',
+        company: row.company ?? '',
+        description: row.description ?? '',
+        salaryMin: row.salaryMin ?? null,
+        salaryMax: row.salaryMax ?? null,
+        salaryCurrency: row.salaryCurrency ?? null,
+        salaryAuthorized: row.salaryAuthorized === true,
+      },
       req.user.id
     );
     const record = await recordResolution(req.params.id, req.user.id, {
@@ -317,8 +326,9 @@ router.post(
       const status = current?.applyStatus;
       const from: ApplyStatus = isApplyStatus(status) ? status : 'pendiente';
 
+      // Pasa por el control de renta: bajo el rango queda esperando autorización.
       applyStatus = canTransition(from, 'en-cola')
-        ? (await transitionApplication({ postulationId, userId: req.user.id, to: 'en-cola' })).to
+        ? (await queueApplication(postulationId, req.user.id)).to
         : from;
     }
 

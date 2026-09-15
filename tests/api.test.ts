@@ -411,6 +411,85 @@ describe('applications sent by the extension', () => {
   });
 });
 
+describe('saved answers and salary authorisation', () => {
+  let mine = '';
+
+  beforeAll(async () => {
+    mine = token;
+    const reg = await call('POST', '/auth/register', { email: unique(), password: PASSWORD }, false);
+    token = reg.data.data.accessToken;
+  });
+
+  afterAll(() => {
+    token = mine;
+  });
+
+  it('saves the answers the candidate declares, and only those sent', async () => {
+    const saved = await call('PUT', '/applications/preferences', {
+      salaryMin: 8_000_000,
+      salaryMax: 9_000_000,
+      availability: 'Inmediata',
+      rut: '123456785',
+      willingToTravel: true,
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.data.data).toMatchObject({ salaryMin: 8_000_000, salaryMax: 9_000_000, rut: '12.345.678-5', willingToTravel: true });
+
+    // Un cambio parcial no borra lo demás.
+    const partial = await call('PUT', '/applications/preferences', { comuna: 'Providencia' });
+    expect(partial.data.data).toMatchObject({ comuna: 'Providencia', rut: '12.345.678-5', salaryMin: 8_000_000 });
+  });
+
+  it('rejects an invalid RUT and an inverted salary range', async () => {
+    expect((await call('PUT', '/applications/preferences', { rut: '12.345.678-9' })).status).toBe(400);
+    expect((await call('PUT', '/applications/preferences', { salaryMin: 3_000_000, salaryMax: 2_000_000 })).status).toBe(400);
+  });
+
+  it('records when the candidate authorised accepting portal terms', async () => {
+    const res = await call('PUT', '/applications/preferences', { acceptPortalTerms: true });
+    expect(res.data.data.acceptPortalTerms).toBe(true);
+    expect(res.data.data.acceptPortalTermsAt).toBeTruthy();
+  });
+
+  it('holds an offer that pays below the range until the candidate authorises it', async () => {
+    // Las ofertas de ejemplo pagan como máximo $7.000.000; el rango parte en $8.000.000.
+    const offers = await call('GET', '/offers?limit=100');
+    const offer = offers.data.data.find((o: any) => o.salaryCurrency === 'CLP' && o.salaryMax < 8_000_000);
+    const created = await call('POST', '/postulations', { offerId: offer.id, estado: 'Preparar postulación', prioridad: 'Media' });
+    const id = created.data.data.postulationId;
+
+    const queued = await call('POST', `/postulations/${id}/queue`);
+    expect(queued.status).toBe(200);
+    expect(queued.data.data.applyStatus).toBe('requiere-autorizacion');
+
+    const detail = await call('GET', `/postulations/${id}`);
+    expect(detail.data.data.applyReason).toBe('renta-bajo-rango');
+    expect(detail.data.data.applyDetail).toContain('$8.000.000');
+
+    const authorized = await call('POST', `/postulations/${id}/authorize`);
+    expect(authorized.data.data.applyStatus).toBe('en-cola');
+
+    const after = await call('GET', `/postulations/${id}`);
+    expect(after.data.data.salaryAuthorized).toBe(true);
+  });
+
+  it('lets the candidate decline an offer below the range', async () => {
+    const offers = await call('GET', '/offers?limit=100');
+    const mineNow = await call('GET', '/postulations?limit=100');
+    const used = new Set(mineNow.data.data.map((p: any) => p.offerId));
+    const offer = offers.data.data.find((o: any) => !used.has(o.id) && o.salaryCurrency === 'CLP' && o.salaryMax < 8_000_000);
+    const created = await call('POST', '/postulations', { offerId: offer.id, estado: 'Preparar postulación', prioridad: 'Media' });
+    const id = created.data.data.postulationId;
+
+    await call('POST', `/postulations/${id}/queue`);
+    const declined = await call('POST', `/postulations/${id}/decline`);
+    expect(declined.data.data.applyStatus).toBe('pendiente');
+
+    const detail = await call('GET', `/postulations/${id}`);
+    expect(detail.data.data.estado).toBe('Descartado');
+  });
+});
+
 describe('learning endpoints stay up with an empty profile', () => {
   const endpoints = [
     '/learning/top-keywords',

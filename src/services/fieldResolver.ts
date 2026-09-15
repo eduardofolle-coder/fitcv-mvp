@@ -12,9 +12,11 @@
  */
 import { AppError } from '../middleware/errorHandler.js';
 import { AgentInvokerService } from './agentInvoker.js';
+import { employmentStatusIssue } from './answerGuards.js';
 import { loadHardData } from './candidateProfile.js';
 import { hardDataForPrompt, type HardData } from './cvComposer.js';
-import { explainJudgment, factsCorpus, judgeStatement } from './narrativeVerifier.js';
+import { explainJudgment, factsCorpus, judgeStatement, normalizeForQuote } from './narrativeVerifier.js';
+import { loadAnswerPreferences } from './savedAnswers.js';
 import {
   classifyField,
   resolveDeterministic,
@@ -30,7 +32,16 @@ export interface JobContext {
   title: string;
   company: string;
   description: string;
+  /** Lo que paga la oferta, y si el candidato autorizó postular bajo su rango. */
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+  salaryAuthorized?: boolean;
 }
+
+// Al modelo solo le llega el texto de la oferta, nunca el sueldo ni las decisiones del candidato.
+const jobForModel = (job: JobContext | undefined) =>
+  job ? { title: job.title, company: job.company, description: job.description } : undefined;
 
 export interface FieldResolution {
   resolutions: Resolution[];
@@ -114,7 +125,7 @@ async function draftAnswers(
   try {
     const invocation = await AgentInvokerService.invoke('answer-writer', {
       facts: hardDataForPrompt(hard),
-      job,
+      job: jobForModel(job),
       questions: pending.map(p => ({
         id: p.field.id,
         text: p.field.label,
@@ -153,6 +164,7 @@ async function draftAnswers(
     try {
       const invocation = await AgentInvokerService.invoke('cv-verifier', {
         facts: hardDataForPrompt(hard),
+        offer: jobForModel(job),
         highlights: [],
         statements: drafts,
       }, userId);
@@ -164,6 +176,8 @@ async function draftAnswers(
   }
 
   const corpus = factsCorpus(hard);
+  // Una motivación habla también de la oferta: lo que dice de ella se respalda con su texto.
+  const offerCorpus = job ? normalizeForQuote([job.title, job.company, job.description].join(' | ')) : '';
 
   for (const p of pending) {
     const { field, classification } = p;
@@ -185,7 +199,19 @@ async function draftAnswers(
       continue;
     }
 
-    const judged = verdicts === null ? null : judgeStatement(verdicts, field.id, corpus);
+    // Callar el desempleo no es mentir; mencionarlo juega en contra, y afirmar
+    // un trabajo actual inexistente sí sería mentir. Nada de eso se envía.
+    const statusIssue = employmentStatusIssue(a.text, hard);
+    if (statusIssue) {
+      out.set(field.id, classification.category === 'capability-check'
+        ? unresolved(p, 'La respuesta redactada no se puede usar; respóndela tú.')
+        : forApproval(p, a.text, `Es un borrador: ${statusIssue}. Corrígelo antes de enviarlo.`));
+      continue;
+    }
+
+    const judged = verdicts === null
+      ? null
+      : judgeStatement(verdicts, field.id, classification.category === 'motivation' ? `${corpus} | ${offerCorpus}` : corpus);
     const why = judged ? explainJudgment(judged) : '';
 
     if (classification.category === 'capability-check') {
@@ -204,12 +230,19 @@ async function draftAnswers(
     }
 
     if (classification.category === 'motivation') {
-      // Una motivación o carta la aprueba siempre el candidato antes de enviarla.
-      const warning = judged === null
-        ? ' No se pudo verificar contra tu CV.'
-        : judged.supported
-          ? ''
-          : ` Ojo: ${why || 'afirma algo que tu CV no respalda'}.`;
+      // Se envía sola solo si todo lo que dice del candidato está en su CV y
+      // todo lo que dice de la oferta está en la oferta.
+      if (judged?.supported) {
+        out.set(field.id, {
+          fieldId: field.id,
+          category: classification.category,
+          status: 'filled',
+          value: a.text,
+          source: 'Redactada con tu experiencia y verificada contra tu CV y la oferta.',
+        });
+        continue;
+      }
+      const warning = judged === null ? ' No se pudo verificar contra tu CV.' : ` Ojo: ${why || 'afirma algo que tu CV no respalda'}.`;
       out.set(field.id, forApproval(p, a.text, `Es un borrador: revísalo antes de enviarlo.${warning}`));
       continue;
     }
@@ -246,10 +279,14 @@ export async function resolveFields(
   if (fields.length === 0) return { resolutions: [], summary: {} };
 
   const hard = await loadHardData(userId);
+  const answers = await loadAnswerPreferences(userId);
+  const pay = job
+    ? { salaryMin: job.salaryMin, salaryMax: job.salaryMax, salaryCurrency: job.salaryCurrency, salaryAuthorized: job.salaryAuthorized }
+    : undefined;
 
   const classified = fields.map(field => ({ field, classification: classifyField(field) }));
   const resolutions = classified.map(({ field, classification }) =>
-    resolveDeterministic(field, classification, hard)
+    resolveDeterministic(field, classification, hard, { answers, pay })
   );
 
   const pending = classified.filter((_, i) => resolutions[i].status === 'needs-generation');

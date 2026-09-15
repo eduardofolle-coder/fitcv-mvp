@@ -9,7 +9,13 @@ import { AgentInvokerService } from '../services/agentInvoker.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import { getAdaptedCv, tailorCv } from '../services/cvTailoring.js';
 import { asciiFileName, pdfFileName, renderCvPdf } from '../services/cvPdf.js';
-import { getApplicationEvents, transitionApplication } from '../services/applicationQueue.js';
+import {
+  authorizeApplication,
+  declineApplication,
+  getApplicationEvents,
+  queueApplication,
+  transitionApplication,
+} from '../services/applicationQueue.js';
 
 const router = Router();
 
@@ -241,7 +247,27 @@ router.post(
   '/:id/queue',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const result = await transitionApplication({ postulationId: req.params.id, userId: req.user.id, to: 'en-cola' });
+    const result = await queueApplication(req.params.id, req.user.id);
+    res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// POST /api/postulations/:id/authorize - Postular aunque la oferta pague bajo el rango
+router.post(
+  '/:id/authorize',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const result = await authorizeApplication(req.params.id, req.user.id);
+    res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// POST /api/postulations/:id/decline - No postular a esta oferta
+router.post(
+  '/:id/decline',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const result = await declineApplication(req.params.id, req.user.id);
     res.json({ success: true, data: { applyStatus: result.to } });
   })
 );

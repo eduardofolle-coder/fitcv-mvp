@@ -1,12 +1,12 @@
 /**
- * Formularios de postulación y preferencias de envío.
+ * Formularios de postulación y "Mis respuestas frecuentes".
  */
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
-import { getApplyPreferences, setApplyPreferences } from '../services/applicationQueue.js';
 import { parseFields, parseJob, resolveFields } from '../services/fieldResolver.js';
+import { loadAnswerPreferences, updateAnswerPreferences } from '../services/savedAnswers.js';
 
 const router = Router();
 
@@ -37,30 +37,19 @@ router.get(
   '/preferences',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    res.json({ success: true, data: await getApplyPreferences(req.user.id) });
+    res.json({ success: true, data: await loadAnswerPreferences(req.user.id) });
   })
 );
 
-// PUT /api/applications/preferences
+// PUT /api/applications/preferences - Actualiza solo los campos enviados
 router.put(
   '/preferences',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const autoSendLinkedIn = req.body?.autoSendLinkedIn;
-    if (typeof autoSendLinkedIn !== 'boolean') {
-      throw new AppError(400, 'autoSendLinkedIn must be true or false.');
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      throw new AppError(400, 'Send the answers to update as a JSON object.');
     }
-
-    // LinkedIn prohíbe los plugins que automatizan actividad: activarlo es una
-    // decisión del candidato sobre su propia cuenta, y tiene que ser explícita.
-    if (autoSendLinkedIn && req.body?.acknowledgeLinkedInRisk !== true) {
-      throw new AppError(
-        400,
-        'LinkedIn prohibits browser plugins that automate activity, so automatic sending there can get the account restricted. Send acknowledgeLinkedInRisk: true to enable it.'
-      );
-    }
-
-    res.json({ success: true, data: await setApplyPreferences(req.user.id, { autoSendLinkedIn }) });
+    res.json({ success: true, data: await updateAnswerPreferences(req.user.id, req.body) });
   })
 );
 

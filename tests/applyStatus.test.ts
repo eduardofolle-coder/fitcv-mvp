@@ -36,6 +36,14 @@ describe('apply status transitions', () => {
     expect(canTransition('pendiente', 'enviando')).toBe(false);
   });
 
+  it('holds an application below the salary range until the candidate authorises it', () => {
+    expect(canTransition('pendiente', 'requiere-autorizacion')).toBe(true);
+    expect(canTransition('requiere-autorizacion', 'en-cola')).toBe(true);
+    expect(canTransition('requiere-autorizacion', 'pendiente')).toBe(true);
+    // Nunca se envía directo desde la cola sin pasar por la autorización.
+    expect(canTransition('requiere-autorizacion', 'enviando')).toBe(false);
+  });
+
   it('validates status and reason values', () => {
     expect(isApplyStatus('enviada')).toBe(true);
     expect(isApplyStatus('sent')).toBe(false);
@@ -64,6 +72,10 @@ describe('qualifiesForAutoSend', () => {
       { fieldId: 'letter', status: 'needs-approval' },
     ];
     expect(qualifiesForAutoSend(resolutions, [{ id: 'name', required: true }, { id: 'letter', required: false }])).toBe(true);
+  });
+
+  it('does not block on a marketing checkbox left unchecked on purpose', () => {
+    expect(qualifiesForAutoSend([{ fieldId: 'terms', status: 'filled' }, { fieldId: 'news', status: 'leave-blank' }])).toBe(true);
   });
 
   it('treats a field without an optional mark as required', () => {

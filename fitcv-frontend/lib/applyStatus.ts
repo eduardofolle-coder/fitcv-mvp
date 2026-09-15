@@ -1,7 +1,14 @@
 // Estados del envío de una postulación, tal como los define el backend
 // (src/services/applyStatus.ts).
 
-export type ApplyStatus = 'pendiente' | 'en-cola' | 'enviando' | 'enviada' | 'requiere-atencion' | 'error';
+export type ApplyStatus =
+  | 'pendiente'
+  | 'en-cola'
+  | 'enviando'
+  | 'enviada'
+  | 'requiere-atencion'
+  | 'requiere-autorizacion'
+  | 'error';
 
 export const APPLY_STATUS_LABELS: Record<ApplyStatus, string> = {
   pendiente: 'Pendiente',
@@ -9,10 +16,12 @@ export const APPLY_STATUS_LABELS: Record<ApplyStatus, string> = {
   enviando: 'Enviando',
   enviada: 'Enviada',
   'requiere-atencion': 'Requiere tu atención',
+  'requiere-autorizacion': 'Requiere tu autorización',
   error: 'Error',
 };
 
 export const APPLY_STATUS_STYLES: Record<ApplyStatus, string> = {
+  'requiere-autorizacion': 'bg-orange-100 text-orange-800',
   pendiente: 'bg-gray-100 text-gray-800',
   'en-cola': 'bg-indigo-100 text-indigo-800',
   enviando: 'bg-blue-100 text-blue-800',
@@ -28,6 +37,7 @@ export const ATTENTION_REASON_LABELS: Record<string, string> = {
   'sitio-empresa': 'La oferta te lleva al sitio de la empresa para postular.',
   'formulario-no-reconocido': 'FITCV no reconoció el formulario de postulación.',
   'envio-automatico-desactivado': 'El envío automático está desactivado para este portal.',
+  'renta-bajo-rango': 'La oferta paga menos que el mínimo de tu rango de renta: autoriza si igual quieres postular.',
   otro: 'Necesita tu revisión.',
 };
 

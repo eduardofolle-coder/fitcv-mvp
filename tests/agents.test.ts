@@ -592,6 +592,81 @@ describe('application fields', () => {
     expect(r.exp.reason).toContain('Lideré la migración');
   }, 60_000);
 
+  it('sends a motivation built from the CV and the offer, once every claim is backed', async () => {
+    stubReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        answers: [
+          { id: 'sf', answerable: false, text: '' },
+          { id: 'exp', answerable: false, text: '' },
+          { id: 'why', answerable: true, text: 'Trabajé en Mercado Libre y me interesa aportar esa experiencia en Node.js y AWS, que es lo que buscan.' },
+        ],
+      }),
+    };
+    verifierReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        highlights: [],
+        statements: [
+          {
+            id: 'why',
+            verdict: 'supported',
+            claims: [
+              { claim: 'Trabajé en Mercado Libre', supportedBy: 'Mercado Libre', verdict: 'supported' },
+              { claim: 'la oferta busca Node.js y AWS', supportedBy: 'Node.js y AWS', verdict: 'supported' },
+            ],
+          },
+        ],
+      }),
+    };
+
+    const res = await call('POST', '/applications/resolve-fields', {
+      fields,
+      job: { title: 'Backend Engineer', company: 'NotCo', description: 'Buscamos experiencia en Node.js y AWS' },
+    });
+    const r = byId(res);
+
+    expect(r.why).toMatchObject({ status: 'filled', category: 'motivation' });
+    // El verificador recibe la oferta para respaldar lo que se dice de ella.
+    expect(lastVerifierPrompt).toContain('Buscamos experiencia en Node.js y AWS');
+  }, 60_000);
+
+  it('never sends an answer that mentions being unemployed, even if the verifier accepts it', async () => {
+    stubReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        answers: [
+          { id: 'sf', answerable: false, text: '' },
+          { id: 'exp', answerable: false, text: '' },
+          { id: 'why', answerable: true, text: 'Estoy cesante y quiero aportar mi experiencia en Mercado Libre.' },
+        ],
+      }),
+    };
+    verifierReply = {
+      status: 200,
+      body: claudeText({
+        success: true,
+        highlights: [],
+        statements: [
+          {
+            id: 'why',
+            verdict: 'supported',
+            claims: [{ claim: 'experiencia en Mercado Libre', supportedBy: 'Mercado Libre', verdict: 'supported' }],
+          },
+        ],
+      }),
+    };
+
+    const res = await call('POST', '/applications/resolve-fields', { fields });
+    const r = byId(res);
+
+    expect(r.why.status).toBe('needs-approval');
+    expect(r.why.reason).toContain('situación laboral');
+  }, 60_000);
+
   it('fails closed when the writer is unavailable', async () => {
     stubReply = { status: 503, body: { error: { message: 'overloaded' } } };
 

@@ -373,6 +373,8 @@ ${inputJson}
 
 "facts" is the candidate's verified record. "highlights" pairs an original line from the CV with a rewritten version of it. "statements" are texts written from those facts: a headline, a summary, or answers to application questions.
 
+"offer", when present, is the job the candidate is applying to. In statements, a claim about the role, the company or what the offer asks for is supported only by text copied exactly from the offer; a claim about the candidate only by an entry of facts. Expressions of interest in the role ("me interesa", "quiero aportar mi experiencia", "me motiva postular") are not claims and need no support: do not list them as claims.
+
 For each highlight decide:
 - "supported" if the rewritten version states nothing beyond the original: same actions, same scope, same ownership, same results. Rewording, emphasis and professional phrasing are fine.
 - "inflated" if it adds anything the original does not state: ownership or leadership ("led", "directed", "owned", "drove") where the original only names the work; larger scope, impact or results; team sizes, metrics, technologies or tools absent from the original; or evaluative claims about the candidate ("demonstrating strong skills", "expert in") that are not facts.
@@ -408,12 +410,14 @@ ${inputJson}
 By kind:
 - "experience": answer with concrete facts from the record that genuinely address the question. If the record contains nothing that answers it, do not stretch unrelated experience to fit: return "answerable": false.
 - "capability": the question asks whether the candidate has something. If the record genuinely shows it, return "answerable": true and, as text, one sentence citing the fact that proves it. If it does not, return "answerable": false. Never infer a yes beyond what the record states.
-- "motivation": write a short, sincere draft connecting the candidate's real experience to the offer. The candidate approves it before anything is sent. Do not invent personal reasons, feelings, values or knowledge of the company that the record does not show.
+- "motivation": write a short, sincere answer (2 to 4 sentences) connecting the candidate's real experience to what the offer asks for. It can be sent without further review, so every statement about the candidate must come from the record and every statement about the role or the company must come from the job text. You may express interest in the role ("me interesa", "quiero aportar mi experiencia"). Do not invent personal reasons, feelings, values or knowledge of the company beyond the job text.
 
 Hard rules:
 - Never state a fact, figure, technology, employer, date, scope or result that is not in the record.
 - Never claim ownership or leadership the record does not state.
 - Never mention salary, availability, relocation, visas, or anything personal the record does not contain.
+- Never mention being unemployed, looking for a job, having been laid off or dismissed, gaps between jobs, or why the candidate left any job, even if the record suggests it.
+- Never say or imply the candidate currently works somewhere unless the record's most recent role is ongoing (no end date, or "present").
 - Respect maxLength when given.
 - Everything you write is checked against the record by an independent verifier, and answers it cannot support are discarded.
 

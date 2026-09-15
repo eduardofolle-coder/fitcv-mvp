@@ -332,5 +332,29 @@ export async function initializeSchema(): Promise<void> {
     );
   `);
 
+  // "Mis respuestas frecuentes": lo que el candidato decide una vez y FITCV usa
+  // en todos los formularios. RUT y dirección se guardan cifrados. La
+  // aceptación de términos de los portales es un consentimiento explícito, con
+  // la fecha en que se dio. salaryAuthorized marca una postulación bajo el rango
+  // de renta que el candidato autorizó igual.
+  await db.exec(`
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS salaryMin INTEGER;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS salaryMax INTEGER;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS availability TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS rut TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS address TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS comuna TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS region TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS nationality TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS driverLicense TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS willingToTravel BOOLEAN;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS shiftWork BOOLEAN;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS relocation BOOLEAN;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS workPermit BOOLEAN;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS acceptPortalTerms BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS acceptPortalTermsAt TIMESTAMPTZ;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS salaryAuthorized BOOLEAN NOT NULL DEFAULT FALSE;
+  `);
+
   console.log('✅ Database schema initialized');
 }

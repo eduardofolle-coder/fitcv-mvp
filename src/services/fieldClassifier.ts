@@ -3,9 +3,11 @@
  * de escribir nada.
  *
  * La regla que ordena todo: los datos duros se copian del perfil; las
- * decisiones personales (renta, disponibilidad, documentos, datos sensibles)
- * nunca las toma FITCV; y la IA solo redacta donde la respuesta sale de la
- * experiencia del candidato, que después se verifica.
+ * decisiones personales (renta, disponibilidad, documentos) salen de lo que el
+ * candidato dejó declarado en "Mis respuestas frecuentes", nunca de una
+ * suposición; los datos sensibles (género, salud, edad) no se responden; y la
+ * IA solo redacta donde la respuesta sale de la experiencia del candidato, que
+ * después se verifica.
  */
 import type { HardData } from './cvComposer.js';
 
@@ -16,6 +18,8 @@ export type FieldCategory =
   | 'capability-check'
   | 'personal-decision'
   | 'motivation'
+  | 'terms-consent'
+  | 'marketing-opt-in'
   | 'unknown';
 
 export type HardDataKey =
@@ -31,6 +35,19 @@ export type HardDataKey =
   | 'education'
   | 'languages';
 
+export type PersonalKey =
+  | 'salary'
+  | 'availability'
+  | 'travel'
+  | 'shifts'
+  | 'relocation'
+  | 'workPermit'
+  | 'rut'
+  | 'address'
+  | 'nationality'
+  | 'driverLicense'
+  | 'sensitive';
+
 export interface ApplicationField {
   id: string;
   label: string;
@@ -43,6 +60,38 @@ export interface Classification {
   category: FieldCategory;
   hardDataKey?: HardDataKey;
   capability?: string;
+  personalKey?: PersonalKey;
+}
+
+/** Lo que el candidato declaró una vez en "Mis respuestas frecuentes". */
+export interface SavedAnswers {
+  salaryMin: number | null;
+  salaryMax: number | null;
+  availability: string | null;
+  rut: string | null;
+  address: string | null;
+  comuna: string | null;
+  region: string | null;
+  nationality: string | null;
+  driverLicense: string | null;
+  willingToTravel: boolean | null;
+  shiftWork: boolean | null;
+  relocation: boolean | null;
+  workPermit: boolean | null;
+  acceptPortalTerms: boolean;
+}
+
+/** Lo que paga la oferta, y si el candidato autorizó postular bajo su rango. */
+export interface OfferPay {
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+  salaryAuthorized?: boolean;
+}
+
+export interface ResolveContext {
+  answers?: SavedAnswers | null;
+  pay?: OfferPay;
 }
 
 interface Base {
@@ -55,9 +104,12 @@ export type Resolution =
   | (Base & { status: 'needs-approval'; value: string; reason: string })
   | (Base & { status: 'needs-user'; reason: string; suggestion?: string })
   | (Base & { status: 'use-adapted-cv' })
-  | (Base & { status: 'needs-generation' });
+  | (Base & { status: 'needs-generation' })
+  | (Base & { status: 'leave-blank'; reason: string });
 
 const NOT_IN_CV = 'Este dato no está en tu CV: complétalo tú.';
+const MISSING_ANSWER = 'Completa este dato en "Mis respuestas frecuentes" y FITCV lo responderá por ti.';
+const FROM_ANSWERS = 'De tus respuestas frecuentes.';
 
 const fold = (s: string): string =>
   s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
@@ -68,8 +120,16 @@ const clean = (s: string): string =>
 
 const CV_UPLOAD = /\b(cv|curriculum|curriculo|resume|hoja de vida)\b/;
 
+// Casillas de publicidad: se dejan sin marcar. Van antes que los términos,
+// porque suelen empezar igual ("acepto recibir novedades").
+const MARKETING =
+  /(newsletter|novedades|promociones?|publicidad|comunicaciones comerciales|ofertas similares|alertas? de empleo|recibir (ofertas|informacion|correos|emails|noticias|comunicaciones))/;
+
+const TERMS =
+  /((acepto|aceptar|he leido|autorizo|consiento|declaro|estoy de acuerdo).*(termino|condicion|politica|privacidad|tratamiento de (mis )?datos|proteccion de datos|uso de (mis )?datos)|terms (and|&) conditions|terms of (use|service)|privacy policy)/;
+
 const PERSONAL_DECISION =
-  /(salari|sueldo|\brenta\b|pretension|expectativa|compensation|remuneracion|disponibilidad|availability|start date|fecha de inicio|cuando podrias|cuando puedes|notice period|preaviso|reubica|relocat|traslad|\bvisa\b|permiso de trabajo|work permit|authoriz|autorizacion|genero|gender|discapacidad|disabilit|etnia|ethnic|nacionalidad|nationality|nacimiento|birth|\bedad\b|\bage\b|\brut\b|\bdni\b|pasaporte|passport|estado civil|marital|^direccion|domicilio|\baddress\b|referencia|reference)/;
+  /(salari|sueldo|\brenta\b|pretension|expectativa|compensation|remuneracion|disponibilidad|availability|start date|fecha de inicio|cuando podrias|cuando puedes|notice period|preaviso|reubica|relocat|traslad|viajar|to travel|turnos|shift work|fines de semana|\bvisa\b|permiso de trabajo|work permit|authoriz|autorizacion|genero|gender|discapacidad|disabilit|etnia|ethnic|nacionalidad|nationality|nacimiento|birth|\bedad\b|\bage\b|\brut\b|\brun\b|\bdni\b|cedula|pasaporte|passport|estado civil|marital|^direccion|domicilio|\baddress\b|referencia|reference|licencia de conducir|licencia clase|driver'?s? licen)/;
 
 const CAPABILITY_START =
   /^(tienes|posees|cuentas con|manejas|dominas|conoces|sabes usar|sabes|usas|has trabajado con|has usado|do you have|are you familiar with|are you experienced (in|with)|have you (used|worked with)|do you know|can you use)\s+/;
@@ -84,6 +144,7 @@ const EXPERIENCE_QUESTION =
   /(experiencia|describe|describa|cuentanos|cuentame|ejemplo|logro|proyecto|situacion|desafio|lideraste|experience|tell us|example|achievement|project|situation|challenge|programming languages|lenguajes de programacion)/;
 
 const YES = new Set(['si', 'yes']);
+const NO = new Set(['no']);
 const YES_NO = new Set(['si', 'yes', 'no']);
 
 const isYesNo = (options?: string[]): boolean =>
@@ -96,6 +157,22 @@ const isYesNo = (options?: string[]): boolean =>
 export function yesOption(options?: string[]): string | undefined {
   if (!options || options.length === 0) return 'Sí';
   return options.find(o => YES.has(clean(o)));
+}
+
+function personalKeyFor(label: string): PersonalKey {
+  if (/(salari|sueldo|\brenta\b|pretension|expectativa|compensation|remuneracion)/.test(label)) return 'salary';
+  if (/(viajar|to travel)/.test(label)) return 'travel';
+  if (/(turnos|shift work|fines de semana|weekends)/.test(label)) return 'shifts';
+  if (/(reubica|relocat|traslad)/.test(label)) return 'relocation';
+  if (/(\bvisa\b|permiso de trabajo|work permit|authoriz|autorizacion)/.test(label)) return 'workPermit';
+  if (/(disponibilidad|availability|start date|fecha de inicio|cuando podrias|cuando puedes|notice period|preaviso)/.test(label)) {
+    return 'availability';
+  }
+  if (/(\brut\b|\brun\b|\bdni\b|cedula)/.test(label)) return 'rut';
+  if (/(^direccion|domicilio|\baddress\b)/.test(label)) return 'address';
+  if (/(nacionalidad|nationality)/.test(label)) return 'nationality';
+  if (/(licencia|licen[cs]e)/.test(label)) return 'driverLicense';
+  return 'sensitive';
 }
 
 function hardDataKeyFor(label: string, type: string): HardDataKey | 'per-skill-years' | undefined {
@@ -130,7 +207,9 @@ export function classifyField(field: ApplicationField): Classification {
   const type = field.type ?? '';
 
   if (CV_UPLOAD.test(label)) return { category: 'cv-upload' };
-  if (PERSONAL_DECISION.test(label)) return { category: 'personal-decision' };
+  if (MARKETING.test(label)) return { category: 'marketing-opt-in' };
+  if (TERMS.test(label)) return { category: 'terms-consent' };
+  if (PERSONAL_DECISION.test(label)) return { category: 'personal-decision', personalKey: personalKeyFor(label) };
 
   const start = label.match(CAPABILITY_START);
   if (start || isYesNo(field.options)) {
@@ -203,6 +282,48 @@ export function pickRangeOption(value: number, options: string[]): string | unde
   return undefined;
 }
 
+/** "$1.800.000", como se escribe un monto en Chile. */
+export const formatClp = (amount: number): string => `$${amount.toLocaleString('es-CL')}`;
+
+/** Elige el tramo de sueldo ("$1.500.000 - $2.000.000", "Más de $2.000.000") que contiene el monto. */
+export function pickMoneyOption(amount: number, options: string[]): string | undefined {
+  for (const option of options) {
+    // Los separadores de miles no son decimales: "1.500.000" es un solo número.
+    const text = fold(option).replace(/(\d)[.,](?=\d{3}(\D|$))/g, '$1');
+    const numbers = (text.match(/\d+/g) ?? []).map(Number).filter(n => n >= 1000);
+
+    if (numbers.length === 2) {
+      const [low, high] = numbers;
+      if (amount >= Math.min(low, high) && amount <= Math.max(low, high)) return option;
+      continue;
+    }
+    if (numbers.length !== 1) continue;
+
+    const [n] = numbers;
+    if (/(mas de|sobre|desde|over|more than|\+|o mas|or more)/.test(text)) {
+      if (amount >= n) return option;
+    } else if (/(hasta|menos de|bajo|under|less than|up to)/.test(text)) {
+      if (amount <= n) return option;
+    }
+  }
+  return undefined;
+}
+
+/** Lo que paga la oferta en pesos, si lo informa. Otras monedas no se comparan. */
+export function offerPayClp(pay?: OfferPay): number | null {
+  if (!pay) return null;
+  const currency = (pay.salaryCurrency ?? 'CLP').toUpperCase();
+  if (currency !== 'CLP') return null;
+  const amount = pay.salaryMax ?? pay.salaryMin ?? null;
+  return typeof amount === 'number' && amount > 0 ? amount : null;
+}
+
+/** Si la oferta paga menos que el mínimo del candidato: cuánto paga y cuál es el mínimo. */
+export function payBelowMinimum(pay: OfferPay | undefined, minimum: number | null): { offer: number; minimum: number } | null {
+  const offer = offerPayClp(pay);
+  return offer !== null && minimum !== null && offer < minimum ? { offer, minimum } : null;
+}
+
 const LANGUAGES: Array<{ asked: RegExp; known: RegExp }> = [
   { asked: /(ingles|english)/, known: /(ingl|engl)/ },
   { asked: /(espanol|spanish|castellano)/, known: /(espan|spanish|castell)/ },
@@ -215,7 +336,8 @@ function resolveHardData(
   field: ApplicationField,
   base: Base,
   key: HardDataKey | undefined,
-  hard: HardData
+  hard: HardData,
+  answers?: SavedAnswers | null
 ): Resolution {
   const fill = (value: string, source: string): Resolution =>
     value
@@ -227,8 +349,13 @@ function resolveHardData(
       return fill(hard.contact.email, 'Correo de tu CV.');
     case 'phone':
       return fill(hard.contact.phone, 'Teléfono de tu CV.');
-    case 'location':
+    case 'location': {
+      // La comuna y la región declaradas son más precisas que la ubicación del CV.
+      const label = clean(field.label);
+      if (/comuna/.test(label) && answers?.comuna) return fill(answers.comuna, FROM_ANSWERS);
+      if (/region/.test(label) && answers?.region) return fill(answers.region, FROM_ANSWERS);
       return fill(hard.contact.location, 'Ubicación de tu CV.');
+    }
     case 'fullName':
       return fill(hard.fullName, 'Nombre de tu CV.');
 
@@ -321,6 +448,114 @@ function resolveHardData(
   }
 }
 
+function resolveSalary(field: ApplicationField, base: Base, answers: SavedAnswers, pay?: OfferPay): Resolution {
+  const { salaryMin: min, salaryMax: max } = answers;
+  if (min === null || max === null) return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
+
+  const offer = offerPayClp(pay);
+  let amount = max;
+  let isRange = true;
+  let source = `Tu rango de renta: ${formatClp(min)} a ${formatClp(max)} líquidos.`;
+
+  if (offer !== null && offer > max) {
+    // La oferta paga más que lo declarado: se acepta su sueldo.
+    amount = offer;
+    isRange = false;
+    source = `La oferta paga ${formatClp(offer)}, sobre tu rango: se acepta el sueldo de la oferta.`;
+  } else if (offer !== null && offer < min) {
+    if (!pay?.salaryAuthorized) {
+      return {
+        ...base,
+        status: 'needs-user',
+        reason: `La oferta paga ${formatClp(offer)}, bajo tu mínimo de ${formatClp(min)}: necesita tu autorización.`,
+      };
+    }
+    amount = offer;
+    isRange = false;
+    source = `Autorizaste postular con el sueldo de la oferta (${formatClp(offer)}).`;
+  }
+
+  if (field.options && field.options.length > 0) {
+    const option = pickMoneyOption(amount, field.options);
+    return option
+      ? { ...base, status: 'filled', value: option, source }
+      : { ...base, status: 'needs-user', reason: 'Ningún tramo del formulario corresponde a tu renta.', suggestion: formatClp(amount) };
+  }
+
+  // Un campo numérico solo acepta un monto: el "hasta" del rango o el de la oferta.
+  if ((field.type ?? '') === 'number') return { ...base, status: 'filled', value: String(amount), source };
+
+  const text = isRange ? `Entre ${formatClp(min)} y ${formatClp(max)} líquidos` : `${formatClp(amount)} líquidos`;
+  const value = field.maxLength && text.length > field.maxLength ? String(amount) : text;
+  return { ...base, status: 'filled', value, source };
+}
+
+/** Elige la opción del formulario que corresponde a lo declarado, o lo escribe tal cual. */
+function chooseAnswer(field: ApplicationField, base: Base, value: string): Resolution {
+  if (!field.options || field.options.length === 0) {
+    return { ...base, status: 'filled', value, source: FROM_ANSWERS };
+  }
+  const wanted = fold(value);
+  const option =
+    field.options.find(o => fold(o) === wanted) ??
+    field.options.find(o => fold(o).includes(wanted) || wanted.includes(fold(o)));
+  return option
+    ? { ...base, status: 'filled', value: option, source: FROM_ANSWERS }
+    : { ...base, status: 'needs-user', reason: 'Ninguna opción corresponde a lo que declaraste.', suggestion: value };
+}
+
+function yesNoAnswer(field: ApplicationField, base: Base, value: boolean | null): Resolution {
+  if (value === null) return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
+  if (!field.options || field.options.length === 0) {
+    return { ...base, status: 'filled', value: value ? 'Sí' : 'No', source: FROM_ANSWERS };
+  }
+  const option = field.options.find(o => (value ? YES : NO).has(clean(o)));
+  return option
+    ? { ...base, status: 'filled', value: option, source: FROM_ANSWERS }
+    : { ...base, status: 'needs-user', reason: 'Ninguna opción corresponde a lo que declaraste.', suggestion: value ? 'Sí' : 'No' };
+}
+
+function resolvePersonal(field: ApplicationField, base: Base, key: PersonalKey, context: ResolveContext): Resolution {
+  if (key === 'sensitive') {
+    return { ...base, status: 'needs-user', reason: 'Es un dato personal sensible: FITCV no lo responde por ti.' };
+  }
+
+  const answers = context.answers;
+  if (!answers) return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
+
+  const text = (value: string | null): Resolution =>
+    value ? chooseAnswer(field, base, value) : { ...base, status: 'needs-user', reason: MISSING_ANSWER };
+
+  switch (key) {
+    case 'salary':
+      return resolveSalary(field, base, answers, context.pay);
+    case 'availability':
+      return text(answers.availability);
+    case 'travel':
+      return yesNoAnswer(field, base, answers.willingToTravel);
+    case 'shifts':
+      return yesNoAnswer(field, base, answers.shiftWork);
+    case 'relocation':
+      return yesNoAnswer(field, base, answers.relocation);
+    case 'workPermit':
+      return yesNoAnswer(field, base, answers.workPermit);
+    case 'rut':
+      return text(answers.rut);
+    case 'address':
+      return text(answers.address);
+    case 'nationality':
+      return text(answers.nationality);
+    case 'driverLicense': {
+      if (!answers.driverLicense) return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
+      // "¿Tienes licencia de conducir?" con Sí/No.
+      if (isYesNo(field.options)) return yesNoAnswer(field, base, !/no tengo/i.test(answers.driverLicense));
+      return chooseAnswer(field, base, answers.driverLicense);
+    }
+    default:
+      return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
+  }
+}
+
 /**
  * Resuelve sin IA todo lo que se puede. Lo que necesita redacción queda como
  * "needs-generation" para que la ruta lo pase por el modelo y el verificador.
@@ -328,7 +563,8 @@ function resolveHardData(
 export function resolveDeterministic(
   field: ApplicationField,
   classification: Classification,
-  hard: HardData
+  hard: HardData,
+  context: ResolveContext = {}
 ): Resolution {
   const base: Base = { fieldId: field.id, category: classification.category };
 
@@ -337,7 +573,24 @@ export function resolveDeterministic(
       return { ...base, status: 'use-adapted-cv' };
 
     case 'personal-decision':
-      return { ...base, status: 'needs-user', reason: 'Es una decisión tuya: FITCV no la responde por ti.' };
+      return resolvePersonal(field, base, classification.personalKey ?? 'sensitive', context);
+
+    case 'terms-consent':
+      return context.answers?.acceptPortalTerms
+        ? {
+            ...base,
+            status: 'filled',
+            value: yesOption(field.options) ?? 'Sí',
+            source: 'Autorizaste a FITCV a aceptar los términos y la privacidad de los portales.',
+          }
+        : {
+            ...base,
+            status: 'needs-user',
+            reason: 'Autoriza en "Mis respuestas frecuentes" la aceptación de términos de los portales, o márcala tú.',
+          };
+
+    case 'marketing-opt-in':
+      return { ...base, status: 'leave-blank', reason: 'Casilla de publicidad: FITCV no la marca.' };
 
     case 'motivation':
     case 'experience-question':
@@ -357,7 +610,7 @@ export function resolveDeterministic(
     }
 
     case 'hard-data':
-      return resolveHardData(field, base, classification.hardDataKey, hard);
+      return resolveHardData(field, base, classification.hardDataKey, hard, context.answers);
 
     default:
       return { ...base, status: 'needs-user', reason: NOT_IN_CV };
