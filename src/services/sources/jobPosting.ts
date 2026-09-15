@@ -38,6 +38,14 @@ export const JOB_POSTING_PORTALS: JobPostingPortal[] = [
     encoding: 'utf-8',
   },
   {
+    source: 'portalminero',
+    label: 'Portal Minero',
+    sitemap: 'https://www.portalminero.com/sitemap-ofertas.xml',
+    offerUrl: /^https:\/\/www\.portalminero\.com\/oferta-laboral\/(\d+)$/,
+    idPrefix: 'pmi',
+    encoding: 'utf-8',
+  },
+  {
     source: 'bne',
     label: 'Bolsa Nacional de Empleo',
     sitemap: 'https://www.bne.gob.cl/sitemap.xml',
@@ -181,7 +189,7 @@ function salaryRange(baseSalary: any): { min: number | null; max: number | null;
 
 export function mapJobPosting(
   posting: Record<string, any>,
-  portal: JobPostingPortal,
+  portal: Pick<JobPostingPortal, 'source' | 'idPrefix' | 'titleFromHeading'>,
   url: string,
   externalId: string,
   countryCode = 'CL'
@@ -222,7 +230,9 @@ export function mapJobPosting(
   };
 }
 
-const BLOCK_MARKERS = [/Attention Required! \| Cloudflare/i, /cf-chl-/i, /captcha/i];
+// Páginas de desafío anti-robots. No se busca "captcha" suelto: muchos portales
+// cargan reCAPTCHA en su formulario de login y eso no es un bloqueo.
+const BLOCK_MARKERS = [/<title>\s*(Attention Required! \| Cloudflare|Just a moment\.\.\.)/i, /cf-chl-/i];
 
 /** Un portal que responde así nos está pidiendo que no sigamos: se respeta. */
 export const looksBlocked = (status: number, body: string): boolean =>

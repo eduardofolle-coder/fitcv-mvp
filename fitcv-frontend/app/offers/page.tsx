@@ -41,6 +41,8 @@ const SOURCE_LABELS: Record<string, string> = {
   trabajando: 'trabajando.cl',
   chiletrabajos: 'Chiletrabajos',
   bne: 'Bolsa Nacional de Empleo',
+  portalminero: 'Portal Minero',
+  trabajosdiarios: 'Trabajos Diarios',
   linkedin: 'LinkedIn',
   computrabajo: 'Computrabajo',
   laborum: 'Laborum',
@@ -48,7 +50,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 // Portales que bloquean la lectura automática: sus ofertas entran con la extensión.
-const EXTENSION_ONLY = ['LinkedIn', 'Computrabajo', 'Laborum', 'Empleos Públicos'];
+const EXTENSION_ONLY = ['LinkedIn', 'Laborum', 'Zonajobs', 'Empleos Públicos'];
 
 const sourceLabel = (source: string) => SOURCE_LABELS[source] ?? source;
 

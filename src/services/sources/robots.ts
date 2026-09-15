@@ -9,10 +9,12 @@
 export interface RobotsRules {
   allow: string[];
   disallow: string[];
+  /** Segundos que el sitio pide esperar entre páginas, si lo indica. */
+  crawlDelay?: number;
 }
 
 export function parseRobots(text: string, agent: string): RobotsRules {
-  const groups: Array<{ agents: string[]; allow: string[]; disallow: string[] }> = [];
+  const groups: Array<{ agents: string[]; allow: string[]; disallow: string[]; crawlDelay?: number }> = [];
   let current: (typeof groups)[number] | null = null;
   let previousWasAgent = false;
 
@@ -39,15 +41,22 @@ export function parseRobots(text: string, agent: string): RobotsRules {
     if (!current || !value) continue;
     if (key === 'allow') current.allow.push(value);
     if (key === 'disallow') current.disallow.push(value);
+    if (key === 'crawl-delay') {
+      const seconds = Number(value);
+      if (Number.isFinite(seconds) && seconds > 0) current.crawlDelay = Math.max(current.crawlDelay ?? 0, seconds);
+    }
   }
 
   const token = agent.toLowerCase();
   const named = groups.filter(g => g.agents.some(a => a !== '*' && a.split(',').some(name => name.trim() && token.includes(name.trim()))));
   const chosen = named.length > 0 ? named : groups.filter(g => g.agents.includes('*'));
 
+  const delays = chosen.map(g => g.crawlDelay).filter((d): d is number => d !== undefined);
+
   return {
     allow: chosen.flatMap(g => g.allow),
     disallow: chosen.flatMap(g => g.disallow),
+    ...(delays.length > 0 ? { crawlDelay: Math.max(...delays) } : {}),
   };
 }
 

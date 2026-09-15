@@ -27,6 +27,7 @@ import {
   type SitemapEntry,
 } from './sources/jobPosting.js';
 import { isAllowed, parseRobots, type RobotsRules } from './sources/robots.js';
+import { extractOfferLinks, keywordsFromTerms, LISTING_PORTALS, type ListingPortal } from './sources/listingPortals.js';
 import { loadAllMatchingProfiles } from './candidateProfile.js';
 import { offerSearchColumns, slugPriority, type ProfileTerm } from './offerMatching.js';
 
@@ -198,6 +199,8 @@ export async function syncJobPostingPortal(
     return report;
   }
   if (robots.status === 200) rules = parseRobots(robots.body, CRAWLER_NAME);
+  // Si el sitio pide más pausa entre páginas que la nuestra, manda el sitio.
+  const pause = Math.max(delayMs, (rules.crawlDelay ?? 0) * 1000);
 
   if (!isAllowed(rules, new URL(portal.sitemap).pathname)) {
     report.errors.push('robots.txt no permite leer el sitemap.');
@@ -215,7 +218,7 @@ export async function syncJobPostingPortal(
   const index = parseSitemap(sitemap.body);
   let urls = index.urls;
   for (const child of index.sitemaps.slice(0, maxChildSitemaps)) {
-    await sleep(delayMs);
+    await sleep(pause);
     const response = await fetchText(child, 'utf-8', fetchImpl, SITEMAP_TIMEOUT_MS);
     if (response.status === 200) urls = urls.concat(parseSitemap(response.body).urls);
   }
@@ -240,7 +243,7 @@ export async function syncJobPostingPortal(
   const fresh = candidates.filter(c => !known.has(c.match[1])).slice(0, maxNew);
 
   for (const { entry, match } of fresh) {
-    await sleep(delayMs);
+    await sleep(pause);
     try {
       const page = await fetchText(entry.loc, portal.encoding, fetchImpl);
       report.fetched += 1;
@@ -263,6 +266,110 @@ export async function syncJobPostingPortal(
       report.saved += await upsertOffers([offer]);
     } catch (err) {
       report.errors.push(`${entry.loc}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return report;
+}
+
+export interface ListingSyncOptions extends PortalSyncOptions {
+  pagesPerKeyword?: number;
+  maxKeywords?: number;
+}
+
+/**
+ * Lee un portal sin sitemap: busca en sus listados las áreas de los candidatos
+ * y guarda las ofertas nuevas que encuentra.
+ */
+export async function syncListingPortal(portal: ListingPortal, options: ListingSyncOptions = {}): Promise<SyncReport> {
+  const {
+    maxNew = 60,
+    delayMs = 2000,
+    fetchImpl = fetch,
+    now = new Date(),
+    priorityTerms = [],
+    pagesPerKeyword = 2,
+    maxKeywords = 6,
+  } = options;
+  const report: SyncReport = { source: portal.source, categories: 0, fetched: 0, saved: 0, skipped: 0, errors: [] };
+
+  const robots = await fetchText(`${portal.origin}/robots.txt`, 'utf-8', fetchImpl);
+  if (looksBlocked(robots.status, robots.body)) {
+    report.blocked = true;
+    report.errors.push(`robots.txt respondió ${robots.status}: el portal no admite lectura automática.`);
+    return report;
+  }
+  const rules: RobotsRules = robots.status === 200 ? parseRobots(robots.body, CRAWLER_NAME) : { allow: [], disallow: [] };
+  const pause = Math.max(delayMs, (rules.crawlDelay ?? 0) * 1000);
+
+  const keywords: Array<string | null> = keywordsFromTerms(priorityTerms, maxKeywords);
+  if (keywords.length === 0) keywords.push(null);
+
+  // Enlaces en orden de prioridad: primero los del área con más peso en los perfiles.
+  const links = new Map<string, string>();
+  let stopped = false;
+
+  for (const keyword of keywords) {
+    for (let page = 1; page <= pagesPerKeyword && !stopped; page++) {
+      const listing = portal.listingUrl(keyword, page);
+      if (!listing) break;
+      const listingPath = new URL(listing);
+      if (!isAllowed(rules, `${listingPath.pathname}${listingPath.search}`)) break;
+
+      await sleep(pause);
+      const res = await fetchText(listing, portal.encoding, fetchImpl);
+      if (looksBlocked(res.status, res.body)) {
+        report.blocked = true;
+        report.errors.push(`El listado respondió ${res.status}; se detiene la lectura en esta pasada.`);
+        stopped = true;
+        break;
+      }
+      if (res.status !== 200) break;
+
+      report.categories += 1;
+      const found = extractOfferLinks(res.body, portal);
+      for (const link of found) {
+        if (!links.has(link.externalId)) links.set(link.externalId, link.url);
+      }
+      if (found.length === 0) break;
+    }
+    if (stopped) break;
+  }
+
+  const known = new Set(
+    (await db.query<{ externalId: string }>('SELECT externalId FROM offers WHERE source = $1', [portal.source])).rows.map(
+      r => r.externalId
+    )
+  );
+  const fresh = [...links].filter(([externalId]) => !known.has(externalId)).slice(0, maxNew);
+
+  for (const [externalId, url] of fresh) {
+    if (stopped) break;
+    if (!isAllowed(rules, new URL(url).pathname)) {
+      report.skipped += 1;
+      continue;
+    }
+
+    await sleep(pause);
+    try {
+      const page = await fetchText(url, portal.encoding, fetchImpl);
+      report.fetched += 1;
+
+      if (looksBlocked(page.status, page.body)) {
+        report.blocked = true;
+        report.errors.push(`El portal respondió ${page.status}; se detiene la lectura en esta pasada.`);
+        break;
+      }
+
+      const offer = page.status === 200 ? portal.parseOffer(page.body, url, externalId) : null;
+      if (!offer || (offer.validThrough && new Date(offer.validThrough) < now)) {
+        report.skipped += 1;
+        continue;
+      }
+
+      report.saved += await upsertOffers([offer]);
+    } catch (err) {
+      report.errors.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -294,6 +401,14 @@ export async function syncAllSources(): Promise<SyncReport[]> {
   for (const portal of JOB_POSTING_PORTALS) {
     try {
       reports.push(await syncJobPostingPortal(portal, { priorityTerms: [...priorityTerms.values()] }));
+    } catch (err) {
+      reports.push({ source: portal.source, categories: 0, fetched: 0, saved: 0, skipped: 0, errors: [String(err)] });
+    }
+  }
+
+  for (const portal of LISTING_PORTALS) {
+    try {
+      reports.push(await syncListingPortal(portal, { priorityTerms: [...priorityTerms.values()] }));
     } catch (err) {
       reports.push({ source: portal.source, categories: 0, fetched: 0, saved: 0, skipped: 0, errors: [String(err)] });
     }

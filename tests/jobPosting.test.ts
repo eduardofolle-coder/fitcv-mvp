@@ -43,6 +43,8 @@ describe('portal offer URLs', () => {
     expect('https://www.trabajando.cl/trabajo/6124702-cajero-a-garzon-iquique'.match(portal('trabajando').offerUrl)?.[1]).toBe('6124702');
     expect('https://www.chiletrabajos.cl/trabajo/conserje-nochero-sabado-y-domingo-3868379'.match(portal('chiletrabajos').offerUrl)?.[1]).toBe('3868379');
     expect('https://www.bne.gob.cl/oferta/2026-094514'.match(portal('bne').offerUrl)?.[1]).toBe('2026-094514');
+    expect('https://www.portalminero.com/oferta-laboral/2225'.match(portal('portalminero').offerUrl)?.[1]).toBe('2225');
+    expect('https://www.portalminero.com/panel/oferta-laboral/2225'.match(portal('portalminero').offerUrl)).toBeNull();
     expect('https://www.trabajando.cl/empresas/falabella'.match(portal('trabajando').offerUrl)).toBeNull();
   });
 });
@@ -142,5 +144,7 @@ describe('helpers', () => {
     expect(looksBlocked(429, '')).toBe(true);
     expect(looksBlocked(200, '<title>Attention Required! | Cloudflare</title>')).toBe(true);
     expect(looksBlocked(200, page('{"@type":"JobPosting","title":"x"}'))).toBe(false);
+    // Un listado normal que carga reCAPTCHA para su login no está bloqueado.
+    expect(looksBlocked(200, '<html><head><title>Trabajo de logistica</title><script src="https://www.google.com/recaptcha/api.js"></script></head></html>')).toBe(false);
   });
 });

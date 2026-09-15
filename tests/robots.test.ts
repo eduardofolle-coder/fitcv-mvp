@@ -49,6 +49,23 @@ describe('robots.txt', () => {
     expect(isAllowed(parseRobots('', 'FITCV-OfferSync'), '/cualquier/cosa')).toBe(true);
   });
 
+  it('honours the crawl delay and a group that blocks another robot', () => {
+    // Texto real de Trabajos Diarios: bloquea ClaudeBot y pide 2 s entre páginas a todos.
+    const robots = `User-agent: *
+Content-Signal: search=yes,ai-train=no,use=reference
+Allow: /
+User-agent: ClaudeBot
+Disallow: /
+User-agent: GPTBot
+Disallow: /
+User-agent: *
+Crawl-delay: 2`;
+    const rules = parseRobots(robots, 'FITCV-OfferSync');
+    expect(rules.crawlDelay).toBe(2);
+    expect(isAllowed(rules, '/trabajo/3085424/reponedores-en-metropolitana-de-santiago')).toBe(true);
+    expect(isAllowed(parseRobots(robots, 'ClaudeBot'), '/trabajo/1/x')).toBe(false);
+  });
+
   it('supports end anchors', () => {
     const rules = parseRobots('User-agent: *\nDisallow: /*.pdf$', 'FITCV-OfferSync');
     expect(isAllowed(rules, '/cv.pdf')).toBe(false);
