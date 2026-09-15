@@ -29,6 +29,10 @@ initErrorTracking();
 
 const app = express();
 
+// En Render (y cualquier hosting con proxy) la IP real viene en X-Forwarded-For.
+// Sin esto, los límites de intentos contarían a todos los usuarios como uno solo.
+if (env.NODE_ENV === 'production') app.set('trust proxy', 1);
+
 // ✅ Database initialization. El servidor NO acepta tráfico hasta que termina:
 // antes se llamaba sin await y app.listen() arrancaba en paralelo, de modo que
 // las primeras requests de un arranque en frío pegaban contra una BD inexistente.

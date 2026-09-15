@@ -1,0 +1,79 @@
+# Blueprint de Render: Dashboard → New → Blueprint → este repositorio.
+# Todo en la misma región para que el backend use la conexión interna a la BD.
+# Virginia es la región de Render más cercana a Chile.
+
+databases:
+  - name: fitcv-db
+    databaseName: fitcv
+    user: fitcv
+    # El plan gratis de Postgres se borra a los 30 días: no sirve para producción.
+    plan: basic-256mb
+    region: virginia
+
+services:
+  - type: web
+    name: fitcv-api
+    runtime: node
+    region: virginia
+    # El plan gratis se duerme sin tráfico y detiene la lectura de portales y el análisis diario.
+    plan: starter
+    branch: main
+    # --include=dev: con NODE_ENV=production npm omite TypeScript y no compila.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    domains:
+      - api.fitcv.cl
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fitcv-db
+          property: connectionString
+      # Se generan una sola vez al crear el servicio. No regenerar
+      # DATA_ENCRYPTION_KEY: los CVs ya guardados quedarían ilegibles.
+      - key: JWT_PRIVATE_KEY
+        generateValue: true
+      - key: JWT_PUBLIC_KEY
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      # sync: false = Render las pide en el panel; nunca van en el repositorio.
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: EMAIL_FROM
+        value: FITCV <no-reply@fitcv.cl>
+      - key: APP_URL
+        value: https://fitcv.cl
+      - key: ALLOWED_ORIGINS
+        value: https://fitcv.cl,https://www.fitcv.cl
+      - key: OFFER_SYNC_MINUTES
+        value: "60"
+      - key: RUN_SCHEDULERS
+        value: "true"
+
+  - type: web
+    name: fitcv-web
+    runtime: node
+    region: virginia
+    plan: starter
+    branch: main
+    rootDir: fitcv-frontend
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    domains:
+      - fitcv.cl
+      - www.fitcv.cl
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Se incrusta al compilar: si cambia, hay que volver a desplegar la web.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.fitcv.cl/api
