@@ -6,7 +6,8 @@
  * El token de la extensión vive solo aquí: la página nunca lo ve.
  */
 
-const DEFAULT_API = 'http://localhost:3000/api';
+// El popup permite cambiarla; esta es la de producción.
+const DEFAULT_API = 'https://api.fitcv.cl/api';
 const STEP_LIMIT = 10;
 const RECHECK_MS = 4000;
 const MAX_WAITS = 5;
