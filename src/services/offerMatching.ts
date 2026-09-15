@@ -55,6 +55,9 @@ const STOPWORDS = new Set([
   'diplomado', 'universidad', 'instituto', 'escuela', 'profesional', 'tecnico', 'tecnica', 'ingenieria',
   'ingeniero', 'ingeniera', 'licenciatura', 'magister', 'honorarios', 'part', 'time', 'full', 'practica',
   'practicante', 'otros', 'otras', 'general', 'generales',
+  // Estudios escolares y adjetivos de alcance: no son un área de trabajo.
+  'ensenanza', 'media', 'basica', 'completa', 'cientifico', 'humanista', 'liceo', 'colegio',
+  'nacional', 'nacionales', 'internacional', 'internacionales', 'global', 'regional', 'local',
 ]);
 
 // Cargos y niveles: dicen la jerarquía, no el área, y calzarían con todo.
@@ -64,6 +67,8 @@ const LEVEL_WORDS = new Set([
   'senior', 'semi', 'junior', 'trainee', 'director', 'directora', 'lider', 'head', 'manager', 'lead',
   'responsable', 'administrativo', 'administrativa', 'operario', 'operaria', 'ayudante', 'agente',
   'representante', 'consultor', 'consultora', 'asesor', 'asesora', 'intern', 'associate',
+  'analyst', 'engineer', 'specialist', 'officer', 'assistant', 'coordinator', 'supervisor', 'executive',
+  'director', 'chief', 'staff',
 ]);
 
 const ENTRY_LEVEL = /(^|\s)(practica|practicante|alumno|alumna|estudiante|trainee|junior|aprendiz|internship|intern)(\s|$)/;

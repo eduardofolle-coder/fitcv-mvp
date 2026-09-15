@@ -52,6 +52,19 @@ describe('buildMatchingProfile', () => {
     expect(keys.some(k => k.includes('capacidad') || k.includes('liderazgo'))).toBe(false);
   });
 
+  it('ignores school studies, scope adjectives and English job levels', () => {
+    // Visto con un perfil real: "Enseñanza Media", "Nacionales" y "Analyst" terminaban como áreas.
+    const noisy = buildMatchingProfile({
+      experience: [{ title: 'Supply Chain Analyst' }, { title: 'Ejecutivo de Ventas Nacionales e Internacionales' }],
+      education: [{ degree: 'Enseñanza Media Científico Humanista' }],
+    });
+    const keys = noisy.terms.map(t => t.key);
+    for (const word of ['analyst', 'ensenanza', 'media', 'nacionales', 'internacionales', 'cientifico', 'humanista']) {
+      expect(keys).not.toContain(word);
+    }
+    expect(keys).toEqual(expect.arrayContaining(['supply chain', 'ventas']));
+  });
+
   it('weighs areas the candidate repeated across roles and studies above one-off mentions', () => {
     const weight = (display: string) => logistics.terms.find(t => t.display === display)?.weight ?? 0;
     expect(weight('logística')).toBeGreaterThan(weight('transporte internacional'));
