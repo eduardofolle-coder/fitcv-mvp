@@ -341,9 +341,16 @@ export async function syncListingPortal(portal: ListingPortal, options: ListingS
       r => r.externalId
     )
   );
-  const fresh = [...links].filter(([externalId]) => !known.has(externalId)).slice(0, maxNew);
+  // Los buscadores de algunos portales devuelven ofertas de cualquier rubro. Con
+  // perfiles que orientar, solo se abren las ofertas cuyo enlace nombra un área.
+  const fresh = [...links]
+    .filter(([externalId]) => !known.has(externalId))
+    .map(([externalId, url]) => ({ externalId, url, priority: slugPriority(url, priorityTerms) }))
+    .filter(link => priorityTerms.length === 0 || link.priority > 0)
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, maxNew);
 
-  for (const [externalId, url] of fresh) {
+  for (const { externalId, url } of fresh) {
     if (stopped) break;
     if (!isAllowed(rules, new URL(url).pathname)) {
       report.skipped += 1;
