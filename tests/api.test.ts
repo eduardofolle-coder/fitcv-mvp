@@ -188,6 +188,20 @@ describe('offers', () => {
     expect(String(data.error)).not.toMatch(/Job offer not found/i);
   });
 
+  it('asks for a CV before showing offers for the candidate profile', async () => {
+    const { status, data } = await call('GET', '/offers?match=profile');
+    expect(status).toBe(200);
+    expect(data.needsProfile).toBe(true);
+    expect(data.data).toEqual([]);
+  });
+
+  it('searches over the accent-free text columns filled at startup', async () => {
+    // Las ofertas de ejemplo se guardan sin columnas de búsqueda; el arranque las completa.
+    const { status, data } = await call('GET', '/offers?search=AMAZON');
+    expect(status).toBe(200);
+    expect(data.data.some((o: any) => o.company === 'Amazon')).toBe(true);
+  });
+
   it('returns a single offer by id', async () => {
     const { status } = await call('GET', `/offers/${offerId}`);
     expect(status).toBe(200);

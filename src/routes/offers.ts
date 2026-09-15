@@ -6,6 +6,12 @@ import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { SEED_OFFERS } from '../db/seedData.js';
 import { safeJsonParse } from '../utils/safeJson.js';
+import { loadMatchingProfile } from '../services/candidateProfile.js';
+import { likePatterns, scoreOffer, searchable } from '../services/offerMatching.js';
+
+// Ofertas candidatas que se puntúan por consulta: las más recientes que
+// mencionan algún término del perfil.
+const MAX_MATCH_CANDIDATES = 3000;
 
 const router = Router();
 
@@ -43,13 +49,57 @@ router.get(
     if (location) add(n => `location ILIKE $${n}`, likePattern(location));
     if (source) add(n => `source = $${n}`, source);
     if (country) add(n => `country = $${n}`, country.toUpperCase());
-    if (search) add(n => `(title ILIKE $${n} OR description ILIKE $${n})`, likePattern(search));
+    // Sin tildes: "logistica" encuentra "Logística".
+    if (search) add(n => `COALESCE(searchText, LOWER(title)) LIKE $${n}`, likePattern(searchable(search)));
     if (Number.isFinite(minSalary) && req.query.minSalary !== undefined) add(n => `salaryMin >= $${n}`, minSalary);
     if (Number.isFinite(maxSalary) && req.query.maxSalary !== undefined) add(n => `salaryMax <= $${n}`, maxSalary);
 
-    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const limitNum = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
     const pageNum = Math.max(Number(req.query.page) || 1, 1);
+
+    // Ofertas del perfil del candidato, de la más afín a la menos.
+    if (req.query.match === 'profile') {
+      const profile = await loadMatchingProfile(req.user.id);
+      const empty = { page: pageNum, limit: limitNum, total: 0, totalPages: 0 };
+      if (!profile) {
+        return res.json({ success: true, data: [], needsProfile: true, profileTerms: [], pagination: empty });
+      }
+
+      const patterns = likePatterns(profile);
+      const termFilter = patterns.map(pattern => {
+        params.push(pattern);
+        return `searchText LIKE $${params.length}`;
+      });
+      const matchWhere = `WHERE ${[...where, `(${termFilter.join(' OR ')})`].join(' AND ')}`;
+
+      const candidates = (await db.query(`
+        SELECT * FROM offers ${matchWhere}
+        ORDER BY publishedAt DESC NULLS LAST, createdAt DESC
+        LIMIT ${MAX_MATCH_CANDIDATES}
+      `, params)).rows;
+
+      const time = (o: any) => (o.publishedAt ? new Date(o.publishedAt).getTime() : 0);
+      const ranked = candidates
+        .map((o: any) => ({ offer: o, match: scoreOffer(o, profile) }))
+        .filter(item => item.match.recommended)
+        .sort((a, b) => b.match.score - a.match.score || time(b.offer) - time(a.offer));
+
+      const total = ranked.length;
+      const pageItems = ranked.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+      return res.json({
+        success: true,
+        data: pageItems.map(({ offer, match }) => ({
+          ...offer,
+          requirements: safeJsonParse(offer.requirements, []),
+          match: { score: match.score, reasons: match.reasons },
+        })),
+        profileTerms: profile.terms.slice(0, 8).map(t => t.display),
+        pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
+      });
+    }
+
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
     const countRow = await db.queryOne<{ count: string }>(`SELECT COUNT(*) AS count FROM offers ${whereSql}`, params);
     const total = Number(countRow?.count ?? 0);

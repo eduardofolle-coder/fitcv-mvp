@@ -6,6 +6,36 @@ import { AppError } from '../middleware/errorHandler.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import { buildHardData, type HardData } from './cvComposer.js';
 import { EncryptionService } from './encryption.js';
+import { buildMatchingProfile, type MatchingProfile } from './offerMatching.js';
+
+const toMatchingProfile = (row: any): MatchingProfile =>
+  buildMatchingProfile({
+    yearsExperience: typeof row.yearsExperience === 'number' ? row.yearsExperience : null,
+    experience: safeJsonParse(row.experience, []),
+    education: safeJsonParse(row.education, []),
+    skills: safeJsonParse(row.skills, {}),
+    summary: typeof row.summary === 'string' ? row.summary : null,
+  });
+
+/** Términos del perfil para buscar ofertas afines, o null si no hay CV analizado. */
+export async function loadMatchingProfile(userId: string): Promise<MatchingProfile | null> {
+  const row = await db.queryOne<any>(
+    'SELECT yearsExperience, experience, education, skills, summary FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+    [userId]
+  );
+  if (!row) return null;
+  const profile = toMatchingProfile(row);
+  return profile.terms.length > 0 ? profile : null;
+}
+
+/** Perfiles de todos los candidatos, para que los lectores prioricen lo que buscan. */
+export async function loadAllMatchingProfiles(limit = 500): Promise<MatchingProfile[]> {
+  const rows = (await db.query<any>(
+    'SELECT yearsExperience, experience, education, skills, summary FROM candidate_profiles ORDER BY updatedAt DESC LIMIT $1',
+    [limit]
+  )).rows;
+  return rows.map(toMatchingProfile).filter(profile => profile.terms.length > 0);
+}
 
 export async function loadHardData(userId: string): Promise<HardData> {
   const profile = await db.queryOne<any>(`

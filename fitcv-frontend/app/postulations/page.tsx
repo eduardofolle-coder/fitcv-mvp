@@ -71,7 +71,8 @@ export default function PostulationsPage() {
     (async () => {
       const [res, offersRes] = await Promise.all([
         apiClient.get<Postulation[]>('/postulations?limit=100'),
-        apiClient.get<Offer[]>('/offers?limit=50'),
+        // Solo ofertas del perfil del candidato, las más afines primero.
+        apiClient.get<Offer[]>('/offers?match=profile&limit=20'),
       ]);
       if (cancelled) return;
 
@@ -285,8 +286,14 @@ export default function PostulationsPage() {
             agregas desde la extensión. */}
         {!loading && availableOffers.length > 0 && (
           <section className="mt-10">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Ofertas disponibles</h2>
-            <p className="text-gray-600 mb-4">Crea una postulación y adapta tu CV a la oferta.</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Ofertas afines a tu perfil</h2>
+            <p className="text-gray-600 mb-4">
+              Las más afines a tu CV. Crea una postulación y adapta tu CV a la oferta, o{' '}
+              <button onClick={() => router.push('/offers')} className="text-blue-600 hover:underline">
+                ve todas las ofertas
+              </button>
+              .
+            </p>
 
             {createError && (
               <div className="rounded-md bg-red-50 p-4 mb-4">

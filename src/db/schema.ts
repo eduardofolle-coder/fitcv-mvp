@@ -270,6 +270,8 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE offers ADD COLUMN IF NOT EXISTS publishedAt TIMESTAMPTZ;
     ALTER TABLE offers ADD COLUMN IF NOT EXISTS lastSeenAt TIMESTAMPTZ;
     ALTER TABLE offers ADD COLUMN IF NOT EXISTS validThrough TIMESTAMPTZ;
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS searchTitle TEXT;
+    ALTER TABLE offers ADD COLUMN IF NOT EXISTS searchText TEXT;
     CREATE INDEX IF NOT EXISTS idx_offers_source ON offers(source);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_offers_source_externalId ON offers(source, externalId) WHERE externalId IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_offers_publishedAt ON offers(publishedAt);

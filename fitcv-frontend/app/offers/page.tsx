@@ -17,18 +17,24 @@ interface Offer {
   salaryMin?: number | null;
   salaryMax?: number | null;
   salaryCurrency?: string | null;
+  match?: { score: number; reasons: string[] };
 }
 
-interface Pagination {
-  page: number;
-  totalPages: number;
-  total: number;
+interface OffersResponse {
+  success: boolean;
+  data?: Offer[];
+  error?: string;
+  pagination?: { page: number; totalPages: number; total: number };
+  needsProfile?: boolean;
+  profileTerms?: string[];
 }
 
 interface Postulation {
   id: string;
   offerId: string;
 }
+
+type Mode = 'profile' | 'all';
 
 const SOURCE_LABELS: Record<string, string> = {
   getonbrd: 'Get on Board',
@@ -49,12 +55,18 @@ const sourceLabel = (source: string) => SOURCE_LABELS[source] ?? source;
 const money = (n: number, currency?: string | null) =>
   currency === 'USD' ? `US$${n.toLocaleString('es-CL')}` : `$${n.toLocaleString('es-CL')}`;
 
+const affinityStyle = (score: number) =>
+  score >= 60 ? 'bg-green-100 text-green-800' : score >= 35 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700';
+
 export default function OffersPage() {
   const router = useRouter();
   const { user, initializing } = useAuth();
 
+  const [mode, setMode] = useState<Mode>('profile');
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, totalPages: 1, total: 0 });
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [profileTerms, setProfileTerms] = useState<string[]>([]);
+  const [needsProfile, setNeedsProfile] = useState(false);
   const [bySource, setBySource] = useState<Array<{ source: string; count: number }>>([]);
   const [applied, setApplied] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
@@ -96,15 +108,17 @@ export default function OffersPage() {
       setLoading(true);
       setError(null);
       const params = new URLSearchParams({ page: String(page), limit: '20' });
+      if (mode === 'profile') params.set('match', 'profile');
       if (search) params.set('search', search);
       if (source) params.set('source', source);
 
-      const res = await apiClient.get<Offer[]>(`/offers?${params}`);
+      const res = (await apiClient.get<Offer[]>(`/offers?${params}`)) as OffersResponse;
       if (cancelled) return;
       if (res.success && Array.isArray(res.data)) {
         setOffers(res.data);
-        const meta = (res as unknown as { pagination?: Pagination }).pagination;
-        if (meta) setPagination(meta);
+        if (res.pagination) setPagination(res.pagination);
+        setNeedsProfile(res.needsProfile === true);
+        setProfileTerms(res.profileTerms ?? []);
       } else {
         setError(res.error || 'No se pudieron cargar las ofertas');
       }
@@ -113,12 +127,17 @@ export default function OffersPage() {
     return () => {
       cancelled = true;
     };
-  }, [initializing, user, page, search, source]);
+  }, [initializing, user, mode, page, search, source]);
 
   if (initializing) {
     return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
   }
   if (!user) return null;
+
+  const changeMode = (next: Mode) => {
+    setMode(next);
+    setPage(1);
+  };
 
   const submitSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -162,8 +181,9 @@ export default function OffersPage() {
             </button>
             <h1 className="text-3xl font-bold text-gray-900">Ofertas</h1>
             <p className="text-gray-600">
-              {totalOffers.toLocaleString('es-CL')} ofertas vigentes de portales chilenos. Postula y la extensión las envía
-              con tu CV adaptado.
+              {mode === 'profile'
+                ? 'Ofertas vigentes afines a tu CV, de la más afín a la menos.'
+                : `${totalOffers.toLocaleString('es-CL')} ofertas vigentes de portales chilenos.`}
             </p>
           </div>
           <button
@@ -174,11 +194,36 @@ export default function OffersPage() {
           </button>
         </div>
 
+        <div className="flex gap-1 mb-4 border-b border-gray-200">
+          {(
+            [
+              ['profile', 'Para tu perfil'],
+              ['all', 'Todas las ofertas'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => changeMode(value)}
+              className={`px-4 py-2 -mb-px text-sm font-medium border-b-2 ${
+                mode === value ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'profile' && profileTerms.length > 0 && (
+          <p className="text-sm text-gray-700 mb-4">
+            Según tu CV buscamos: <strong>{profileTerms.join(', ')}</strong>.
+          </p>
+        )}
+
         <form onSubmit={submitSearch} className="flex gap-2 mb-4">
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Cargo, empresa o palabra clave (ej: analista, Node.js, enfermera)"
+            placeholder={mode === 'profile' ? 'Afinar dentro de tus ofertas (ej: jefe, Santiago, SAP)' : 'Cargo, empresa o palabra clave'}
             className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
           />
           <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
@@ -200,7 +245,8 @@ export default function OffersPage() {
                   : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {item.source ? sourceLabel(item.source) : 'Todos los portales'} · {item.count.toLocaleString('es-CL')}
+              {item.source ? sourceLabel(item.source) : 'Todos los portales'}
+              {mode === 'all' ? ` · ${item.count.toLocaleString('es-CL')}` : ''}
             </button>
           ))}
         </div>
@@ -218,9 +264,29 @@ export default function OffersPage() {
 
         {loading ? (
           <div className="text-center py-12 text-gray-600">Cargando ofertas...</div>
+        ) : needsProfile ? (
+          <div className="text-center py-12 bg-white rounded-lg shadow">
+            <p className="text-gray-700 mb-4">Sube tu CV para que FITCV te muestre las ofertas de tu perfil.</p>
+            <button
+              onClick={() => router.push('/cv')}
+              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+            >
+              Subir mi CV
+            </button>
+          </div>
         ) : offers.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow text-gray-500">
-            No hay ofertas vigentes con esos filtros.
+          <div className="text-center py-12 bg-white rounded-lg shadow text-gray-600 px-6">
+            {mode === 'profile' ? (
+              <>
+                <p className="mb-2">Todavía no hay ofertas vigentes afines a tu perfil con esos filtros.</p>
+                <p className="text-sm text-gray-500">
+                  FITCV revisa los portales cada hora y lee primero las ofertas de tus áreas. Mientras, puedes agregar
+                  ofertas de LinkedIn, Computrabajo o Laborum con la extensión.
+                </p>
+              </>
+            ) : (
+              <p>No hay ofertas vigentes con esos filtros.</p>
+            )}
           </div>
         ) : (
           <ul className="space-y-3">
@@ -235,6 +301,14 @@ export default function OffersPage() {
                         {offer.company}
                         {offer.location ? ` · ${offer.location}` : ''}
                       </p>
+                      {offer.match && (
+                        <p className="text-xs text-gray-600 mt-2">
+                          <span className={`px-2 py-0.5 rounded-full font-semibold ${affinityStyle(offer.match.score)}`}>
+                            Afinidad {offer.match.score}%
+                          </span>
+                          {offer.match.reasons.length > 0 && <span className="ml-2">Coincide con: {offer.match.reasons.join(', ')}</span>}
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-gray-500">
                         <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{sourceLabel(offer.source)}</span>
                         {offer.publishedAt && <span>Publicada el {new Date(offer.publishedAt).toLocaleDateString()}</span>}

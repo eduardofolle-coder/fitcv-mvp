@@ -18,7 +18,7 @@ import offersRoutes from './routes/offers.js';
 import learningRoutes from './routes/learning.js';
 import applicationsRoutes from './routes/applications.js';
 import extensionRoutes from './routes/extension.js';
-import { startOfferSync } from './services/offerSync.js';
+import { backfillOfferSearch, startOfferSync } from './services/offerSync.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
@@ -34,6 +34,8 @@ async function initializeDatabase() {
   await db.init();
   await initializeSchema();
   await initializeSeedData();
+  const backfilled = await backfillOfferSearch();
+  if (backfilled > 0) console.log(`✅ Search columns filled for ${backfilled} offers`);
   console.log('✅ Database ready');
 }
 
