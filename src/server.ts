@@ -152,6 +152,12 @@ function shutdown(code: number): void {
 // un cierre ordenado.
 if (env.NODE_ENV !== 'production') {
   const shutdownFile = path.resolve('data', `.shutdown-${PORT}`);
+  // Un pedido de cierre que quedó de una ejecución anterior no debe apagar esta.
+  try {
+    unlinkSync(shutdownFile);
+  } catch {
+    // No había archivo: lo normal.
+  }
   const watcher = setInterval(() => {
     if (!existsSync(shutdownFile)) return;
     try {
