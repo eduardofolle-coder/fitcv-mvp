@@ -297,7 +297,7 @@ async function markSentFromTab(tabId) {
   return { ok: true };
 }
 
-const POPUP_COMMANDS = ['fitcv:status', 'fitcv:pair', 'fitcv:unpair', 'fitcv:start', 'fitcv:stop', 'fitcv:capture'];
+const POPUP_COMMANDS = ['fitcv:status', 'fitcv:pair', 'fitcv:unpair', 'fitcv:start', 'fitcv:stop', 'fitcv:capture', 'fitcv:extract-offers'];
 
 async function handleMessage(message, sender) {
   const type = message && message.type;
@@ -333,6 +333,33 @@ async function handleMessage(message, sender) {
       return stop();
     case 'fitcv:capture':
       return captureTab(message.tabId);
+    case 'fitcv:extract-offers': {
+      if (!message.tabId) throw new Error('Falta la pestaña.');
+      const [injection] = await chrome.scripting.executeScript({
+        target: { tabId: message.tabId },
+        files: ['content/offerExtractor.js'],
+      });
+      const result = injection && injection.result;
+      if (!result || result.count === 0) throw new Error('No se encontraron ofertas en esta página.');
+
+      let saved = 0;
+      for (const offer of result.offers) {
+        try {
+          const normalized = {
+            url: offer.url,
+            title: offer.title.slice(0, 300),
+            company: offer.company.slice(0, 100),
+            description: offer.description.slice(0, 20000),
+          };
+          await api('/extension/offers', { method: 'POST', body: { ...normalized, queue: true } });
+          saved++;
+        } catch (err) {
+          await log(`No se pudo guardar "${offer.title}": ${err instanceof Error ? err.message : 'error desconocido'}`);
+        }
+      }
+      await log(`Capturadas ${saved}/${result.count} ofertas de ${result.portal}.`);
+      return { saved, total: result.count };
+    }
     default:
       throw new Error('Mensaje desconocido.');
   }

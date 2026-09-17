@@ -82,7 +82,7 @@ router.get(
     // $n se numeran sobre la marcha en vez de estar fijos en el texto.
     const params: any[] = [req.user.id];
     let query = `
-      SELECT p.*, o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location, o.source
+      SELECT p.id, p.userId, p.offerId, p.estado, p.prioridad, p.notes, p.cvAdaptedId, p.postulationWeight, p.postuladoAt, p.createdAt, p.updatedAt, p.applyStatus, p.applyReason, p.applyDetail, o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location, o.source
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
       WHERE p.userId = $1

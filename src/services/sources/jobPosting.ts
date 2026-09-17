@@ -54,6 +54,14 @@ export const JOB_POSTING_PORTALS: JobPostingPortal[] = [
     encoding: 'windows-1252',
     titleFromHeading: true,
   },
+  {
+    source: 'jobrapido',
+    label: 'Jobrapido',
+    sitemap: 'https://www.jobrapido.com/sitemap_jobs_cl.xml',
+    offerUrl: /^https:\/\/www\.jobrapido\.com\/[a-z]{2}\/job\/(\d+)-[^/?#]*$/,
+    idPrefix: 'jrd',
+    encoding: 'utf-8',
+  },
 ];
 
 export interface SitemapEntry {

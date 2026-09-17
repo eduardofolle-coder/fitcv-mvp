@@ -71,7 +71,9 @@ $('capture').addEventListener('click', async () => {
   showError('action-error', null);
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    await call({ type: 'fitcv:capture', tabId: tab.id });
+    const result = await call({ type: 'fitcv:extract-offers', tabId: tab.id });
+    const msg = `Capturadas ${result.saved}/${result.total} ofertas. Se agregarán a la cola automáticamente.`;
+    console.log(msg);
   } catch (error) {
     showError('action-error', error);
   }
