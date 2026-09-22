@@ -39,7 +39,7 @@ export default function Landing() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm">
                 <span className="text-2xl">⚡</span>
-                <span className="text-sm font-medium text-cyan-300">Powered by Claude AI</span>
+                <span className="text-sm font-medium text-cyan-300">Sin mentiras · Solo tu experiencia real</span>
               </div>
 
               <div className="space-y-3">
@@ -275,7 +275,7 @@ export default function Landing() {
           </div>
 
           <div className="border-t border-white/5 pt-8 text-center text-gray-500 text-sm">
-            <p>© 2026 fitcv. Construido con Claude AI. Sin IA pública generada.</p>
+            <p>© 2026 fitcv · Tu CV, adaptado a cada oferta · Hecho en Chile</p>
           </div>
         </div>
       </footer>
