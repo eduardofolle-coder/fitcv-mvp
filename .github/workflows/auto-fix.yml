@@ -52,6 +52,7 @@ jobs:
           # documenta Moonshot para Claude Code.
           ANTHROPIC_BASE_URL: https://api.moonshot.ai/anthropic
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.MOONSHOT_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
           ANTHROPIC_MODEL: kimi-k2.7-code-highspeed
           ANTHROPIC_SMALL_FAST_MODEL: kimi-k2.7-code-highspeed
           # Claude Code no conoce el modelo Kimi; sin esto bloquea por el
@@ -60,18 +61,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          git checkout -b "autofix/${GITHUB_RUN_ID}"
-          # -p = modo headless. || true: si el agente falla, el paso siguiente lo
-          # informa en vez de romper el workflow.
-          claude -p "$(cat .github/fixer-prompt.md)
+          # --- Diagnóstico: para saber exactamente qué falla ---
+          echo "== claude version =="; claude --version 2>&1 || echo "claude NO ENCONTRADO en PATH"
+          echo "== auth =="; echo "AUTH_TOKEN len: ${#ANTHROPIC_AUTH_TOKEN} | API_KEY len: ${#ANTHROPIC_API_KEY} | base: $ANTHROPIC_BASE_URL | model: $ANTHROPIC_MODEL"
 
-          Issue a resolver: #${ISSUE_NUMBER}. Revísalo con: gh issue view ${ISSUE_NUMBER}" \
+          git checkout -b "autofix/${GITHUB_RUN_ID}"
+
+          # Prompt por stdin. Añade la referencia al issue.
+          PROMPT="$(cat .github/fixer-prompt.md)
+
+          Issue a resolver: #${ISSUE_NUMBER}. Míralo con: gh issue view ${ISSUE_NUMBER}"
+
+          echo "== corriendo claude =="
+          set +e
+          printf '%s' "$PROMPT" | claude -p \
+            --model kimi-k2.7-code-highspeed \
             --output-format text \
             --dangerously-skip-permissions \
-            --allowedTools "Bash Edit Write Read Grep Glob" \
-            > /tmp/fixer-summary.txt 2>&1 || true
-          echo "----- Resumen del agente -----"
-          tail -c 4000 /tmp/fixer-summary.txt || true
+            --verbose \
+            --allowedTools "Bash Edit Write Read Grep Glob" 2>&1 | tee /tmp/fixer-summary.txt
+          echo "== claude exit: ${PIPESTATUS[0]} =="
+          set -e
 
       - name: Verify and open PR
         env:
