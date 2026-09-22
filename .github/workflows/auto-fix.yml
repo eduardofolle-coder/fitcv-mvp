@@ -47,11 +47,16 @@ jobs:
 
       - name: Diagnose and fix
         env:
-          # Claude Code apuntado a Kimi (Moonshot), igual que la app. Envía la
-          # key como x-api-key vía ANTHROPIC_API_KEY.
+          # Claude Code apuntado a Kimi (Moonshot). Para un proveedor externo se
+          # usa ANTHROPIC_AUTH_TOKEN (Bearer), no ANTHROPIC_API_KEY — así lo
+          # documenta Moonshot para Claude Code.
           ANTHROPIC_BASE_URL: https://api.moonshot.ai/anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MOONSHOT_API_KEY }}
           ANTHROPIC_MODEL: kimi-k2.7-code-highspeed
+          ANTHROPIC_SMALL_FAST_MODEL: kimi-k2.7-code-highspeed
+          # Claude Code no conoce el modelo Kimi; sin esto bloquea por el
+          # tamaño de contexto que no puede inferir.
+          CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '1'
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
