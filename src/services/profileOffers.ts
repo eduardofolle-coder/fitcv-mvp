@@ -26,7 +26,10 @@ export type TierCounts = Record<MatchTier, number>;
 export async function rankOffersForProfile(
   profile: MatchingProfile,
   where: string[] = [ACTIVE_OFFER],
-  params: unknown[] = []
+  params: unknown[] = [],
+  // `all` conserva también las que no se recomiendan: el diagnóstico necesita
+  // saber qué se descartó y por qué, no solo lo que quedó.
+  options: { all?: boolean } = {}
 ): Promise<RankedOffer[]> {
   const values = [...params];
   const termFilter = likePatterns(profile).map(pattern => {
@@ -45,7 +48,7 @@ export async function rankOffersForProfile(
   const time = (offer: any) => (offer.publishedAt ? new Date(offer.publishedAt).getTime() : 0);
   return candidates
     .map((offer: any) => ({ offer, match: scoreOffer(offer, profile) }))
-    .filter(item => item.match.recommended)
+    .filter(item => options.all || item.match.recommended)
     .sort((a, b) => b.match.score - a.match.score || time(b.offer) - time(a.offer));
 }
 

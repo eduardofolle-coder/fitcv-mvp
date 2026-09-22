@@ -567,21 +567,23 @@ describe('saved answers and salary authorisation', () => {
   });
 });
 
-describe('learning endpoints stay up with an empty profile', () => {
-  const endpoints = [
-    '/learning/top-keywords',
-    '/learning/patterns',
-    '/learning/skill-growth',
-    '/learning/recommendations',
-    '/learning/market-trends',
-  ];
+describe('diagnosis', () => {
+  // Las cinco pestañas que había antes leían una tabla que nada escribía:
+  // devolvían listas vacías y dos de ellas inventaban texto fijo. El
+  // diagnóstico las reemplaza y tiene que sostener el caso sin CV, que es el
+  // estado de todo usuario recién registrado.
+  it('answers 200 with no data when the candidate has no analyzed CV', async () => {
+    const { status, data } = await call('GET', '/learning/diagnosis');
+    expect(status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.data).toBeNull();
+    expect(data.reason).toBe('no-cv');
+  });
 
-  for (const endpoint of endpoints) {
-    it(`GET ${endpoint} returns 200`, async () => {
-      const { status } = await call('GET', endpoint);
-      expect(status).toBe(200);
-    });
-  }
+  it('requires authentication', async () => {
+    const res = await fetch(`${API}/learning/diagnosis`);
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('cv', () => {

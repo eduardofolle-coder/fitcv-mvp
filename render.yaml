@@ -42,12 +42,35 @@ services:
       - key: DATA_ENCRYPTION_KEY
         generateValue: true
       # sync: false = Render las pide en el panel; nunca van en el repositorio.
+      # CLAUDE_API_KEY es la key de Moonshot (Kimi), no de Anthropic.
       - key: CLAUDE_API_KEY
         sync: false
+      # Kimi (Moonshot) vía su endpoint compatible con Anthropic. Sin estas dos,
+      # el backend usaría los defaults de Anthropic y el análisis fallaría con
+      # la key de Moonshot.
+      - key: CLAUDE_API_URL
+        value: https://api.moonshot.ai/anthropic/v1/messages
+      # kimi-k2.7-code-highspeed: el más rápido de la cuenta. K3 razonaba tanto que
+      # el adaptador de CV (16k tokens) superaba los 5 min. El verificador
+      # anti-mentiras corre igual, así que la seguridad no depende del modelo.
+      - key: CLAUDE_MODEL
+        value: kimi-k2.7-code-highspeed
+      - key: CLAUDE_ORCHESTRATOR_MODEL
+        value: kimi-k2.7-code-highspeed
+      - key: CLAUDE_TIMEOUT_MS
+        value: "300000"
       - key: RESEND_API_KEY
         sync: false
       - key: SENTRY_DSN
         sync: false
+      # WhatsApp (Twilio). SID y token secretos van en el panel; el FROM es el
+      # número de trial de la cuenta. En producción cambia al número de marca.
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        value: whatsapp:+17372508034
       - key: EMAIL_FROM
         value: FITCV <no-reply@fitcv.cl>
       - key: APP_URL

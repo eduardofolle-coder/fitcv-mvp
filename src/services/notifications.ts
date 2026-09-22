@@ -1,10 +1,33 @@
 /**
- * Avisos al candidato. Hoy se muestran en el tablero; los canales externos
- * (WhatsApp, correo) se conectan en createNotification cuando existan.
+ * Avisos al candidato. Se muestran en el tablero y, si el usuario tiene teléfono
+ * y Twilio está configurado, también se mandan por WhatsApp.
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { safeJsonParse } from '../utils/safeJson.js';
+import { EncryptionService } from './encryption.js';
+import { sendWhatsApp, whatsappEnabled } from './whatsapp.js';
+import { logger } from './logger.js';
+
+/**
+ * Manda el aviso por WhatsApp en segundo plano. No espera ni propaga fallos: el
+ * aviso ya quedó guardado, y que WhatsApp falle no debe afectar a quien lo creó.
+ */
+async function pushWhatsApp(userId: string, title: string, body: string): Promise<void> {
+  if (!whatsappEnabled()) return;
+  try {
+    const row = await db.queryOne<{ contactInfo: string | null }>(
+      'SELECT contactInfo FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+      [userId]
+    );
+    if (!row?.contactInfo) return;
+    const contact = safeJsonParse<{ phone?: string }>(EncryptionService.decrypt(row.contactInfo), {});
+    if (!contact.phone) return;
+    await sendWhatsApp(contact.phone, `${title}\n${body}`);
+  } catch (error) {
+    logger.error('WhatsApp: no se pudo notificar', { detail: (error as Error).message });
+  }
+}
 
 export interface NotificationInput {
   userId: string;
@@ -29,6 +52,10 @@ export async function createNotification(input: NotificationInput): Promise<stri
     input.link ?? null,
     input.data === undefined ? null : JSON.stringify(input.data),
   ]);
+
+  // Fire-and-forget: no bloquea la respuesta al que crea el aviso.
+  void pushWhatsApp(input.userId, input.title, input.body);
+
   return id;
 }
 

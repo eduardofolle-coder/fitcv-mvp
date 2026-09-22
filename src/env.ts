@@ -36,6 +36,12 @@ export const env = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   EMAIL_FROM: process.env.EMAIL_FROM || '',
 
+  // WhatsApp por Twilio. Sin las tres, el envío es un no-op y los avisos solo
+  // quedan en el tablero. TWILIO_WHATSAPP_FROM en el sandbox es whatsapp:+14155238886.
+  TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
+  TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
+  TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM || '',
+
   // Con varias instancias del servidor, las tareas programadas (lectura de
   // portales, análisis diario) deben correr en una sola: en las demás, false.
   RUN_SCHEDULERS: process.env.RUN_SCHEDULERS !== 'false'

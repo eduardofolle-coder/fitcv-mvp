@@ -49,14 +49,14 @@ const SYNONYM_GROUPS = [
 // Palabras que no describen un área: conectores, lugares, trámites de estudio.
 const STOPWORDS = new Set([
   'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'u', 'en', 'para', 'por', 'con', 'sin', 'a', 'al',
-  'un', 'una', 'su', 'sus', 'se', 'que', 'the', 'and', 'of', 'for', 'in', 'at', 'to', 'with',
+  'un', 'una', 'su', 'sus', 'se', 'que', 'como', 'the', 'and', 'of', 'for', 'in', 'at', 'to', 'with',
   'sa', 'spa', 'ltda', 'limitada', 'eirl', 'chile', 'santiago', 'region', 'empresa', 'area', 'nivel',
   'experiencia', 'anos', 'egresado', 'egresada', 'titulado', 'titulada', 'titulo', 'carrera', 'curso',
   'diplomado', 'universidad', 'instituto', 'escuela', 'profesional', 'tecnico', 'tecnica', 'ingenieria',
   'ingeniero', 'ingeniera', 'licenciatura', 'magister', 'honorarios', 'part', 'time', 'full', 'practica',
   'practicante', 'otros', 'otras', 'general', 'generales',
   // Estudios escolares y adjetivos de alcance: no son un área de trabajo.
-  'ensenanza', 'media', 'basica', 'completa', 'cientifico', 'humanista', 'liceo', 'colegio',
+  'ensenanza', 'media', 'basica', 'secundaria', 'completa', 'cientifico', 'humanista', 'liceo', 'colegio',
   'nacional', 'nacionales', 'internacional', 'internacionales', 'global', 'regional', 'local',
 ]);
 
@@ -218,6 +218,8 @@ export interface OfferMatch {
   recommended: boolean;
   tier: MatchTier;
   reasons: string[];
+  /** Claves de todos los términos del perfil que la oferta nombra. */
+  hits: string[];
 }
 
 export function scoreOffer(offer: { title?: string | null; description?: string | null }, profile: MatchingProfile): OfferMatch {
@@ -261,8 +263,45 @@ export function scoreOffer(offer: { title?: string | null; description?: string 
     recommended,
     tier: matchTier(score),
     reasons: [...titleHits, ...bodyHits].slice(0, 5).map(t => t.display),
+    hits: [...titleHits, ...bodyHits].map(t => t.key),
   };
 }
+
+/** Si el cargo es de entrada (práctica, junior, trainee). */
+export const isEntryLevel = (title: string): boolean => ENTRY_LEVEL.test(` ${searchable(title)} `);
+
+/**
+ * Lo que pide una oferta, en palabras mostrables: las áreas conocidas que
+ * nombra y las palabras de su título que no son nivel ni relleno. Es el
+ * vocabulario contra el que se compara el CV del candidato en el diagnóstico.
+ */
+export function offerTopics(offer: { title?: string | null; description?: string | null }): string[] {
+  const rawTitle = offer.title ?? '';
+  let title = ` ${searchable(rawTitle)} `;
+  const body = ` ${searchable((offer.description ?? '').slice(0, 15000))} `;
+  const found = new Set<string>();
+
+  for (const group of SYNONYM_GROUPS) {
+    const pattern = compile(group.variants);
+    if (!pattern.test(title) && !pattern.test(body)) continue;
+    found.add(group.display);
+    // Lo que ya quedó nombrado como área se borra del título: si no, "Jefe de
+    // Logística" devolvería además el token "logistica" y el candidato vería
+    // el mismo tema repetido con otra grafía.
+    title = title.replace(compile(group.variants, 'g'), ' ');
+  }
+
+  const forms = displayForms(rawTitle);
+  for (const token of title.trim().split(' ')) {
+    if (token.length < 4 || /^\d+$/.test(token) || STOPWORDS.has(token) || LEVEL_WORDS.has(token)) continue;
+    found.add(forms.get(token) ?? token);
+  }
+  return [...found];
+}
+
+/** Si el perfil ya nombra ese tema. */
+export const profileCovers = (profile: MatchingProfile, topic: string): boolean =>
+  profile.terms.some(term => term.pattern.test(` ${searchable(topic)} `));
 
 /** Patrones LIKE para acotar en SQL las ofertas candidatas antes de puntuar. */
 export function likePatterns(profile: MatchingProfile, max = 150): string[] {

@@ -48,33 +48,18 @@ export interface RecordOutcomeRequest {
   feedback?: string;
 }
 
-export interface TopKeywordsResponse {
-  keywords: string[];
+export interface TopicCount {
+  term: string;
+  offers: number;
 }
 
-export interface PatternsResponse {
-  topCompanies: string[];
-  topJobTitles: string[];
-  averageScore: number;
-  totalAdaptations: number;
-}
-
-export interface SkillGrowthResponse {
-  newSkills: string[];
-  strengthenedSkills: string[];
-  obsoleteSkills: string[];
-}
-
-export interface RecommendationsResponse {
-  recommendedKeywords: string[];
-  recommendedCompanies: string[];
-  recommendedRoles: string[];
-  marketOpportunities: string[];
-}
-
-export interface MarketTrendsResponse {
-  hotSkills: string[];
-  hotRoles: string[];
-  hotCompanies: string[];
-  marketHealth: string;
+export interface DiagnosisResponse {
+  matched: number;
+  reach: { alto: number; medio: number; bajo: number };
+  nearMisses: number;
+  entryLevelDiscarded: number;
+  analyzed: number;
+  strengths: TopicCount[];
+  gaps: TopicCount[];
+  unused: string[];
 }
