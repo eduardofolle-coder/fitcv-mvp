@@ -71,12 +71,15 @@ services:
         sync: false
       - key: TWILIO_WHATSAPP_FROM
         value: whatsapp:+17372508034
+      # Sin dominio verificado en Resend, el remitente de prueba funciona ya.
+      # Cambiar a "FITCV <no-reply@fitcv.cl>" cuando fitcv.cl esté verificado.
       - key: EMAIL_FROM
-        value: FITCV <no-reply@fitcv.cl>
+        value: onboarding@resend.dev
+      # URLs de Render mientras no exista fitcv.cl. Cambiar a https://fitcv.cl al registrarlo.
       - key: APP_URL
-        value: https://fitcv.cl
+        value: https://fitcv-web.onrender.com
       - key: ALLOWED_ORIGINS
-        value: https://fitcv.cl,https://www.fitcv.cl
+        value: https://fitcv-web.onrender.com,https://fitcv.cl,https://www.fitcv.cl
       - key: OFFER_SYNC_MINUTES
         value: "60"
       - key: RUN_SCHEDULERS
@@ -98,5 +101,6 @@ services:
       - key: NODE_VERSION
         value: "22"
       # Se incrusta al compilar: si cambia, hay que volver a desplegar la web.
+      # URL de Render mientras no exista api.fitcv.cl. Cambiar al registrar el dominio.
       - key: NEXT_PUBLIC_API_URL
-        value: https://api.fitcv.cl/api
+        value: https://fitcv-api.onrender.com/api
