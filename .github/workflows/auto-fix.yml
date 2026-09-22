@@ -1,0 +1,98 @@
+name: Auto-fix
+
+# Agente reparador de FITCV. Diagnostica y propone un fix como Pull Request.
+# NUNCA mergea ni despliega solo: un humano revisa el PR (línea de seguridad).
+#
+# v1 conservador: se dispara SOLO a mano, etiquetando un issue con `auto-fix`.
+# El disparo automático ante fallo de CI está abajo, comentado: se activa
+# cuando confirmemos que el agente corre bien sobre Moonshot en el runner.
+#
+# Requiere el secreto MOONSHOT_API_KEY en el repo (Settings → Secrets → Actions).
+
+on:
+  issues:
+    types: [labeled]
+  # workflow_run:
+  #   workflows: ["CI"]
+  #   types: [completed]
+
+concurrency:
+  group: auto-fix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    # Solo cuando se etiqueta un issue con `auto-fix`.
+    if: github.event_name == 'issues' && github.event.label.name == 'auto-fix'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies + Claude Code
+        run: |
+          npm ci
+          npm i -g @anthropic-ai/claude-code
+
+      - name: Diagnose and fix
+        env:
+          # Claude Code apuntado a Kimi (Moonshot), igual que la app. Envía la
+          # key como x-api-key vía ANTHROPIC_API_KEY.
+          ANTHROPIC_BASE_URL: https://api.moonshot.ai/anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+          ANTHROPIC_MODEL: kimi-k2.7-code-highspeed
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          git checkout -b "autofix/${GITHUB_RUN_ID}"
+          # -p = modo headless. || true: si el agente falla, el paso siguiente lo
+          # informa en vez de romper el workflow.
+          claude -p "$(cat .github/fixer-prompt.md)
+
+          Issue a resolver: #${ISSUE_NUMBER}. Revísalo con: gh issue view ${ISSUE_NUMBER}" \
+            --output-format text \
+            --dangerously-skip-permissions \
+            --allowedTools "Bash Edit Write Read Grep Glob" \
+            > /tmp/fixer-summary.txt 2>&1 || true
+          echo "----- Resumen del agente -----"
+          tail -c 4000 /tmp/fixer-summary.txt || true
+
+      - name: Verify and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            gh issue comment "${ISSUE_NUMBER}" --body "🤖 El agente reparador no encontró un cambio que proponer. Revisa el log de la Action."
+            exit 0
+          fi
+          # Gate: no proponer algo que ni siquiera compila.
+          npm run typecheck
+          git config user.name "fitcv-fixer[bot]"
+          git config user.email "bot@fitcv.cl"
+          git add -A
+          git commit -m "Auto-fix propuesto para #${ISSUE_NUMBER}"
+          git push origin "autofix/${GITHUB_RUN_ID}"
+          SUMMARY="$(tail -c 3500 /tmp/fixer-summary.txt 2>/dev/null || echo 'sin resumen')"
+          gh pr create \
+            --title "🤖 Auto-fix para #${ISSUE_NUMBER} — requiere tu revisión" \
+            --body "Fix propuesto automáticamente por el agente reparador. **Revísalo antes de mergear.** Cierra #${ISSUE_NUMBER} al mergear.
+
+          ---
+          ### Resumen del agente
+          \`\`\`
+          ${SUMMARY}
+          \`\`\`" \
+            --base main \
+            --head "autofix/${GITHUB_RUN_ID}"
