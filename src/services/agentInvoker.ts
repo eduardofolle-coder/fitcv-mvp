@@ -137,7 +137,7 @@ export class AgentInvokerService {
     try {
       // Validate API key
       if (!this.apiKey) {
-        throw new Error('CLAUDE_API_KEY not configured');
+        throw new Error('AI service rejected the credentials (CLAUDE_API_KEY is missing, invalid or expired).');
       }
 
       // Get agent config

@@ -5,7 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './env.js';
-import { errorHandler } from './middleware/errorHandler.js';
+import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
 import { logger } from './services/logger.js';
 import { initErrorTracking, captureException } from './services/errorTracking.js';
 import { db } from './db/client.js';
@@ -83,14 +83,15 @@ app.get('/', (req, res) => {
 });
 
 // ✅ Health check
-app.get('/health', (req, res) => {
+app.get('/health', asyncHandler(async (req, res) => {
+  const countRow = await db.queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM offers');
   res.json({
     status: 'ok',
     timestamp: new Date(),
     version: '0.2.1',
-    offersCount: SEED_OFFERS.length
+    offersCount: countRow?.count ?? 0
   });
-});
+}));
 
 // Diagnóstico del watchdog: BD, cantidad de ofertas y frescura del sync.
 // 503 si algo está en falla, para que un monitor externo lo detecte.
