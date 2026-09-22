@@ -41,6 +41,11 @@ export const env = {
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
   TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM || '',
+  // WhatsApp del admin para alertas del watchdog (E.164). Vacío = solo Sentry+log.
+  ADMIN_WHATSAPP: process.env.ADMIN_WHATSAPP || '',
+
+  // Cada cuántos minutos revisa el watchdog. 0 = apagado.
+  WATCHDOG_MINUTES: parseInt(process.env.WATCHDOG_MINUTES || '10'),
 
   // Con varias instancias del servidor, las tareas programadas (lectura de
   // portales, análisis diario) deben correr en una sola: en las demás, false.

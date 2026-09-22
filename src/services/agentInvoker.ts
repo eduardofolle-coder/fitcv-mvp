@@ -77,6 +77,47 @@ export class AgentInvokerService {
   // ejerciten el flujo completo contra un upstream simulado.
   private static apiUrl = env.CLAUDE_API_URL;
 
+  // Reintentos ante fallos transitorios del proveedor de IA. A escala (muchos
+  // usuarios postulando a la vez) el proveedor devuelve 429; un timeout o un 5xx
+  // también son recuperables reintentando. Un 4xx (salvo 429) no se reintenta.
+  private static readonly MAX_RETRIES = 3;
+
+  private static async postWithRetry(body: ClaudeAPIRequest): Promise<{ data: ClaudeAPIResponse }> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        return await axios.post<ClaudeAPIResponse>(this.apiUrl, body, {
+          headers: { 'x-api-key': this.apiKey, 'anthropic-version': '2023-06-01' },
+          // Rankear ofertas o reescribir un CV completo tarda; sin holgura el
+          // usuario recibía un timeout en vez de su resultado.
+          timeout: env.CLAUDE_TIMEOUT_MS,
+        });
+      } catch (error) {
+        lastError = error;
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        const timedOut = (error as { code?: string })?.code === 'ECONNABORTED';
+        const retryable = status === 429 || (typeof status === 'number' && status >= 500) || timedOut;
+        if (!retryable || attempt === this.MAX_RETRIES) throw error;
+
+        // Respeta Retry-After si el proveedor lo manda; si no, backoff
+        // exponencial con jitter (~1.5s, 3s, 6s) para no golpear en sincronía.
+        const retryAfter = Number(
+          (error as { response?: { headers?: Record<string, string> } })?.response?.headers?.['retry-after']
+        );
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : Math.round(2 ** attempt * 1500 + Math.random() * 800);
+        logger.warn('AI call retry', {
+          attempt: attempt + 1,
+          reason: status ?? (timedOut ? 'timeout' : 'error'),
+          waitMs,
+        });
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
+    }
+    throw lastError;
+  }
+
   /**
    * Invoke a FITCV agent
    */
@@ -111,29 +152,11 @@ export class AgentInvokerService {
       // Call Claude API
       logger.info(`Invoking agent: ${agentName}`, { userId, agentName });
 
-      const response = await axios.post<ClaudeAPIResponse>(
-        this.apiUrl,
-        {
-          model: config.model,
-          max_tokens: config.maxTokens,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-        } as ClaudeAPIRequest,
-        {
-          headers: {
-            'x-api-key': this.apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          // 30s no alcanzaba: rankear varias ofertas o reescribir un CV
-          // completo tarda más, y el usuario recibía un timeout en vez de su
-          // resultado.
-          timeout: env.CLAUDE_TIMEOUT_MS,
-        }
-      );
+      const response = await this.postWithRetry({
+        model: config.model,
+        max_tokens: config.maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      });
 
       // La respuesta trae una lista de bloques y no todos son texto: los
       // modelos actuales pueden anteponer otros tipos. Tomar content[0].text a

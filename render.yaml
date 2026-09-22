@@ -84,6 +84,12 @@ services:
         value: "60"
       - key: RUN_SCHEDULERS
         value: "true"
+      # Watchdog: cada cuántos minutos revisa BD y frescura del sync.
+      - key: WATCHDOG_MINUTES
+        value: "10"
+      # WhatsApp del admin para alertas del watchdog (opcional; vacío = solo Sentry).
+      - key: ADMIN_WHATSAPP
+        sync: false
 
   - type: web
     name: fitcv-web

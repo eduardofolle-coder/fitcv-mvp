@@ -426,28 +426,31 @@ export async function syncAllSources(): Promise<SyncReport[]> {
 
 let running = false;
 
+/**
+ * Una pasada de sincronización, con guard anti-solape compartido. La usan el
+ * scheduler y el watchdog (para re-disparar el sync si quedó atascado). Nunca
+ * rechaza: captura todo por dentro.
+ */
+export async function runSyncOnce(): Promise<void> {
+  if (running) return;
+  running = true;
+  try {
+    for (const report of await syncAllSources()) {
+      logger.info('Offer sync finished', { ...report, errors: report.errors.slice(0, 5) });
+    }
+  } catch (err) {
+    logger.error('Offer sync failed', { message: err instanceof Error ? err.message : String(err) });
+  } finally {
+    running = false;
+  }
+}
+
 /** Sincroniza al arrancar y cada `intervalMinutes`. Con 0 queda apagado. */
 export function startOfferSync(intervalMinutes: number): () => void {
   if (!(intervalMinutes > 0)) return () => undefined;
 
-  const run = async () => {
-    // Una pasada lenta no debe solaparse con la siguiente.
-    if (running) return;
-    running = true;
-    try {
-      for (const report of await syncAllSources()) {
-        logger.info('Offer sync finished', { ...report, errors: report.errors.slice(0, 5) });
-      }
-    } catch (err) {
-      logger.error('Offer sync failed', { message: err instanceof Error ? err.message : String(err) });
-    } finally {
-      running = false;
-    }
-  };
-
-  // run nunca rechaza (captura todo), así que se puede descartar su promesa.
-  const first = setTimeout(() => void run(), 5_000);
-  const every = setInterval(() => void run(), intervalMinutes * 60_000);
+  const first = setTimeout(() => void runSyncOnce(), 5_000);
+  const every = setInterval(() => void runSyncOnce(), intervalMinutes * 60_000);
   first.unref();
   every.unref();
 

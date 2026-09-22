@@ -20,6 +20,7 @@ import applicationsRoutes from './routes/applications.js';
 import extensionRoutes from './routes/extension.js';
 import { backfillOfferSearch, startOfferSync } from './services/offerSync.js';
 import { startDailyAnalysis } from './services/dailyAnalysis.js';
+import { startWatchdog, getHealthReport } from './services/watchdog.js';
 import notificationsRoutes from './routes/notifications.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
@@ -89,6 +90,14 @@ app.get('/health', (req, res) => {
     version: '0.2.1',
     offersCount: SEED_OFFERS.length
   });
+});
+
+// Diagnóstico del watchdog: BD, cantidad de ofertas y frescura del sync.
+// 503 si algo está en falla, para que un monitor externo lo detecte.
+app.get('/status', (req, res) => {
+  const report = getHealthReport();
+  if (!report) return res.json({ status: 'starting' });
+  res.status(report.ok ? 200 : 503).json(report);
 });
 
 // ✅ Routes
@@ -209,6 +218,8 @@ initializeDatabase()
         startOfferSync(env.OFFER_SYNC_MINUTES);
         // Solo trabaja para candidatos que eligieron una hora: sin eso no hace nada.
         startDailyAnalysis();
+        // Vigila BD y frescura del sync; auto-recupera y alerta lo que no.
+        startWatchdog(env.WATCHDOG_MINUTES, env.OFFER_SYNC_MINUTES);
       }
     });
   })
