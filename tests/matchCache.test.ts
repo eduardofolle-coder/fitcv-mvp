@@ -9,6 +9,12 @@ describe('match cache', () => {
   beforeAll(async () => {
     await db.init();
     await initializeSchema();
+    // Limpiar restos de corridas anteriores: este test no levanta su propio
+    // servidor, así que podría reutilizar una base persistente en disco.
+    await db.query('DELETE FROM user_match_cache WHERE userId = $1', [USER]);
+    await db.query('DELETE FROM candidate_profiles WHERE userId = $1', [USER]);
+    await db.query('DELETE FROM users WHERE id = $1', [USER]);
+    await db.query('DELETE FROM offers WHERE id = ANY($1)', [['o-hit', 'o-miss']]);
     await db.query('INSERT INTO users (id, email, passwordHash) VALUES ($1, $2, $3)', [USER, 'mc@test.dev', 'x']);
     await db.query(
       `INSERT INTO candidate_profiles (id, userId, fullName, yearsExperience, education, skills, summary, experience)
