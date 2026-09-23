@@ -143,6 +143,7 @@ const CSS = `
 .fitcv-landing .final p{color:var(--hero-muted); font-size:18px; margin-top:14px; position:relative; z-index:1}
 .fitcv-landing .final .btn{margin-top:26px; position:relative; z-index:1; font-size:17px; padding:14px 26px}
 .fitcv-landing footer{padding-block:36px; color:var(--muted); font-size:14px; text-align:center}
+.fitcv-landing footer a{color:inherit; text-decoration:underline; text-underline-offset:2px}
 .fitcv-landing .theme-toggle{background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:9px; width:38px; height:38px; cursor:pointer; display:grid; place-items:center; font-size:16px}
 @media (max-width:860px){
   .fitcv-landing .hero-grid{grid-template-columns:1fr; gap:32px; padding:36px 28px}
@@ -416,7 +417,10 @@ export default function Landing() {
           </div>
         </section>
 
-        <footer>© 2026 fitcv · Tu CV, adaptado a cada oferta · Hecho en Chile</footer>
+        <footer>
+          © 2026 fitcv · Tu CV, adaptado a cada oferta · Hecho en Chile ·{' '}
+          <a href="mailto:contacto@fitcv.cl">contacto@fitcv.cl</a>
+        </footer>
       </div>
     </div>
   );
