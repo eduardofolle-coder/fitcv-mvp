@@ -86,8 +86,9 @@ router.get(
 
       // Camino rápido: la vista por defecto (sin filtros de empresa/búsqueda/
       // sueldo) se sirve de la caché precalculada en background — un SELECT, no
-      // los ~50s de puntuar todo en vivo.
-      if (where.length === 0) {
+      // los ~50s de puntuar todo en vivo. `where` arranca con el filtro de
+      // vigencia, así que el indicador de "sin filtros del usuario" es params.
+      if (params.length === 0) {
         const cache = await getCachedMatch(req.user.id);
         if (cache) {
           const list = tier ? cache.ranked.filter(r => r.tier === tier) : cache.ranked;

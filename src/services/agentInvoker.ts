@@ -11,6 +11,39 @@ import { env } from '../env';
 import { AppError } from '../middleware/errorHandler';
 import { extractJson } from '../utils/safeJson';
 
+// Límite de llamadas SIMULTÁNEAS al proveedor de IA. Sin esto, una ráfaga de
+// subidas de CV o de postulaciones dispara cientos de requests en paralelo y
+// Moonshot responde 429 en masa. El semáforo hace cola: nadie se rechaza, se
+// espera. ponytail: semáforo en proceso; con varias instancias el límite es por
+// instancia (suficiente hasta tener un worker/cola central).
+const AI_MAX_CONCURRENCY = parseInt(process.env.AI_MAX_CONCURRENCY || '4');
+let aiActive = 0;
+const aiWaiters: Array<() => void> = [];
+
+function acquireAiSlot(): Promise<void> {
+  if (aiActive < AI_MAX_CONCURRENCY) {
+    aiActive++;
+    return Promise.resolve();
+  }
+  return new Promise<void>(resolve => aiWaiters.push(resolve));
+}
+
+function releaseAiSlot(): void {
+  const next = aiWaiters.shift();
+  if (next) next(); // le pasa el cupo directo: aiActive no baja
+  else aiActive--;
+}
+
+/** Corre `fn` respetando el tope de llamadas simultáneas a la IA. */
+export async function withAiSlot<T>(fn: () => Promise<T>): Promise<T> {
+  await acquireAiSlot();
+  try {
+    return await fn();
+  } finally {
+    releaseAiSlot();
+  }
+}
+
 export type AgentName = 'cv-analyzer' | 'postulation-matcher' | 'cv-adapter' | 'cv-verifier' | 'answer-writer' | 'offer-ranker' | 'postulation-orchestrator';
 
 export interface AgentInvocation {
@@ -152,11 +185,11 @@ export class AgentInvokerService {
       // Call Claude API
       logger.info(`Invoking agent: ${agentName}`, { userId, agentName });
 
-      const response = await this.postWithRetry({
+      const response = await withAiSlot(() => this.postWithRetry({
         model: config.model,
         max_tokens: config.maxTokens,
         messages: [{ role: 'user', content: prompt }],
-      });
+      }));
 
       // La respuesta trae una lista de bloques y no todos son texto: los
       // modelos actuales pueden anteponer otros tipos. Tomar content[0].text a
