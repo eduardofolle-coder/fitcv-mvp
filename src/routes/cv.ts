@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
+import { recomputeUserMatches } from '../services/matchCache.js';
 import { db } from '../db/client.js';
 import { EncryptionService } from '../services/encryption.js';
 import { ProfileAnalyzerService, type ProfileAnalysisResult } from '../services/profileAnalyzer.js';
@@ -130,6 +131,10 @@ router.post(
       JSON.stringify(certifications),
       contactInfo
     ]);
+
+    // El perfil cambió: recalcular su matching en background (no bloquea la
+    // respuesta). Al entrar a ofertas/diagnóstico ya estará caliente.
+    void recomputeUserMatches(req.user.id);
 
     res.json({
       success: true,

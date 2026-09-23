@@ -8,6 +8,7 @@ import { SEED_OFFERS } from '../db/seedData.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import rateLimit from 'express-rate-limit';
 import { loadMatchingProfile } from '../services/candidateProfile.js';
+import { getCachedMatch, recomputeUserMatches } from '../services/matchCache.js';
 import { isMatchTier, searchable } from '../services/offerMatching.js';
 import { countByTier, rankOffersForProfile } from '../services/profileOffers.js';
 import { runOfferAnalysis } from '../services/dailyAnalysis.js';
@@ -81,8 +82,38 @@ router.get(
         });
       }
 
-      const ranked = await rankOffersForProfile(profile, where, params);
       const tier = isMatchTier(req.query.tier) ? req.query.tier : null;
+
+      // Camino rápido: la vista por defecto (sin filtros de empresa/búsqueda/
+      // sueldo) se sirve de la caché precalculada en background — un SELECT, no
+      // los ~50s de puntuar todo en vivo.
+      if (where.length === 0) {
+        const cache = await getCachedMatch(req.user.id);
+        if (cache) {
+          const list = tier ? cache.ranked.filter(r => r.tier === tier) : cache.ranked;
+          const pageRanked = list.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+          const ids = pageRanked.map(r => r.offerId);
+          const rows = ids.length
+            ? (await db.query('SELECT * FROM offers WHERE id = ANY($1)', [ids])).rows
+            : [];
+          const byId = new Map(rows.map((o: any) => [o.id, o]));
+          return res.json({
+            success: true,
+            data: pageRanked.flatMap(r => {
+              const o = byId.get(r.offerId);
+              return o ? [{ ...o, requirements: safeJsonParse(o.requirements, []), match: { score: r.score, tier: r.tier, reasons: r.reasons } }] : [];
+            }),
+            profileTerms: profile.terms.slice(0, 8).map(t => t.display),
+            tierCounts: cache.tierCounts,
+            pagination: { page: pageNum, limit: limitNum, total: list.length, totalPages: Math.ceil(list.length / limitNum) },
+          });
+        }
+        // Sin caché todavía (perfil nuevo o recién cambiado): se calienta para la
+        // próxima y esta vez se responde en vivo, lento, una sola vez.
+        void recomputeUserMatches(req.user.id);
+      }
+
+      const ranked = await rankOffersForProfile(profile, where, params);
       const shown = tier ? ranked.filter(item => item.match.tier === tier) : ranked;
 
       const total = shown.length;

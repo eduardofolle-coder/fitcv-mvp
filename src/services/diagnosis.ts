@@ -11,8 +11,8 @@
  * diferencia importa y la redacción de la interfaz la respeta.
  */
 import { loadMatchingProfile } from './candidateProfile.js';
-import { isEntryLevel, offerTopics, profileCovers } from './offerMatching.js';
-import { countByTier, rankOffersForProfile, type TierCounts } from './profileOffers.js';
+import { isEntryLevel, offerTopics, profileCovers, type MatchingProfile } from './offerMatching.js';
+import { countByTier, rankOffersForProfile, type RankedOffer, type TierCounts } from './profileOffers.js';
 
 // Ofertas afines sobre las que se cuentan términos. Las más afines primero, así
 // que el diagnóstico habla del mercado al que el candidato apunta de verdad.
@@ -54,8 +54,15 @@ export interface Diagnosis {
 export async function buildDiagnosis(userId: string): Promise<Diagnosis | null> {
   const profile = await loadMatchingProfile(userId);
   if (!profile) return null;
-
   const scored = await rankOffersForProfile(profile, undefined, undefined, { all: true });
+  return buildDiagnosisFromScored(profile, scored);
+}
+
+/**
+ * La agregación (barata) separada del puntaje (caro). La caché de matching la
+ * reusa con un `scored` ya calculado para no volver a puntuar miles de ofertas.
+ */
+export function buildDiagnosisFromScored(profile: MatchingProfile, scored: RankedOffer[]): Diagnosis {
   const matched = scored.filter(item => item.match.recommended);
   const discarded = scored.filter(item => !item.match.recommended);
 

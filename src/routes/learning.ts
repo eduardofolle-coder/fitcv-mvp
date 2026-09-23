@@ -16,6 +16,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { buildDiagnosis } from '../services/diagnosis.js';
+import { getCachedMatch, recomputeUserMatches } from '../services/matchCache.js';
 import { logger } from '../services/logger.js';
 
 const router = Router();
@@ -30,8 +31,16 @@ router.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const diagnosis = await buildDiagnosis(userId);
 
+    // Camino rápido: diagnóstico precalculado en background. Si aún no existe,
+    // se calienta para la próxima y se calcula en vivo esta vez (lento, una sola).
+    const cached = await getCachedMatch(userId);
+    if (cached?.diagnosis) {
+      return res.json({ success: true, data: cached.diagnosis });
+    }
+    if (!cached) void recomputeUserMatches(userId);
+
+    const diagnosis = await buildDiagnosis(userId);
     if (!diagnosis) {
       return res.json({ success: true, data: null, reason: 'no-cv' });
     }

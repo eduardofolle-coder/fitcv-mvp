@@ -10,6 +10,7 @@
  */
 import { db } from '../db/client.js';
 import { logger } from './logger.js';
+import { recomputeAllUsers } from './matchCache.js';
 import {
   fetchGetOnBoardCategoryPage,
   GETONBRD_SOURCE,
@@ -438,6 +439,16 @@ export async function runSyncOnce(): Promise<void> {
     for (const report of await syncAllSources()) {
       logger.info('Offer sync finished', { ...report, errors: report.errors.slice(0, 5) });
     }
+
+    // Poda: una oferta vencida hace más de una semana ya no sirve y solo hace
+    // más lento cada matching. Sin esto la tabla crece para siempre.
+    const pruned = await db.query(
+      `DELETE FROM offers WHERE validThrough IS NOT NULL AND validThrough < CURRENT_TIMESTAMP - INTERVAL '7 days'`
+    );
+    if (pruned.rowCount) logger.info('Pruned expired offers', { removed: pruned.rowCount });
+
+    // Entraron/salieron ofertas: recalcular el matching de todos en background.
+    void recomputeAllUsers();
   } catch (err) {
     logger.error('Offer sync failed', { message: err instanceof Error ? err.message : String(err) });
   } finally {

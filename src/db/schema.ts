@@ -397,5 +397,30 @@ export async function initializeSchema(): Promise<void> {
     );
   `);
 
+  // Caché del matching por usuario. Puntuar 3.000+ ofertas por request tomaba
+  // ~50s y tumbaba el servidor; ahora el ranking y el diagnóstico se calculan en
+  // background y se guardan aquí, y las páginas solo hacen un SELECT por userId.
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS user_match_cache (
+      userId TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      ranked TEXT NOT NULL,      -- [{offerId, score, tier, reasons}] recomendadas, ordenadas
+      tierCounts TEXT NOT NULL,  -- {alto, medio, bajo}
+      diagnosis TEXT,            -- objeto Diagnosis serializado (o null si no aplica)
+      computedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Índice de trigramas para el filtro `searchText LIKE '%x%'` (comodín inicial,
+  // que un btree no puede usar). Solo Postgres; PGlite no trae pg_trgm, así que
+  // se intenta aparte y su fallo no rompe el arranque en desarrollo.
+  try {
+    await db.exec(`
+      CREATE EXTENSION IF NOT EXISTS pg_trgm;
+      CREATE INDEX IF NOT EXISTS idx_offers_searchtext_trgm ON offers USING gin (searchText gin_trgm_ops);
+    `);
+  } catch {
+    // PGlite u otro motor sin pg_trgm: el filtro cae a seq scan, tolerable en dev.
+  }
+
   console.log('✅ Database schema initialized');
 }
