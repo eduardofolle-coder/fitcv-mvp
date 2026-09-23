@@ -170,7 +170,7 @@ export class AgentInvokerService {
     try {
       // Validate API key
       if (!this.apiKey) {
-        throw new Error('CLAUDE_API_KEY not configured');
+        throw new Error('AI service is not configured (CLAUDE_API_KEY missing).');
       }
 
       // Get agent config
