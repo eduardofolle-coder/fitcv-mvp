@@ -60,6 +60,11 @@ async function createDriver(): Promise<Driver> {
       max: 10,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
+      // Una query que se cuelga no debe retener su conexión para siempre y
+      // agotar el pool (pasó bajo carga): a los 30s Postgres la aborta y libera
+      // la conexión. El recompute pesado consulta rápido; lo lento es la CPU
+      // en Node, ya fuera de la conexión.
+      statement_timeout: 30_000,
     });
 
     // Una conexión que muere en el pool no puede tumbar el proceso.

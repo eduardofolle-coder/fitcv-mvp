@@ -410,17 +410,12 @@ export async function initializeSchema(): Promise<void> {
     );
   `);
 
-  // Índice de trigramas para el filtro `searchText LIKE '%x%'` (comodín inicial,
-  // que un btree no puede usar). Solo Postgres; PGlite no trae pg_trgm, así que
-  // se intenta aparte y su fallo no rompe el arranque en desarrollo.
-  try {
-    await db.exec(`
-      CREATE EXTENSION IF NOT EXISTS pg_trgm;
-      CREATE INDEX IF NOT EXISTS idx_offers_searchtext_trgm ON offers USING gin (searchText gin_trgm_ops);
-    `);
-  } catch {
-    // PGlite u otro motor sin pg_trgm: el filtro cae a seq scan, tolerable en dev.
-  }
+  // NO crear el índice GIN de trigramas aquí: sobre decenas de miles de ofertas
+  // tarda minutos y cuelga el arranque (el puerto no abre y Render marca el
+  // deploy como fallido). La caché de matching sirve las lecturas por id, no
+  // necesita ese índice; solo aceleraría el filtro LIKE del recompute (que corre
+  // en background). Si hace falta, se crea una vez con CREATE INDEX CONCURRENTLY
+  // fuera del arranque.
 
   console.log('✅ Database schema initialized');
 }
