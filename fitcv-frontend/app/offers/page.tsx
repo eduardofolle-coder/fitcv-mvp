@@ -4,7 +4,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api-client';
-import { MATCH_TIERS, MATCH_TIER_LABELS, MATCH_TIER_STYLES, type MatchTier, type TierCounts } from '@/lib/matchTier';
+import { MATCH_TIERS, MATCH_TIER_LABELS, type MatchTier, type TierCounts } from '@/lib/matchTier';
+import AppShell from '@/app/components/AppShell';
 
 interface Offer {
   id: string;
@@ -136,9 +137,15 @@ export default function OffersPage() {
   }, [initializing, user, mode, page, search, source, tier]);
 
   if (initializing) {
-    return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
+    return <div className="aw-loading">Cargando...</div>;
   }
   if (!user) return null;
+
+  const TIER_DARK: Record<string, { bg: string; color: string }> = {
+    alto: { bg: 'rgba(52,211,153,.12)', color: '#6EE7B7' },
+    medio: { bg: 'rgba(225,165,38,.12)', color: '#E1A526' },
+    bajo: { bg: 'rgba(169,182,200,.12)', color: '#A9B6C8' },
+  };
 
   const changeMode = (next: Mode) => {
     setMode(next);
@@ -178,236 +185,178 @@ export default function OffersPage() {
   const totalOffers = bySource.reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-5xl mx-auto px-4">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline mb-2">
-              ← Tablero
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">Ofertas</h1>
-            <p className="text-gray-600">
-              {mode === 'profile'
-                ? 'Ofertas vigentes afines a tu CV, de la más afín a la menos.'
-                : `${totalOffers.toLocaleString('es-CL')} ofertas vigentes de portales chilenos.`}
-            </p>
-          </div>
-          <button
-            onClick={() => router.push('/postulations')}
-            className="shrink-0 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50"
-          >
-            Mis postulaciones
-          </button>
-        </div>
-
-        <div className="flex gap-1 mb-4 border-b border-gray-200">
-          {(
-            [
-              ['profile', 'Para tu perfil'],
-              ['all', 'Todas las ofertas'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => changeMode(value)}
-              className={`px-4 py-2 -mb-px text-sm font-medium border-b-2 ${
-                mode === value ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {mode === 'profile' && profileTerms.length > 0 && (
-          <p className="text-sm text-gray-700 mb-4">
-            Según tu CV buscamos: <strong>{profileTerms.join(', ')}</strong>.
+    <AppShell>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, marginBottom:20 }}>
+        <div>
+          <h1 className="aw-h1">Ofertas</h1>
+          <p className="aw-muted">
+            {mode === 'profile'
+              ? 'Ofertas vigentes afines a tu CV, de la más afín a la menos.'
+              : `${totalOffers.toLocaleString('es-CL')} ofertas vigentes de portales chilenos.`}
           </p>
-        )}
-
-        {mode === 'profile' && !needsProfile && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {(['', ...MATCH_TIERS] as const).map(value => {
-              const count = value ? tierCounts[value] : tierCounts.alto + tierCounts.medio + tierCounts.bajo;
-              const active = tier === value;
-              return (
-                <button
-                  key={value || 'todos'}
-                  onClick={() => {
-                    setTier(value);
-                    setPage(1);
-                  }}
-                  className={`px-3 py-1.5 rounded-full text-sm font-semibold transition border ${
-                    active
-                      ? value
-                        ? `${MATCH_TIER_STYLES[value]} border-current`
-                        : 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {value ? MATCH_TIER_LABELS[value] : 'Todos los calces'} · {count.toLocaleString('es-CL')}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <form onSubmit={submitSearch} className="flex gap-2 mb-4">
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder={mode === 'profile' ? 'Afinar dentro de tus ofertas (ej: jefe, Santiago, SAP)' : 'Cargo, empresa o palabra clave'}
-            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-          />
-          <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
-            Buscar
-          </button>
-        </form>
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          {[{ source: '', count: totalOffers }, ...bySource].map(item => (
-            <button
-              key={item.source || 'todas'}
-              onClick={() => {
-                setSource(item.source);
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                source === item.source
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              {item.source ? sourceLabel(item.source) : 'Todos los portales'}
-              {mode === 'all' ? ` · ${item.count.toLocaleString('es-CL')}` : ''}
-            </button>
-          ))}
         </div>
+        <button onClick={() => router.push('/postulations')} className="aw-btn-outline aw-btn-sm" style={{ flexShrink:0 }}>
+          Mis postulaciones
+        </button>
+      </div>
 
-        <p className="text-xs text-gray-500 mb-6">
-          {EXTENSION_ONLY.join(', ')} bloquean la lectura automática: agrega sus ofertas con el botón &quot;Agregar esta
-          oferta a la cola&quot; de la extensión mientras navegas.
+      <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:'1px solid rgba(255,255,255,.08)' }}>
+        {([['profile','Para tu perfil'],['all','Todas las ofertas']] as const).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => changeMode(value)}
+            style={{
+              padding:'8px 16px', marginBottom:-1, fontSize:14, fontWeight:500, border:'none', cursor:'pointer',
+              background:'transparent', borderBottom: mode === value ? '2px solid #E1A526' : '2px solid transparent',
+              color: mode === value ? '#E1A526' : '#A9B6C8',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'profile' && profileTerms.length > 0 && (
+        <p className="aw-muted" style={{ marginBottom:12 }}>
+          Según tu CV buscamos: <strong style={{ color:'#F4F1E9' }}>{profileTerms.join(', ')}</strong>.
         </p>
+      )}
 
-        {error && (
-          <div className="rounded-md bg-red-50 p-4 mb-4">
-            <p className="text-sm font-medium text-red-800">{error}</p>
-          </div>
-        )}
+      {mode === 'profile' && !needsProfile && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:12 }}>
+          {(['', ...MATCH_TIERS] as const).map(value => {
+            const count = value ? tierCounts[value] : tierCounts.alto + tierCounts.medio + tierCounts.bajo;
+            const active = tier === value;
+            const d = value ? TIER_DARK[value] : null;
+            return (
+              <button
+                key={value || 'todos'}
+                onClick={() => { setTier(value); setPage(1); }}
+                className={`aw-filter${active ? ' aw-filter-active' : ''}`}
+                style={active && d ? { background:d.bg, color:d.color, borderColor:d.color+'40' } : {}}
+              >
+                {value ? MATCH_TIER_LABELS[value] : 'Todos los calces'} · {count.toLocaleString('es-CL')}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-        {loading ? (
-          <div className="text-center py-12 text-gray-600">Cargando ofertas...</div>
-        ) : needsProfile ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-700 mb-4">Sube tu CV para que FITCV te muestre las ofertas de tu perfil.</p>
-            <button
-              onClick={() => router.push('/cv')}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
-            >
-              Subir mi CV
-            </button>
-          </div>
-        ) : offers.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow text-gray-600 px-6">
-            {mode === 'profile' ? (
-              <>
-                <p className="mb-2">Todavía no hay ofertas vigentes afines a tu perfil con esos filtros.</p>
-                <p className="text-sm text-gray-500">
-                  FITCV revisa los portales cada hora y lee primero las ofertas de tus áreas. Mientras, puedes agregar
-                  ofertas de LinkedIn, Computrabajo o Laborum con la extensión.
-                </p>
-              </>
-            ) : (
-              <p>No hay ofertas vigentes con esos filtros.</p>
-            )}
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {offers.map(offer => {
-              const postulationId = applied[offer.id];
-              return (
-                <li key={offer.id} className="bg-white rounded-lg shadow p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="font-semibold text-gray-900">{offer.title}</h2>
-                      <p className="text-sm text-gray-600">
-                        {offer.company}
-                        {offer.location ? ` · ${offer.location}` : ''}
-                      </p>
-                      {offer.match && (
-                        <p className="text-xs text-gray-600 mt-2">
-                          <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${MATCH_TIER_STYLES[offer.match.tier]}`}>
+      <form onSubmit={submitSearch} style={{ display:'flex', gap:8, marginBottom:12 }}>
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder={mode === 'profile' ? 'Afinar dentro de tus ofertas (ej: jefe, Santiago, SAP)' : 'Cargo, empresa o palabra clave'}
+          className="aw-input"
+          style={{ flex:1 }}
+        />
+        <button type="submit" className="aw-btn-gold aw-btn-sm">Buscar</button>
+      </form>
+
+      <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
+        {[{ source: '', count: totalOffers }, ...bySource].map(item => (
+          <button
+            key={item.source || 'todas'}
+            onClick={() => { setSource(item.source); setPage(1); }}
+            className={`aw-filter${source === item.source ? ' aw-filter-active' : ''}`}
+          >
+            {item.source ? sourceLabel(item.source) : 'Todos los portales'}
+            {mode === 'all' ? ` · ${item.count.toLocaleString('es-CL')}` : ''}
+          </button>
+        ))}
+      </div>
+
+      <p className="aw-dim" style={{ marginBottom:20 }}>
+        {EXTENSION_ONLY.join(', ')} bloquean la lectura automática: agrega sus ofertas con la extensión.
+      </p>
+
+      {error && <div className="aw-error" style={{ marginBottom:12 }}>{error}</div>}
+
+      {loading ? (
+        <div style={{ textAlign:'center', padding:'48px 0', color:'#A9B6C8' }}>Cargando ofertas...</div>
+      ) : needsProfile ? (
+        <div className="aw-card" style={{ textAlign:'center', padding:'48px 24px' }}>
+          <p className="aw-muted" style={{ marginBottom:16 }}>Sube tu CV para que FITCV te muestre las ofertas de tu perfil.</p>
+          <button onClick={() => router.push('/cv')} className="aw-btn-gold">Subir mi CV</button>
+        </div>
+      ) : offers.length === 0 ? (
+        <div className="aw-card" style={{ textAlign:'center', padding:'48px 24px' }}>
+          {mode === 'profile' ? (
+            <>
+              <p className="aw-muted" style={{ marginBottom:8 }}>Todavía no hay ofertas vigentes afines a tu perfil con esos filtros.</p>
+              <p className="aw-dim">FITCV revisa los portales cada hora. Mientras, puedes agregar ofertas de LinkedIn, Computrabajo o Laborum con la extensión.</p>
+            </>
+          ) : (
+            <p className="aw-muted">No hay ofertas vigentes con esos filtros.</p>
+          )}
+        </div>
+      ) : (
+        <ul style={{ listStyle:'none', padding:0, margin:0, display:'flex', flexDirection:'column', gap:8 }}>
+          {offers.map(offer => {
+            const postulationId = applied[offer.id];
+            return (
+              <li key={offer.id} className="aw-card aw-card-sm">
+                <div style={{ display:'flex', alignItems:'flex-start', gap:16 }}>
+                  <div style={{ minWidth:0, flex:1 }}>
+                    <p style={{ fontWeight:600, color:'#F4F1E9' }}>{offer.title}</p>
+                    <p className="aw-muted">{offer.company}{offer.location ? ` · ${offer.location}` : ''}</p>
+                    {offer.match && (() => {
+                      const d = TIER_DARK[offer.match.tier];
+                      return (
+                        <p style={{ marginTop:6, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                          <span className="aw-pill" style={{ background:d.bg, color:d.color }}>
                             {MATCH_TIER_LABELS[offer.match.tier]} · {offer.match.score}%
                           </span>
-                          {offer.match.reasons.length > 0 && <span className="ml-2">Coincide con: {offer.match.reasons.join(', ')}</span>}
+                          {offer.match.reasons.length > 0 && <span className="aw-dim">Coincide con: {offer.match.reasons.join(', ')}</span>}
                         </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-gray-500">
-                        <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{sourceLabel(offer.source)}</span>
-                        {offer.publishedAt && <span>Publicada el {new Date(offer.publishedAt).toLocaleDateString()}</span>}
-                        {offer.validThrough && <span>· vence el {new Date(offer.validThrough).toLocaleDateString()}</span>}
-                        {typeof offer.salaryMin === 'number' && (
-                          <span>
-                            · {money(offer.salaryMin, offer.salaryCurrency)}
-                            {typeof offer.salaryMax === 'number' && offer.salaryMax !== offer.salaryMin
-                              ? ` – ${money(offer.salaryMax, offer.salaryCurrency)}`
-                              : ''}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      {postulationId ? (
-                        <button
-                          onClick={() => router.push(`/postulations/${postulationId}`)}
-                          className="px-3 py-1.5 text-sm font-medium text-green-700 border border-green-600 rounded hover:bg-green-50"
-                        >
-                          Ya postulada · ver
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => applyWithFitcv(offer)}
-                          disabled={busyOffer !== null}
-                          className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {busyOffer === offer.id ? 'Postulando...' : 'Postular con FITCV'}
-                        </button>
-                      )}
-                      {offer.url && (
-                        <a href={offer.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
-                          Ver en el portal
-                        </a>
+                      );
+                    })()}
+                    <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, marginTop:6 }}>
+                      <span className="aw-pill aw-pill-gray">{sourceLabel(offer.source)}</span>
+                      {offer.publishedAt && <span className="aw-dim">Publicada el {new Date(offer.publishedAt).toLocaleDateString()}</span>}
+                      {offer.validThrough && <span className="aw-dim">· vence el {new Date(offer.validThrough).toLocaleDateString()}</span>}
+                      {typeof offer.salaryMin === 'number' && (
+                        <span className="aw-dim">
+                          · {money(offer.salaryMin, offer.salaryCurrency)}
+                          {typeof offer.salaryMax === 'number' && offer.salaryMax !== offer.salaryMin ? ` – ${money(offer.salaryMax, offer.salaryCurrency)}` : ''}
+                        </span>
                       )}
                     </div>
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, flexShrink:0 }}>
+                    {postulationId ? (
+                      <button onClick={() => router.push(`/postulations/${postulationId}`)} className="aw-btn-outline aw-btn-sm" style={{ borderColor:'rgba(110,231,183,.4)', color:'#6EE7B7' }}>
+                        Ya postulada · ver
+                      </button>
+                    ) : (
+                      <button onClick={() => applyWithFitcv(offer)} disabled={busyOffer !== null} className="aw-btn-gold aw-btn-sm">
+                        {busyOffer === offer.id ? 'Postulando...' : 'Postular con FITCV'}
+                      </button>
+                    )}
+                    {offer.url && (
+                      <a href={offer.url} target="_blank" rel="noopener noreferrer" className="aw-dim" style={{ fontSize:12 }}>
+                        Ver en el portal →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-        {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white disabled:opacity-50"
-            >
-              Anterior
-            </button>
-            <span className="text-sm text-gray-600">
-              Página {pagination.page} de {pagination.totalPages} · {pagination.total.toLocaleString('es-CL')} ofertas
-            </span>
-            <button
-              onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-              disabled={page >= pagination.totalPages}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white disabled:opacity-50"
-            >
-              Siguiente
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+      {pagination.totalPages > 1 && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:20 }}>
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="aw-btn-outline aw-btn-sm">
+            Anterior
+          </button>
+          <span className="aw-dim">Página {pagination.page} de {pagination.totalPages} · {pagination.total.toLocaleString('es-CL')} ofertas</span>
+          <button onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))} disabled={page >= pagination.totalPages} className="aw-btn-outline aw-btn-sm">
+            Siguiente
+          </button>
+        </div>
+      )}
+    </AppShell>
   );
 }

@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
+import AppShell from '@/app/components/AppShell';
 
 const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown'];
 
@@ -57,7 +58,7 @@ export default function CVUploadPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return <div className="aw-loading">Cargando...</div>;
   }
 
   if (!user) {
@@ -69,11 +70,11 @@ export default function CVUploadPage() {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       if (!isSupported(selectedFile)) {
-        setError('Please select a PDF or plain text (.txt, .md) file');
+        setError('Selecciona un archivo PDF o de texto plano (.txt, .md)');
         return;
       }
       if (selectedFile.size > 5 * 1024 * 1024) {
-        setError('File size must be less than 5MB');
+        setError('El archivo debe pesar menos de 5MB');
         return;
       }
       setFile(selectedFile);
@@ -83,10 +84,7 @@ export default function CVUploadPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!file) {
-      setError('Please select a file');
-      return;
-    }
+    if (!file) { setError('Selecciona un archivo'); return; }
 
     setLoading(true);
     setError(null);
@@ -96,57 +94,43 @@ export default function CVUploadPage() {
       const cvContent = (await extractText(file)).trim();
 
       if (cvContent.length < 50) {
-        setError(
-          'Could not read enough text from that file. If it is a scanned PDF (an image), export a text-based PDF or upload a .txt version.'
-        );
+        setError('No se pudo leer el texto del archivo. Si es un PDF escaneado (imagen), exporta uno con texto o sube una versión .txt.');
         return;
       }
 
-      setSuccess(`Analyzing "${file.name}" with AI...`);
+      setSuccess(`Analizando "${file.name}" con IA...`);
 
-      const response = await apiClient.post<{ profileId: string }>('/cv/upload', {
-        cvContent,
-      });
+      const response = await apiClient.post<{ profileId: string }>('/cv/upload', { cvContent });
 
       if (!response.success) {
         setSuccess(null);
-        setError(response.error || 'Failed to upload CV');
+        setError(response.error || 'No se pudo subir el CV');
         return;
       }
 
-      setSuccess('CV analyzed successfully. Redirecting...');
-      // Con el CV cargado, se le pide elegir la hora del análisis diario si aún no la tiene.
+      setSuccess('CV analizado exitosamente. Redirigiendo...');
       const prefs = await apiClient.get<{ dailyAnalysisHour: number | null }>('/applications/preferences');
       router.push(prefs.success && prefs.data?.dailyAnalysisHour === null ? '/preferences?primera=1' : '/dashboard');
     } catch (err) {
       setSuccess(null);
-      setError(err instanceof Error ? err.message : 'Failed to upload CV');
+      setError(err instanceof Error ? err.message : 'No se pudo subir el CV');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Upload Your CV</h1>
+    <AppShell>
+      <div style={{ maxWidth:480, margin:'0 auto' }}>
+        <h1 className="aw-h1" style={{ marginBottom:20 }}>Subir mi CV</h1>
 
-          {error && (
-            <div className="rounded-md bg-red-50 p-4 mb-6">
-              <p className="text-sm font-medium text-red-800">{error}</p>
-            </div>
-          )}
+        {error && <div className="aw-error" style={{ marginBottom:16 }}>{error}</div>}
+        {success && <div className="aw-success" style={{ marginBottom:16 }}>{success}</div>}
 
-          {success && (
-            <div className="rounded-md bg-green-50 p-4 mb-6">
-              <p className="text-sm font-medium text-green-800">{success}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="aw-card">
+          <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:16 }}>
             <div
-              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition"
+              className="aw-dropzone"
               onClick={() => fileInputRef.current?.click()}
             >
               <input
@@ -154,66 +138,46 @@ export default function CVUploadPage() {
                 type="file"
                 accept=".pdf,.txt,.md,.markdown"
                 onChange={handleFileChange}
-                className="hidden"
+                style={{ display:'none' }}
               />
-
-              <svg
-                className="mx-auto h-12 w-12 text-gray-400"
-                stroke="currentColor"
-                fill="none"
-                viewBox="0 0 48 48"
-              >
-                <path
-                  d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-2-12l6 6m-6-6v12m0 0L20 28m8-8l-8 8"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+              <svg style={{ width:40, height:40, color:'rgba(225,165,38,.6)', margin:'0 auto 12px' }} stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                <path d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-2-12l6 6m-6-6v12m0 0L20 28m8-8l-8 8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-
               {file ? (
-                <div>
-                  <p className="mt-2 font-medium text-gray-900">{file.name}</p>
-                  <p className="text-sm text-gray-600">{(file.size / 1024).toFixed(2)} KB</p>
-                  <p className="text-xs text-gray-500 mt-2">Click to change file</p>
-                </div>
+                <>
+                  <p style={{ fontWeight:600, color:'#F4F1E9' }}>{file.name}</p>
+                  <p className="aw-dim">{(file.size / 1024).toFixed(2)} KB</p>
+                  <p className="aw-dim" style={{ marginTop:4 }}>Click para cambiar archivo</p>
+                </>
               ) : (
-                <div>
-                  <p className="mt-2 font-medium text-gray-900">Click to upload your CV</p>
-                  <p className="text-sm text-gray-600">or drag and drop</p>
-                  <p className="text-xs text-gray-500 mt-2">PDF or .txt up to 5MB</p>
-                </div>
+                <>
+                  <p style={{ fontWeight:600, color:'#F4F1E9' }}>Click para subir tu CV</p>
+                  <p className="aw-muted">o arrastra y suelta</p>
+                  <p className="aw-dim" style={{ marginTop:4 }}>PDF o .txt, hasta 5MB</p>
+                </>
               )}
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || !file}
-              className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {loading ? 'Uploading...' : 'Upload & Analyze'}
+            <button type="submit" disabled={loading || !file} className="aw-btn-gold" style={{ width:'100%', justifyContent:'center' }}>
+              {loading ? 'Subiendo...' : 'Subir y analizar'}
             </button>
 
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="w-full flex justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-            >
-              Back to Dashboard
+            <button type="button" onClick={() => router.push('/dashboard')} className="aw-btn-outline" style={{ width:'100%', justifyContent:'center' }}>
+              Volver al tablero
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">What happens next:</h3>
-            <ol className="text-sm text-gray-600 space-y-2">
-              <li>1. AI extracts your skills and experience</li>
-              <li>2. Your profile is built automatically</li>
-              <li>3. See personalized job recommendations</li>
-              <li>4. Adapt CV for each opportunity</li>
+          <div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(255,255,255,.08)' }}>
+            <p style={{ fontSize:13, fontWeight:600, color:'#A9B6C8', marginBottom:8 }}>¿Qué pasa después?</p>
+            <ol style={{ fontSize:13, color:'#6C7686', display:'flex', flexDirection:'column', gap:4, paddingLeft:16 }}>
+              <li>1. La IA extrae tus habilidades y experiencia</li>
+              <li>2. Se construye tu perfil automáticamente</li>
+              <li>3. Ves las ofertas más afines a tu CV</li>
+              <li>4. Adaptas el CV a cada oportunidad</li>
             </ol>
           </div>
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

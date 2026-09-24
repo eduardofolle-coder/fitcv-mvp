@@ -328,6 +328,7 @@ export async function initializeSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS apply_preferences (
       userId TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       autoSendLinkedIn BOOLEAN NOT NULL DEFAULT FALSE,
+      allowDataAnalysis BOOLEAN NOT NULL DEFAULT FALSE,
       updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -361,6 +362,7 @@ export async function initializeSchema(): Promise<void> {
   await db.exec(`
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS dailyAnalysisHour INTEGER;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS lastAnalysisDate TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS allowDataAnalysis BOOLEAN NOT NULL DEFAULT FALSE;
 
     CREATE TABLE IF NOT EXISTS offer_digests (
       id TEXT PRIMARY KEY,

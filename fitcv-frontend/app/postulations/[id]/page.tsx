@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api-client';
 import { ApplyPanel } from './ApplyPanel';
+import AppShell from '@/app/components/AppShell';
 
 interface PostulationDetail {
   id: string;
@@ -44,17 +45,17 @@ interface Resolution {
   suggestion?: string;
 }
 
-const STATUS_STYLE: Record<ResolutionStatus, { label: string; className: string }> = {
-  filled: { label: 'Se responde sola', className: 'bg-green-100 text-green-800' },
-  'needs-approval': { label: 'Borrador: revísalo', className: 'bg-yellow-100 text-yellow-800' },
-  'needs-user': { label: 'Te toca a ti', className: 'bg-gray-100 text-gray-800' },
-  'use-adapted-cv': { label: 'Sube el CV adaptado', className: 'bg-indigo-100 text-indigo-800' },
-  'needs-generation': { label: 'Pendiente', className: 'bg-gray-100 text-gray-800' },
-  'leave-blank': { label: 'Se deja sin marcar', className: 'bg-gray-100 text-gray-600' },
+const STATUS_STYLE: Record<ResolutionStatus, { label: string; bg: string; color: string }> = {
+  filled:            { label: 'Se responde sola',    bg: 'rgba(52,211,153,.18)',  color: '#6EE7B7' },
+  'needs-approval':  { label: 'Borrador: revísalo',  bg: 'rgba(225,165,38,.18)',  color: '#E1A526' },
+  'needs-user':      { label: 'Te toca a ti',        bg: 'rgba(169,182,200,.15)', color: '#A9B6C8' },
+  'use-adapted-cv':  { label: 'Sube el CV adaptado', bg: 'rgba(99,179,237,.18)',  color: '#90CDF4' },
+  'needs-generation':{ label: 'Pendiente',           bg: 'rgba(169,182,200,.15)', color: '#A9B6C8' },
+  'leave-blank':     { label: 'Se deja sin marcar',  bg: 'rgba(108,118,134,.15)', color: '#6C7686' },
 };
 
-const scoreColor = (score: number) =>
-  score >= 75 ? 'text-green-600' : score >= 50 ? 'text-yellow-600' : 'text-red-600';
+const scoreColor = (score: number): string =>
+  score >= 75 ? '#6EE7B7' : score >= 50 ? '#E1A526' : '#FCA5A5';
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -192,159 +193,112 @@ export default function PostulationDetailPage() {
   };
 
   if (initializing || (user && loading)) {
-    return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
+    return <div className="aw-loading">Cargando...</div>;
   }
 
   if (!user) return null;
 
   if (!detail) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="max-w-2xl mx-auto bg-white rounded-lg shadow p-6 text-center">
-          <p className="text-red-700 mb-4">{loadError || 'Postulación no encontrada'}</p>
-          <button onClick={() => router.push('/postulations')} className="text-blue-600 hover:underline">
+      <AppShell>
+        <div className="aw-card" style={{ maxWidth:640, margin:'0 auto', textAlign:'center' }}>
+          <p className="aw-error" style={{ marginBottom:16 }}>{loadError || 'Postulación no encontrada'}</p>
+          <button onClick={() => router.push('/postulations')} className="aw-btn-outline">
             Volver a mis postulaciones
           </button>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   const keywordMatches = cv?.narrative?.keywordMatches ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 space-y-6">
+    <AppShell>
+      <div style={{ maxWidth:900, margin:'0 auto', display:'flex', flexDirection:'column', gap:20 }}>
         <div>
-          <button onClick={() => router.push('/postulations')} className="text-sm text-blue-600 hover:underline mb-3">
+          <button onClick={() => router.push('/postulations')} className="aw-btn-outline aw-btn-sm" style={{ marginBottom:12 }}>
             ← Mis postulaciones
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">{detail.title}</h1>
-          <p className="text-gray-600">
-            {detail.company}
-            {detail.level ? ` · ${detail.level}` : ''} · {detail.estado}
+          <h1 className="aw-h1">{detail.title}</h1>
+          <p className="aw-muted">
+            {detail.company}{detail.level ? ` · ${detail.level}` : ''} · {detail.estado}
           </p>
         </div>
 
-        {loadError && (
-          <div className="rounded-md bg-red-50 p-4">
-            <p className="text-sm font-medium text-red-800">{loadError}</p>
-          </div>
-        )}
+        {loadError && <div className="aw-error">{loadError}</div>}
 
         {/* CV adaptado */}
-        <section className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-start justify-between gap-4 mb-2">
+        <section className="aw-card">
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, marginBottom:12 }}>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">CV adaptado a esta oferta</h2>
-              <p className="text-sm text-gray-600">
+              <h2 className="aw-h2" style={{ margin:0 }}>CV adaptado a esta oferta</h2>
+              <p className="aw-muted" style={{ marginTop:4 }}>
                 Empresas, cargos, fechas y estudios se copian tal cual de tu CV. Solo el titular, el resumen y la
                 redacción de tus logros se orientan a la oferta, y se verifica que no digan más de lo que dice tu CV.
               </p>
             </div>
-            <button
-              onClick={generate}
-              disabled={generating}
-              className="shrink-0 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-            >
+            <button onClick={generate} disabled={generating} className="aw-btn-gold aw-btn-sm" style={{ flexShrink:0 }}>
               {generating ? 'Adaptando...' : cv ? 'Volver a adaptar' : 'Adaptar mi CV'}
             </button>
           </div>
 
-          {generating && (
-            <div className="rounded-md bg-blue-50 p-4 mt-4">
-              <p className="text-sm text-blue-800">
-                Adaptando tu CV y verificando cada afirmación contra el original. Suele tardar entre 30 y 60 segundos.
-              </p>
-            </div>
-          )}
-
+          {generating && <div className="aw-info" style={{ marginTop:12 }}>Adaptando tu CV y verificando cada afirmación contra el original. Suele tardar entre 30 y 60 segundos.</div>}
           {needsReupload && (
-            <div className="rounded-md bg-yellow-50 p-4 mt-4">
-              <p className="text-sm text-yellow-800 mb-2">
-                Tu CV se analizó con una versión anterior de FITCV que no guardaba tu historial laboral por separado.
-                Súbelo de nuevo para poder adaptarlo.
-              </p>
-              <button onClick={() => router.push('/cv')} className="text-sm font-medium text-yellow-900 underline">
-                Subir mi CV
-              </button>
+            <div className="aw-warning" style={{ marginTop:12 }}>
+              Tu CV se analizó con una versión anterior de FITCV que no guardaba tu historial laboral por separado.
+              Súbelo de nuevo para poder adaptarlo.{' '}
+              <button onClick={() => router.push('/cv')} style={{ color:'#E1A526', background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0, textDecoration:'underline' }}>Subir mi CV</button>
             </div>
           )}
-
-          {generateError && (
-            <div className="rounded-md bg-red-50 p-4 mt-4">
-              <p className="text-sm font-medium text-red-800">{generateError}</p>
-            </div>
-          )}
-
-          {!cv && !generating && !needsReupload && (
-            <p className="text-gray-500 mt-4">Todavía no has adaptado tu CV para esta oferta.</p>
-          )}
+          {generateError && <div className="aw-error" style={{ marginTop:12 }}>{generateError}</div>}
+          {!cv && !generating && !needsReupload && <p className="aw-muted" style={{ marginTop:12 }}>Todavía no has adaptado tu CV para esta oferta.</p>}
 
           {cv && (
-            <div className="mt-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <p className="text-sm text-gray-600">Puntaje ATS estimado</p>
-                  <p className={`text-3xl font-bold ${cv.atsScore === null ? 'text-gray-400' : scoreColor(cv.atsScore)}`}>
+            <div style={{ marginTop:20, display:'flex', flexDirection:'column', gap:16 }}>
+              <div className="aw-grid-3">
+                <div className="aw-stat">
+                  <p className="aw-dim">Puntaje ATS estimado</p>
+                  <p style={{ fontSize:32, fontWeight:700, color: cv.atsScore === null ? '#6C7686' : scoreColor(cv.atsScore) }}>
                     {cv.atsScore === null ? '—' : cv.atsScore}
                   </p>
                 </div>
-                <div className="rounded-lg border border-gray-200 p-4 md:col-span-2">
-                  <p className="text-sm text-gray-600 mb-2">Palabras clave de la oferta que ya están en tu CV</p>
+                <div className="aw-stat" style={{ gridColumn:'span 2' }}>
+                  <p className="aw-dim" style={{ marginBottom:8 }}>Palabras clave de la oferta ya en tu CV</p>
                   {keywordMatches.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {keywordMatches.map(k => (
-                        <span key={k} className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-full text-sm">
-                          {k}
-                        </span>
-                      ))}
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                      {keywordMatches.map(k => <span key={k} className="aw-pill aw-pill-blue">{k}</span>)}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">Ninguna detectada.</p>
+                    <p className="aw-dim">Ninguna detectada.</p>
                   )}
                 </div>
               </div>
 
               {cv.narrative?.rationale && (
-                <div className="rounded-lg bg-indigo-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700 mb-1">
-                    Consejo para ti (no aparece en el CV)
-                  </p>
-                  <p className="text-sm text-indigo-900">{cv.narrative.rationale}</p>
+                <div className="aw-info">
+                  <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4 }}>Consejo para ti (no aparece en el CV)</p>
+                  <p style={{ fontSize:14 }}>{cv.narrative.rationale}</p>
                 </div>
               )}
 
               {cv.changes.length > 0 && (
-                <div className="rounded-lg bg-yellow-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-yellow-800 mb-2">
-                    Lo que FITCV corrigió para no exagerar
-                  </p>
-                  <ul className="list-disc pl-5 space-y-1">
-                    {cv.changes.map((change, i) => (
-                      <li key={i} className="text-sm text-yellow-900">
-                        {change}
-                      </li>
-                    ))}
+                <div className="aw-warning">
+                  <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:6 }}>Lo que FITCV corrigió para no exagerar</p>
+                  <ul style={{ paddingLeft:16, display:'flex', flexDirection:'column', gap:4 }}>
+                    {cv.changes.map((change, i) => <li key={i} style={{ fontSize:14 }}>{change}</li>)}
                   </ul>
                 </div>
               )}
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold text-gray-700">
-                    Tu CV{cv.narrative?.language === 'en' ? ' (en inglés)' : ''}
-                  </p>
-                  <button
-                    onClick={() => flashCopied('cv', cv.content)}
-                    className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50"
-                  >
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                  <p style={{ fontWeight:600, color:'#A9B6C8', fontSize:13 }}>Tu CV{cv.narrative?.language === 'en' ? ' (en inglés)' : ''}</p>
+                  <button onClick={() => flashCopied('cv', cv.content)} className="aw-btn-outline aw-btn-sm">
                     {copied === 'cv' ? 'Copiado' : 'Copiar texto'}
                   </button>
                 </div>
-                <pre className="whitespace-pre-wrap break-words font-sans text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-5 overflow-x-auto">
-                  {cv.content}
-                </pre>
+                <pre className="aw-pre">{cv.content}</pre>
               </div>
             </div>
           )}
@@ -353,9 +307,9 @@ export default function PostulationDetailPage() {
         <ApplyPanel postulationId={detail.id} hasCv={Boolean(cv)} />
 
         {/* Preguntas del formulario */}
-        <section className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Preguntas del formulario</h2>
-          <p className="text-sm text-gray-600 mb-4">
+        <section className="aw-card">
+          <h2 className="aw-h2">Preguntas del formulario</h2>
+          <p className="aw-muted" style={{ marginBottom:14 }}>
             Pega las preguntas de la postulación, una por línea. FITCV responde solo lo que tu CV respalda; las
             decisiones personales, como la renta, las decides tú.
           </p>
@@ -365,59 +319,48 @@ export default function PostulationDetailPage() {
             onChange={e => setQuestions(e.target.value)}
             rows={5}
             placeholder={'¿Tienes experiencia en AWS?\nPretensión de renta líquida\nDescribe un proyecto del que te sientas orgulloso'}
-            className="w-full rounded-md border border-gray-300 p-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+            className="aw-input"
+            style={{ resize:'vertical' }}
           />
 
-          <div className="mt-3 flex items-center gap-3">
-            <button
-              onClick={resolve}
-              disabled={resolving}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-            >
+          <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:12 }}>
+            <button onClick={resolve} disabled={resolving} className="aw-btn-gold aw-btn-sm">
               {resolving ? 'Respondiendo...' : 'Responder con mi CV'}
             </button>
-            {resolving && <p className="text-sm text-gray-600">Redactando y verificando, puede tardar hasta un minuto.</p>}
+            {resolving && <p className="aw-dim">Redactando y verificando, puede tardar hasta un minuto.</p>}
           </div>
 
-          {resolveError && (
-            <div className="rounded-md bg-red-50 p-4 mt-4">
-              <p className="text-sm font-medium text-red-800">{resolveError}</p>
-            </div>
-          )}
+          {resolveError && <div className="aw-error" style={{ marginTop:12 }}>{resolveError}</div>}
 
           {resolutions.length > 0 && (
-            <ul className="mt-6 space-y-4">
+            <ul style={{ marginTop:20, display:'flex', flexDirection:'column', gap:12, listStyle:'none', padding:0 }}>
               {resolutions.map(r => {
                 const style = STATUS_STYLE[r.status];
                 return (
-                  <li key={r.fieldId} className="rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <p className="font-medium text-gray-900">{asked[r.fieldId] ?? r.fieldId}</p>
-                      <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${style.className}`}>
-                        {style.label}
-                      </span>
+                  <li key={r.fieldId} className="aw-card aw-card-sm">
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, marginBottom:8 }}>
+                      <p style={{ fontWeight:600, color:'#F4F1E9' }}>{asked[r.fieldId] ?? r.fieldId}</p>
+                      <span className="aw-pill" style={{ background:style.bg, color:style.color, flexShrink:0 }}>{style.label}</span>
                     </div>
 
                     {r.status === 'filled' && (
                       <>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{r.value}</p>
-                        {r.source && <p className="text-xs text-gray-500 mt-1">{r.source}</p>}
+                        <p style={{ fontSize:14, color:'#F4F1E9', whiteSpace:'pre-wrap' }}>{r.value}</p>
+                        {r.source && <p className="aw-dim" style={{ marginTop:4 }}>{r.source}</p>}
                       </>
                     )}
 
                     {r.status === 'needs-approval' && (
                       <>
-                        {r.reason && <p className="text-sm text-yellow-800 mb-2">{r.reason}</p>}
+                        {r.reason && <p className="aw-muted" style={{ marginBottom:8 }}>{r.reason}</p>}
                         <textarea
                           value={drafts[r.fieldId] ?? ''}
                           onChange={e => setDrafts(d => ({ ...d, [r.fieldId]: e.target.value }))}
                           rows={4}
-                          className="w-full rounded-md border border-gray-300 p-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                          className="aw-input"
+                          style={{ resize:'vertical' }}
                         />
-                        <button
-                          onClick={() => flashCopied(r.fieldId, drafts[r.fieldId] ?? '')}
-                          className="mt-2 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50"
-                        >
+                        <button onClick={() => flashCopied(r.fieldId, drafts[r.fieldId] ?? '')} className="aw-btn-outline aw-btn-sm" style={{ marginTop:8 }}>
                           {copied === r.fieldId ? 'Copiado' : 'Copiar'}
                         </button>
                       </>
@@ -425,13 +368,13 @@ export default function PostulationDetailPage() {
 
                     {r.status === 'needs-user' && (
                       <>
-                        {r.reason && <p className="text-sm text-gray-700">{r.reason}</p>}
-                        {r.suggestion && <p className="text-xs text-gray-500 mt-1">Sugerencia: {r.suggestion}</p>}
+                        {r.reason && <p className="aw-muted">{r.reason}</p>}
+                        {r.suggestion && <p className="aw-dim" style={{ marginTop:4 }}>Sugerencia: {r.suggestion}</p>}
                       </>
                     )}
 
                     {r.status === 'use-adapted-cv' && (
-                      <p className="text-sm text-gray-700">Usa el CV adaptado de esta página.</p>
+                      <p className="aw-muted">Usa el CV adaptado de esta página.</p>
                     )}
                   </li>
                 );
@@ -440,6 +383,6 @@ export default function PostulationDetailPage() {
           )}
         </section>
       </div>
-    </div>
+    </AppShell>
   );
 }

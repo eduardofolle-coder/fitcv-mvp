@@ -4,10 +4,19 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import {
   APPLY_STATUS_LABELS,
-  APPLY_STATUS_STYLES,
   ATTENTION_REASON_LABELS,
   applyStatusOf,
 } from '@/lib/applyStatus';
+
+const APPLY_STATUS_DARK: Record<string, { bg: string; color: string }> = {
+  pendiente:              { bg: 'rgba(169,182,200,.15)', color: '#A9B6C8' },
+  'en-cola':              { bg: 'rgba(167,139,250,.18)', color: '#C4B5FD' },
+  enviando:               { bg: 'rgba(59,130,246,.18)',  color: '#93C5FD' },
+  enviada:                { bg: 'rgba(52,211,153,.18)',  color: '#6EE7B7' },
+  'requiere-atencion':    { bg: 'rgba(225,165,38,.18)',  color: '#E1A526' },
+  'requiere-autorizacion':{ bg: 'rgba(251,146,60,.18)',  color: '#FED7AA' },
+  error:                  { bg: 'rgba(248,113,113,.18)', color: '#FCA5A5' },
+};
 
 interface ApplyState {
   applyStatus: string;
@@ -88,37 +97,29 @@ export function ApplyPanel({ postulationId, hasCv }: { postulationId: string; ha
 
   if (!state) return null;
 
-  const secondary =
-    'px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50 disabled:opacity-50';
+  const d = APPLY_STATUS_DARK[status] ?? APPLY_STATUS_DARK['pendiente'];
 
   return (
-    <section className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-start justify-between gap-4 mb-3">
+    <section className="aw-card">
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, marginBottom:12 }}>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Envío de la postulación</h2>
-          <p className="text-sm text-gray-600">
+          <h2 className="aw-h2" style={{ margin:0 }}>Envío de la postulación</h2>
+          <p className="aw-muted" style={{ marginTop:4 }}>
             La extensión de Chrome la envía por ti con este CV. Solo la envía sola si tu CV respalda todo lo que pide el
             formulario.
           </p>
         </div>
-        <span className={`shrink-0 px-3 py-1 rounded-full text-sm font-medium ${APPLY_STATUS_STYLES[status]}`}>
+        <span className="aw-pill" style={{ background:d.bg, color:d.color, flexShrink:0 }}>
           {APPLY_STATUS_LABELS[status]}
         </span>
       </div>
 
       {status === 'requiere-atencion' && (
-        <div className="rounded-md bg-yellow-50 p-4 mb-4">
-          <p className="text-sm text-yellow-900">
-            {(state.applyReason && ATTENTION_REASON_LABELS[state.applyReason]) || 'Necesita tu revisión.'}
-          </p>
-          {state.applyDetail && <p className="text-xs text-yellow-800 mt-1">{state.applyDetail}</p>}
+        <div className="aw-warning" style={{ marginBottom:12 }}>
+          <p>{(state.applyReason && ATTENTION_REASON_LABELS[state.applyReason]) || 'Necesita tu revisión.'}</p>
+          {state.applyDetail && <p style={{ fontSize:12, marginTop:4 }}>{state.applyDetail}</p>}
           {state.applyUrl && (
-            <a
-              href={state.applyUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block mt-2 text-sm font-medium text-yellow-900 underline"
-            >
+            <a href={state.applyUrl} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', marginTop:8, color:'#E1A526', fontWeight:600, textDecoration:'underline' }}>
               Ir a postular
             </a>
           )}
@@ -126,69 +127,47 @@ export function ApplyPanel({ postulationId, hasCv }: { postulationId: string; ha
       )}
 
       {status === 'requiere-autorizacion' && (
-        <div className="rounded-md bg-orange-50 p-4 mb-4">
-          <p className="text-sm text-orange-900">
-            {(state.applyReason && ATTENTION_REASON_LABELS[state.applyReason]) || 'Necesita tu autorización para postular.'}
-          </p>
-          {state.applyDetail && <p className="text-xs text-orange-800 mt-1">{state.applyDetail}</p>}
-          <div className="flex flex-wrap gap-2 mt-3">
-            <button
-              onClick={() => act('authorize')}
-              disabled={busy}
-              className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded hover:bg-orange-700 disabled:opacity-50"
-            >
-              Autorizar y postular
-            </button>
-            <button
-              onClick={() => act('decline')}
-              disabled={busy}
-              className="px-4 py-2 text-sm font-medium text-orange-700 border border-orange-600 rounded hover:bg-orange-100 disabled:opacity-50"
-            >
-              No postular
-            </button>
+        <div className="aw-warning" style={{ marginBottom:12 }}>
+          <p>{(state.applyReason && ATTENTION_REASON_LABELS[state.applyReason]) || 'Necesita tu autorización para postular.'}</p>
+          {state.applyDetail && <p style={{ fontSize:12, marginTop:4 }}>{state.applyDetail}</p>}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
+            <button onClick={() => act('authorize')} disabled={busy} className="aw-btn-gold aw-btn-sm">Autorizar y postular</button>
+            <button onClick={() => act('decline')} disabled={busy} className="aw-btn-outline aw-btn-sm">No postular</button>
           </div>
         </div>
       )}
 
       {status === 'enviada' && state.sentAt && (
-        <p className="text-sm text-green-700 mb-4">Enviada el {new Date(state.sentAt).toLocaleString()}.</p>
+        <p className="aw-success" style={{ marginBottom:12 }}>Enviada el {new Date(state.sentAt).toLocaleString()}.</p>
       )}
 
-      {status === 'error' && state.applyDetail && <p className="text-sm text-red-700 mb-4">{state.applyDetail}</p>}
+      {status === 'error' && state.applyDetail && (
+        <div className="aw-error" style={{ marginBottom:12 }}>{state.applyDetail}</div>
+      )}
 
-      <div className="flex flex-wrap gap-2">
+      <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
         {(status === 'pendiente' || status === 'requiere-atencion' || status === 'error') && (
-          <button
-            onClick={() => act('queue')}
-            disabled={busy}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
+          <button onClick={() => act('queue')} disabled={busy} className="aw-btn-gold aw-btn-sm">
             {status === 'pendiente' ? 'Enviar con la extensión' : 'Reintentar con la extensión'}
           </button>
         )}
         {status === 'en-cola' && (
-          <button onClick={() => act('unqueue')} disabled={busy} className={secondary}>
-            Quitar de la cola
-          </button>
+          <button onClick={() => act('unqueue')} disabled={busy} className="aw-btn-outline aw-btn-sm">Quitar de la cola</button>
         )}
         {status !== 'enviada' && status !== 'enviando' && (
-          <button onClick={() => act('mark-sent')} disabled={busy} className={secondary}>
-            Ya la envié por mi cuenta
-          </button>
+          <button onClick={() => act('mark-sent')} disabled={busy} className="aw-btn-outline aw-btn-sm">Ya la envié por mi cuenta</button>
         )}
         {hasCv && (
-          <button onClick={downloadPdf} className={secondary}>
-            Descargar CV en PDF
-          </button>
+          <button onClick={downloadPdf} className="aw-btn-outline aw-btn-sm">Descargar CV en PDF</button>
         )}
       </div>
 
-      {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
+      {error && <div className="aw-error" style={{ marginTop:12 }}>{error}</div>}
 
       {events.length > 0 && (
-        <ol className="mt-5 pt-4 border-t border-gray-100 space-y-1">
+        <ol style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(255,255,255,.08)', display:'flex', flexDirection:'column', gap:4 }}>
           {events.map((event, i) => (
-            <li key={i} className="text-sm text-gray-600">
+            <li key={i} className="aw-dim">
               {new Date(event.createdAt).toLocaleString()} · {APPLY_STATUS_LABELS[applyStatusOf(event.toStatus)]}
               {event.mode === 'auto' ? ' automáticamente' : event.mode === 'manual' ? ' por ti' : ''}
               {event.reason ? ` — ${ATTENTION_REASON_LABELS[event.reason] ?? event.reason}` : ''}

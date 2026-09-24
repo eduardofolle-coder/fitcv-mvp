@@ -28,46 +28,40 @@ export function DiagnosisCard() {
 
   if (loading) {
     return (
-      <section className="bg-white rounded-lg shadow mb-8 p-6">
-        <p className="text-sm text-gray-500">Analizando tu CV contra las ofertas vigentes...</p>
+      <section className="aw-card" style={{ marginBottom:24 }}>
+        <p className="aw-muted">Analizando tu CV contra las ofertas vigentes...</p>
       </section>
     );
   }
 
-  // Sin CV la tarjeta de perfil ya invita a subirlo; no hace falta repetirlo.
   if (!data) return null;
 
   const share = (count: number) => (data.analyzed > 0 ? Math.round((count / data.analyzed) * 100) : 0);
 
   return (
-    <section className="bg-white rounded-lg shadow mb-8 p-6">
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Diagnóstico de tu CV</h2>
-      <p className="text-sm text-gray-600 mb-5">
-        Comparado con {data.matched} {data.matched === 1 ? 'oferta vigente afín' : 'ofertas vigentes afines'} a tu
-        perfil.
+    <section className="aw-card" style={{ marginBottom:24 }}>
+      <h2 className="aw-h2">Diagnóstico de tu CV</h2>
+      <p className="aw-muted" style={{ marginBottom:20 }}>
+        Comparado con {data.matched} {data.matched === 1 ? 'oferta vigente afín' : 'ofertas vigentes afines'} a tu perfil.
       </p>
 
       {data.matched === 0 ? (
-        <p className="text-sm text-gray-700">
+        <p className="aw-muted">
           Hoy no hay ofertas vigentes que calcen con tu perfil.{' '}
-          {data.nearMisses > 0 && (
-            <>
-              Hay {data.nearMisses} de tu área que quedaron fuera por poca coincidencia.{' '}
-            </>
-          )}
+          {data.nearMisses > 0 && <>Hay {data.nearMisses} de tu área que quedaron fuera por poca coincidencia. </>}
           FITCV sigue revisando los portales cada hora.
         </p>
       ) : (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Stat label="Calce alto" value={data.reach.alto} tone="text-green-700" />
-            <Stat label="Calce medio" value={data.reach.medio} tone="text-yellow-700" />
-            <Stat label="Calce bajo" value={data.reach.bajo} tone="text-gray-700" />
-            <Stat label="Casi calzan" value={data.nearMisses} tone="text-gray-500" />
+        <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
+          <div className="aw-grid-4">
+            <Stat label="Calce alto" value={data.reach.alto} color="#6EE7B7" />
+            <Stat label="Calce medio" value={data.reach.medio} color="#E1A526" />
+            <Stat label="Calce bajo" value={data.reach.bajo} color="#A9B6C8" />
+            <Stat label="Casi calzan" value={data.nearMisses} color="#6C7686" />
           </div>
 
           {data.entryLevelDiscarded > 0 && (
-            <p className="text-sm text-gray-700 bg-gray-50 rounded-md p-3">
+            <p className="aw-info">
               {data.entryLevelDiscarded}{' '}
               {data.entryLevelDiscarded === 1 ? 'oferta de tu área es' : 'ofertas de tu área son'} de práctica o
               primer empleo. No se te recomiendan por tus años de experiencia.
@@ -79,7 +73,7 @@ export function DiagnosisCard() {
             help="Términos de tu CV que aparecen en las ofertas que alcanzas."
             items={data.strengths}
             share={share}
-            className="bg-green-50 text-green-800"
+            pillClass="aw-pill aw-pill-green"
             empty="Ninguno de tus términos aparece de forma repetida en estas ofertas."
           />
 
@@ -88,31 +82,26 @@ export function DiagnosisCard() {
             help="Aparece en estas ofertas y no lo encontramos escrito en tu CV. Si lo has hecho, agrégalo; si no, es lo que te falta."
             items={data.gaps}
             share={share}
-            className="bg-orange-50 text-orange-800"
+            pillClass="aw-pill aw-pill-orange"
             empty="Tu CV ya menciona todo lo que piden estas ofertas de forma repetida."
           />
 
           {data.unused.length > 0 && (
             <div>
-              <p className="text-sm font-semibold text-gray-900">Lo que ocupa espacio sin sumar</p>
-              <p className="text-xs text-gray-500 mb-2">
+              <p style={{ fontSize:14, fontWeight:600, color:'#F4F1E9', marginBottom:4 }}>Lo que ocupa espacio sin sumar</p>
+              <p className="aw-dim" style={{ marginBottom:8 }}>
                 Está en tu CV y ninguna de estas ofertas lo pide. Puede seguir siendo válido en otra área.
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                 {data.unused.map((term) => (
-                  <span key={term} className="px-2.5 py-1 rounded-full text-sm bg-gray-100 text-gray-600">
-                    {term}
-                  </span>
+                  <span key={term} className="aw-pill aw-pill-gray">{term}</span>
                 ))}
               </div>
             </div>
           )}
 
-          <button
-            onClick={() => router.push('/offers')}
-            className="text-sm font-medium text-blue-600 hover:underline"
-          >
-            Ver las ofertas de tu perfil
+          <button onClick={() => router.push('/offers')} style={{ fontSize:13, fontWeight:600, color:'#E1A526', background:'none', border:'none', cursor:'pointer', padding:0, textAlign:'left' }}>
+            Ver las ofertas de tu perfil →
           </button>
         </div>
       )}
@@ -120,42 +109,33 @@ export function DiagnosisCard() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
+function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="rounded-lg border border-gray-100 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
-      <p className={`text-2xl font-bold ${tone}`}>{value}</p>
+    <div className="aw-stat">
+      <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:'#6C7686', marginBottom:4 }}>{label}</p>
+      <p style={{ fontSize:24, fontWeight:700, color }}>{value}</p>
     </div>
   );
 }
 
 function TopicList({
-  title,
-  help,
-  items,
-  share,
-  className,
-  empty,
+  title, help, items, share, pillClass, empty,
 }: {
-  title: string;
-  help: string;
-  items: TopicCount[];
-  share: (count: number) => number;
-  className: string;
-  empty: string;
+  title: string; help: string; items: TopicCount[];
+  share: (count: number) => number; pillClass: string; empty: string;
 }) {
   return (
     <div>
-      <p className="text-sm font-semibold text-gray-900">{title}</p>
-      <p className="text-xs text-gray-500 mb-2">{help}</p>
+      <p style={{ fontSize:14, fontWeight:600, color:'#F4F1E9', marginBottom:4 }}>{title}</p>
+      <p className="aw-dim" style={{ marginBottom:8 }}>{help}</p>
       {items.length === 0 ? (
-        <p className="text-sm text-gray-500">{empty}</p>
+        <p className="aw-muted">{empty}</p>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
           {items.map((item) => (
-            <span key={item.term} className={`px-2.5 py-1 rounded-full text-sm ${className}`}>
+            <span key={item.term} className={pillClass}>
               {item.term}
-              <span className="ml-1.5 opacity-70">{share(item.offers)}%</span>
+              <span style={{ marginLeft:6, opacity:.7 }}>{share(item.offers)}%</span>
             </span>
           ))}
         </div>

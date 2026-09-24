@@ -78,103 +78,101 @@ export function DailyAnalysisCard() {
 
   const latest = items.find(item => item.kind === 'offer-digest' && item.data);
 
+  const TIER_DARK: Record<string, { bg: string; color: string }> = {
+    alto: { bg: 'rgba(52,211,153,.12)', color: '#6EE7B7' },
+    medio: { bg: 'rgba(225,165,38,.12)', color: '#E1A526' },
+    bajo: { bg: 'rgba(169,182,200,.12)', color: '#A9B6C8' },
+  };
+
   return (
-    <section className="bg-white rounded-lg shadow mb-8 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+    <section className="aw-card" style={{ marginBottom:24 }}>
+      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-start', justifyContent:'space-between', gap:12, marginBottom:16 }}>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">
+          <h2 className="aw-h2" style={{ margin:0 }}>
             Análisis diario de ofertas
             {unread > 0 && (
-              <span className="ml-2 align-middle px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+              <span className="aw-pill aw-pill-red" style={{ marginLeft:8, verticalAlign:'middle' }}>
                 {unread} {unread === 1 ? 'aviso nuevo' : 'avisos nuevos'}
               </span>
             )}
           </h2>
           {hour === undefined ? null : hour === null ? (
-            <p className="text-sm text-orange-700">Todavía no eliges la hora de tu análisis diario.</p>
+            <p style={{ fontSize:13, color:'#FED7AA', marginTop:4 }}>Todavía no eliges la hora de tu análisis diario.</p>
           ) : (
-            <p className="text-sm text-gray-600">Todos los días a las {hourLabel(hour)} (hora de Chile).</p>
+            <p className="aw-muted" style={{ marginTop:4 }}>Todos los días a las {hourLabel(hour)} (hora de Chile).</p>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => router.push('/preferences')}
-            className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50"
-          >
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+          <button onClick={() => router.push('/preferences')} className="aw-btn-outline aw-btn-sm">
             {hour === null ? 'Elegir hora' : 'Cambiar hora'}
           </button>
-          <button
-            onClick={runNow}
-            disabled={running}
-            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
+          <button onClick={runNow} disabled={running} className="aw-btn-gold aw-btn-sm">
             {running ? 'Analizando...' : 'Analizar ahora'}
           </button>
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-md bg-red-50 p-3 mb-4">
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      )}
+      {error && <div className="aw-error" style={{ marginBottom:16 }}>{error}</div>}
 
       {latest?.data ? (
-        <div className="space-y-4">
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           <div>
-            <p className="font-semibold text-gray-900">{latest.title}</p>
-            <p className="text-sm text-gray-600">{latest.body}</p>
-            <p className="text-xs text-gray-500 mt-1">{new Date(latest.createdAt).toLocaleString()}</p>
+            <p style={{ fontWeight:600, color:'#F4F1E9' }}>{latest.title}</p>
+            <p className="aw-muted">{latest.body}</p>
+            <p className="aw-dim" style={{ marginTop:4 }}>{new Date(latest.createdAt).toLocaleString()}</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            {MATCH_TIERS.map(tier => (
-              <button
-                key={tier}
-                onClick={() => router.push('/offers')}
-                className={`rounded-lg p-3 text-left ${MATCH_TIER_STYLES[tier]}`}
-              >
-                <p className="text-xs font-semibold uppercase">{MATCH_TIER_LABELS[tier]}</p>
-                <p className="text-2xl font-bold">{latest.data?.total[tier] ?? 0}</p>
-                <p className="text-xs">{latest.data?.fresh[tier] ?? 0} nuevas</p>
-              </button>
-            ))}
+          <div className="aw-grid-3">
+            {MATCH_TIERS.map(tier => {
+              const d = TIER_DARK[tier];
+              return (
+                <button
+                  key={tier}
+                  onClick={() => router.push('/offers')}
+                  style={{ background:d.bg, borderRadius:10, padding:'12px 16px', textAlign:'left', border:`1px solid ${d.color}30`, cursor:'pointer' }}
+                >
+                  <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:d.color }}>{MATCH_TIER_LABELS[tier]}</p>
+                  <p style={{ fontSize:24, fontWeight:700, color:d.color }}>{latest.data?.total[tier] ?? 0}</p>
+                  <p style={{ fontSize:12, color:d.color, opacity:.7 }}>{latest.data?.fresh[tier] ?? 0} nuevas</p>
+                </button>
+              );
+            })}
           </div>
 
           {latest.data.top.length > 0 && (
-            <ul className="divide-y divide-gray-100">
-              {latest.data.top.map(offer => (
-                <li key={offer.id} className="py-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{offer.title}</p>
-                    <p className="text-xs text-gray-500 truncate">{offer.company}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {offer.isNew && <span className="text-xs font-semibold text-blue-700">Nueva</span>}
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${MATCH_TIER_STYLES[offer.tier]}`}>
-                      {MATCH_TIER_LABELS[offer.tier]}
-                    </span>
-                  </div>
-                </li>
-              ))}
+            <ul>
+              {latest.data.top.map(offer => {
+                const d = TIER_DARK[offer.tier];
+                return (
+                  <li key={offer.id} className="aw-row">
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontSize:14, fontWeight:500, color:'#F4F1E9', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{offer.title}</p>
+                      <p className="aw-dim" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{offer.company}</p>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+                      {offer.isNew && <span className="aw-pill aw-pill-blue" style={{ fontSize:11 }}>Nueva</span>}
+                      <span className="aw-pill" style={{ background:d.bg, color:d.color }}>{MATCH_TIER_LABELS[offer.tier]}</span>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
 
-          <div className="flex flex-wrap gap-3">
-            <button onClick={() => router.push('/offers')} className="text-sm font-medium text-blue-600 hover:underline">
-              Ver todas las ofertas de tu perfil
+          <div style={{ display:'flex', flexWrap:'wrap', gap:12 }}>
+            <button onClick={() => router.push('/offers')} style={{ fontSize:13, fontWeight:600, color:'#E1A526', background:'none', border:'none', cursor:'pointer', padding:0 }}>
+              Ver todas las ofertas de tu perfil →
             </button>
             {unread > 0 && (
-              <button onClick={markAllRead} className="text-sm text-gray-500 hover:underline">
+              <button onClick={markAllRead} style={{ fontSize:13, color:'#6C7686', background:'none', border:'none', cursor:'pointer', padding:0 }}>
                 Marcar avisos como leídos
               </button>
             )}
           </div>
         </div>
       ) : (
-        <p className="text-sm text-gray-500">
-          Aún no hay análisis. {hour === null ? 'Elige una hora' : 'Espera la hora elegida'} o pulsa &quot;Analizar
-          ahora&quot;.
+        <p className="aw-muted">
+          Aún no hay análisis. {hour === null ? 'Elige una hora' : 'Espera la hora elegida'} o pulsa &quot;Analizar ahora&quot;.
         </p>
       )}
     </section>

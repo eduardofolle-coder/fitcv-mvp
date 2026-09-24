@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api-client';
 import { NATIONALITIES, REGIONES, comunasByRegion } from '@/lib/chile';
+import AppShell from '@/app/components/AppShell';
 
 // Lo que devuelve y acepta /api/applications/preferences.
 interface Preferences {
@@ -110,7 +111,7 @@ export default function PreferencesPage() {
   }, [initializing, user]);
 
   if (initializing || !loaded) {
-    return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
+    return <div className="aw-loading">Cargando...</div>;
   }
   if (!user) return null;
 
@@ -155,16 +156,10 @@ export default function PreferencesPage() {
     setSaving(false);
   };
 
-  const input =
-    'w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none';
-  const label = 'block text-sm font-medium text-gray-700 mb-1';
-
   const yesNo = (id: string, text: string, value: YesNo, onChange: (v: YesNo) => void) => (
     <div>
-      <label htmlFor={id} className={label}>
-        {text}
-      </label>
-      <select id={id} value={value} onChange={e => onChange(e.target.value as YesNo)} className={input}>
+      <label htmlFor={id} className="aw-label">{text}</label>
+      <select id={id} value={value} onChange={e => onChange(e.target.value as YesNo)} className="aw-select">
         <option value="">Preguntarme cada vez</option>
         <option value="si">Sí</option>
         <option value="no">No</option>
@@ -172,203 +167,152 @@ export default function PreferencesPage() {
     </div>
   );
 
+  const sectionStyle = { marginBottom: 16 };
+  const gridStyle = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } as const;
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-3xl mx-auto px-4">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline mb-2">
-          ← Tablero
-        </button>
-        <h1 className="text-3xl font-bold text-gray-900">Mis respuestas frecuentes</h1>
-        <p className="text-gray-600 mb-6">
-          Lo que respondes aquí una vez, FITCV lo usa en todos los formularios de postulación. Lo que dejes en blanco se
-          te preguntará en cada postulación.
-        </p>
+    <AppShell>
+      <h1 className="aw-h1" style={{ marginBottom:4 }}>Mis respuestas frecuentes</h1>
+      <p className="aw-muted" style={{ marginBottom:20 }}>
+        Lo que respondes aquí una vez, FITCV lo usa en todos los formularios de postulación. Lo que dejes en blanco se
+        te preguntará en cada postulación.
+      </p>
 
-        {firstTime && (
-          <div className="rounded-md bg-blue-50 p-4 mb-6">
-            <p className="text-sm text-blue-900">
-              Tu CV quedó analizado. Ahora elige a qué hora quieres que FITCV revise cada día las ofertas de tu perfil y
-              completa tus respuestas frecuentes.
-            </p>
+      {firstTime && (
+        <div className="aw-info" style={{ marginBottom:20 }}>
+          Tu CV quedó analizado. Ahora elige a qué hora quieres que FITCV revise cada día las ofertas de tu perfil y
+          completa tus respuestas frecuentes.
+        </div>
+      )}
+
+      <form onSubmit={save} style={{ display:'flex', flexDirection:'column', gap:16 }}>
+        <section className="aw-card" style={sectionStyle}>
+          <h2 className="aw-h2">Análisis diario de ofertas</h2>
+          <p className="aw-muted" style={{ marginBottom:12 }}>
+            Cada día, a esta hora, FITCV revisa las ofertas de tu perfil y te avisa cuántas hay de calce alto, medio y
+            bajo, destacando las nuevas.
+          </p>
+          <div style={{ maxWidth:240 }}>
+            <label htmlFor="analysisHour" className="aw-label">Hora del análisis (hora de Chile)</label>
+            <select id="analysisHour" value={analysisHour} onChange={e => setAnalysisHour(e.target.value)} className="aw-select">
+              <option value="">Sin análisis diario</option>
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+              ))}
+            </select>
           </div>
-        )}
+        </section>
 
-        <form onSubmit={save} className="space-y-6">
-          <section className="bg-white rounded-lg shadow p-6 space-y-3">
-            <h2 className="text-lg font-semibold text-gray-900">Análisis diario de ofertas</h2>
-            <p className="text-sm text-gray-600">
-              Cada día, a esta hora, FITCV revisa las ofertas de tu perfil y te avisa cuántas hay de calce alto, medio y
-              bajo, destacando las nuevas.
-            </p>
-            <div className="max-w-xs">
-              <label htmlFor="analysisHour" className={label}>
-                Hora del análisis (hora de Chile)
-              </label>
-              <select id="analysisHour" value={analysisHour} onChange={e => setAnalysisHour(e.target.value)} className={input}>
-                <option value="">Sin análisis diario</option>
-                {Array.from({ length: 24 }, (_, h) => (
-                  <option key={h} value={h}>
-                    {String(h).padStart(2, '0')}:00
-                  </option>
-                ))}
+        <section className="aw-card" style={sectionStyle}>
+          <h2 className="aw-h2">Pretensión de renta líquida</h2>
+          <div style={{ ...gridStyle, marginBottom:12 }}>
+            <div>
+              <label htmlFor="salaryMin" className="aw-label">Desde ($)</label>
+              <input id="salaryMin" inputMode="numeric" value={salaryMin} onChange={e => setSalaryMin(e.target.value)} placeholder="1.800.000" className="aw-input" />
+            </div>
+            <div>
+              <label htmlFor="salaryMax" className="aw-label">Hasta ($)</label>
+              <input id="salaryMax" inputMode="numeric" value={salaryMax} onChange={e => setSalaryMax(e.target.value)} placeholder="2.200.000" className="aw-input" />
+            </div>
+          </div>
+          <ul className="aw-dim" style={{ paddingLeft:16, display:'flex', flexDirection:'column', gap:4 }}>
+            <li>Si la oferta no dice cuánto paga, FITCV responde tu rango completo (en campos numéricos, el &quot;hasta&quot;).</li>
+            <li>Si la oferta paga más que tu rango, FITCV postula y acepta el sueldo de la oferta.</li>
+            <li>Si la oferta paga menos que tu &quot;desde&quot;, FITCV no postula: te pide autorización en tu tablero.</li>
+          </ul>
+        </section>
+
+        <section className="aw-card" style={sectionStyle}>
+          <h2 className="aw-h2">Disponibilidad y condiciones</h2>
+          <div style={{ ...gridStyle }}>
+            <div>
+              <label htmlFor="availability" className="aw-label">Disponibilidad para empezar</label>
+              <select id="availability" value={availability} onChange={e => setAvailability(e.target.value)} className="aw-select">
+                <option value="">Preguntarme cada vez</option>
+                {AVAILABILITY.map(option => <option key={option} value={option}>{option}</option>)}
               </select>
             </div>
-          </section>
-
-          <section className="bg-white rounded-lg shadow p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900">Pretensión de renta líquida</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="salaryMin" className={label}>
-                  Desde ($)
-                </label>
-                <input id="salaryMin" inputMode="numeric" value={salaryMin} onChange={e => setSalaryMin(e.target.value)} placeholder="1.800.000" className={input} />
-              </div>
-              <div>
-                <label htmlFor="salaryMax" className={label}>
-                  Hasta ($)
-                </label>
-                <input id="salaryMax" inputMode="numeric" value={salaryMax} onChange={e => setSalaryMax(e.target.value)} placeholder="2.200.000" className={input} />
-              </div>
+            <div>
+              <label htmlFor="driverLicense" className="aw-label">Licencia de conducir</label>
+              <select id="driverLicense" value={driverLicense} onChange={e => setDriverLicense(e.target.value)} className="aw-select">
+                <option value="">Preguntarme cada vez</option>
+                {LICENSES.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
             </div>
-            <ul className="text-xs text-gray-500 list-disc pl-5 space-y-1">
-              <li>Si la oferta no dice cuánto paga, FITCV responde tu rango completo (en campos numéricos, el &quot;hasta&quot;).</li>
-              <li>Si la oferta paga más que tu rango, FITCV postula y acepta el sueldo de la oferta.</li>
-              <li>Si la oferta paga menos que tu &quot;desde&quot;, FITCV no postula: te pide autorización en tu tablero.</li>
-            </ul>
-          </section>
-
-          <section className="bg-white rounded-lg shadow p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900">Disponibilidad y condiciones</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="availability" className={label}>
-                  Disponibilidad para empezar
-                </label>
-                <select id="availability" value={availability} onChange={e => setAvailability(e.target.value)} className={input}>
-                  <option value="">Preguntarme cada vez</option>
-                  {AVAILABILITY.map(option => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="driverLicense" className={label}>
-                  Licencia de conducir
-                </label>
-                <select id="driverLicense" value={driverLicense} onChange={e => setDriverLicense(e.target.value)} className={input}>
-                  <option value="">Preguntarme cada vez</option>
-                  {LICENSES.map(option => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {yesNo('travel', '¿Disponibilidad para viajar?', willingToTravel, setWillingToTravel)}
-              {yesNo('shifts', '¿Disponibilidad para turnos o fines de semana?', shiftWork, setShiftWork)}
-              {yesNo('relocation', '¿Disponibilidad para cambiarte de ciudad?', relocation, setRelocation)}
-              {yesNo('workPermit', '¿Tienes permiso para trabajar en Chile?', workPermit, setWorkPermit)}
-            </div>
-          </section>
-
-          <section className="bg-white rounded-lg shadow p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900">Datos personales</h2>
-            <p className="text-xs text-gray-500">Se guardan cifrados y solo se usan en los formularios de postulación.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="rut" className={label}>
-                  RUT
-                </label>
-                <input id="rut" value={rut} onChange={e => setRut(e.target.value)} placeholder="12.345.678-5" className={input} />
-              </div>
-              <div>
-                <label htmlFor="nationality" className={label}>
-                  Nacionalidad
-                </label>
-                <select id="nationality" value={nationality} onChange={e => setNationality(e.target.value)} className={input}>
-                  <option value="">Selecciona…</option>
-                  {NATIONALITIES.map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label htmlFor="address" className={label}>
-                  Dirección
-                </label>
-                <input id="address" value={address} onChange={e => setAddress(e.target.value)} className={input} />
-              </div>
-              <div>
-                <label htmlFor="region" className={label}>
-                  Región
-                </label>
-                <select id="region" value={region} onChange={e => { setRegion(e.target.value); setComuna(''); }} className={input}>
-                  <option value="">Selecciona…</option>
-                  {REGIONES.map(r => <option key={r.nombre} value={r.nombre}>{r.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="comuna" className={label}>
-                  Comuna
-                </label>
-                <select id="comuna" value={comuna} onChange={e => setComuna(e.target.value)} className={input} disabled={!region}>
-                  <option value="">{region ? 'Selecciona…' : 'Elige región primero'}</option>
-                  {comunasByRegion(region).map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-white rounded-lg shadow p-6 space-y-3">
-            <h2 className="text-lg font-semibold text-gray-900">Términos de los portales</h2>
-            <label className="flex items-start gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={acceptPortalTerms}
-                onChange={e => setAcceptPortalTerms(e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>
-                Autorizo a FITCV a marcar en mi nombre las casillas de aceptación de términos, condiciones y política de
-                privacidad de los formularios de postulación. Las casillas de publicidad o novedades nunca se marcan.
-              </span>
-            </label>
-            {acceptPortalTerms && acceptedAt && (
-              <p className="text-xs text-gray-500">Autorizado el {new Date(acceptedAt).toLocaleString()}.</p>
-            )}
-          </section>
-
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-800">{error}</p>
-            </div>
-          )}
-          {message && (
-            <div className="rounded-md bg-green-50 p-4">
-              <p className="text-sm font-medium text-green-800">{message}</p>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Guardando...' : 'Guardar mis respuestas'}
-          </button>
-        </form>
-
-        <section className="mt-8 border-t pt-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Zona de peligro</h2>
-          <DeleteAccountButton onDeleted={() => router.push('/login')} />
-          <p className="mt-2 text-xs text-gray-400">
-            Tus datos son eliminados permanentemente. Ver{' '}
-            <a href="/privacy" className="underline">política de privacidad</a>.
-          </p>
+            {yesNo('travel', '¿Disponibilidad para viajar?', willingToTravel, setWillingToTravel)}
+            {yesNo('shifts', '¿Disponibilidad para turnos o fines de semana?', shiftWork, setShiftWork)}
+            {yesNo('relocation', '¿Disponibilidad para cambiarte de ciudad?', relocation, setRelocation)}
+            {yesNo('workPermit', '¿Tienes permiso para trabajar en Chile?', workPermit, setWorkPermit)}
+          </div>
         </section>
-      </div>
-    </div>
+
+        <section className="aw-card" style={sectionStyle}>
+          <h2 className="aw-h2">Datos personales</h2>
+          <p className="aw-dim" style={{ marginBottom:12 }}>Se guardan cifrados y solo se usan en los formularios de postulación.</p>
+          <div style={{ ...gridStyle }}>
+            <div>
+              <label htmlFor="rut" className="aw-label">RUT</label>
+              <input id="rut" value={rut} onChange={e => setRut(e.target.value)} placeholder="12.345.678-5" className="aw-input" />
+            </div>
+            <div>
+              <label htmlFor="nationality" className="aw-label">Nacionalidad</label>
+              <select id="nationality" value={nationality} onChange={e => setNationality(e.target.value)} className="aw-select">
+                <option value="">Selecciona…</option>
+                {NATIONALITIES.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div style={{ gridColumn:'1 / -1' }}>
+              <label htmlFor="address" className="aw-label">Dirección</label>
+              <input id="address" value={address} onChange={e => setAddress(e.target.value)} className="aw-input" />
+            </div>
+            <div>
+              <label htmlFor="region" className="aw-label">Región</label>
+              <select id="region" value={region} onChange={e => { setRegion(e.target.value); setComuna(''); }} className="aw-select">
+                <option value="">Selecciona…</option>
+                {REGIONES.map(r => <option key={r.nombre} value={r.nombre}>{r.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="comuna" className="aw-label">Comuna</label>
+              <select id="comuna" value={comuna} onChange={e => setComuna(e.target.value)} className="aw-select" disabled={!region}>
+                <option value="">{region ? 'Selecciona…' : 'Elige región primero'}</option>
+                {comunasByRegion(region).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section className="aw-card" style={sectionStyle}>
+          <h2 className="aw-h2">Términos de los portales</h2>
+          <label style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:14, color:'#A9B6C8', cursor:'pointer' }}>
+            <input type="checkbox" checked={acceptPortalTerms} onChange={e => setAcceptPortalTerms(e.target.checked)} style={{ marginTop:2 }} />
+            <span>
+              Autorizo a FITCV a marcar en mi nombre las casillas de aceptación de términos, condiciones y política de
+              privacidad de los formularios de postulación. Las casillas de publicidad o novedades nunca se marcan.
+            </span>
+          </label>
+          {acceptPortalTerms && acceptedAt && (
+            <p className="aw-dim" style={{ marginTop:8 }}>Autorizado el {new Date(acceptedAt).toLocaleString()}.</p>
+          )}
+        </section>
+
+        {error && <div className="aw-error">{error}</div>}
+        {message && <div className="aw-success">{message}</div>}
+
+        <button type="submit" disabled={saving} className="aw-btn-gold" style={{ alignSelf:'flex-start' }}>
+          {saving ? 'Guardando...' : 'Guardar mis respuestas'}
+        </button>
+      </form>
+
+      <section style={{ marginTop:32, paddingTop:24, borderTop:'1px solid rgba(255,255,255,.08)' }}>
+        <p className="aw-dim" style={{ textTransform:'uppercase', letterSpacing:'.06em', fontSize:11, marginBottom:12 }}>Zona de peligro</p>
+        <DeleteAccountButton onDeleted={() => router.push('/login')} />
+        <p className="aw-dim" style={{ marginTop:8 }}>
+          Tus datos son eliminados permanentemente. Ver{' '}
+          <a href="/privacy" style={{ color:'#6C7686', textDecoration:'underline' }}>política de privacidad</a>.
+        </p>
+      </section>
+    </AppShell>
   );
 }
 
@@ -378,30 +322,24 @@ function DeleteAccountButton({ onDeleted }: { onDeleted: () => void }) {
 
   if (!confirming) {
     return (
-      <button
-        onClick={() => setConfirming(true)}
-        className="text-sm text-red-600 underline hover:text-red-800"
-      >
+      <button onClick={() => setConfirming(true)} style={{ fontSize:13, color:'#FCA5A5', background:'none', border:'none', cursor:'pointer', textDecoration:'underline', padding:0 }}>
         Eliminar mi cuenta y todos mis datos
       </button>
     );
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm text-gray-700">¿Seguro? Esta acción no se puede deshacer.</span>
+    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+      <span className="aw-muted">¿Seguro? Esta acción no se puede deshacer.</span>
       <button
-        onClick={async () => {
-          setDeleting(true);
-          await apiClient.delete('/auth/me');
-          onDeleted();
-        }}
+        onClick={async () => { setDeleting(true); await apiClient.delete('/auth/me'); onDeleted(); }}
         disabled={deleting}
-        className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 disabled:opacity-50"
+        className="aw-btn-sm"
+        style={{ background:'rgba(248,113,113,.2)', color:'#FCA5A5', border:'1px solid rgba(248,113,113,.4)', borderRadius:7, padding:'5px 12px', cursor:'pointer', fontSize:13, fontWeight:600 }}
       >
         {deleting ? 'Eliminando…' : 'Sí, eliminar'}
       </button>
-      <button onClick={() => setConfirming(false)} className="text-sm text-gray-500 underline">
+      <button onClick={() => setConfirming(false)} style={{ fontSize:13, color:'#6C7686', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>
         Cancelar
       </button>
     </div>

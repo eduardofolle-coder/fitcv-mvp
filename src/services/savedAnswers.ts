@@ -9,6 +9,7 @@ import type { SavedAnswers } from './fieldClassifier.js';
 
 export interface AnswerPreferences extends SavedAnswers {
   autoSendLinkedIn: boolean;
+  allowDataAnalysis: boolean;
   acceptPortalTermsAt: string | null;
   /** Hora de Chile (0-23) del análisis diario de ofertas; null si no la eligió. */
   dailyAnalysisHour: number | null;
@@ -16,6 +17,7 @@ export interface AnswerPreferences extends SavedAnswers {
 
 const EMPTY: AnswerPreferences = {
   autoSendLinkedIn: false,
+  allowDataAnalysis: false,
   salaryMin: null,
   salaryMax: null,
   availability: null,
@@ -76,6 +78,7 @@ export async function loadAnswerPreferences(userId: string): Promise<AnswerPrefe
 
   return {
     autoSendLinkedIn: row.autoSendLinkedIn === true,
+    allowDataAnalysis: row.allowDataAnalysis === true,
     salaryMin: int(row.salaryMin),
     salaryMax: int(row.salaryMax),
     availability: row.availability ?? null,
@@ -169,6 +172,11 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.dailyAnalysisHour = value as number | null;
   }
 
+  if (has('allowDataAnalysis')) {
+    if (typeof body.allowDataAnalysis !== 'boolean') throw new AppError(400, 'allowDataAnalysis must be true or false.');
+    next.allowDataAnalysis = body.allowDataAnalysis;
+  }
+
   if (has('autoSendLinkedIn')) {
     if (typeof body.autoSendLinkedIn !== 'boolean') throw new AppError(400, 'autoSendLinkedIn must be true or false.');
     // LinkedIn prohíbe los plugins que automatizan actividad: activarlo es una
@@ -184,12 +192,13 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
 
   await db.query(`
     INSERT INTO apply_preferences (
-      userId, autoSendLinkedIn, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
+      userId, autoSendLinkedIn, allowDataAnalysis, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
       driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt,
       dailyAnalysisHour, updatedAt
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP)
     ON CONFLICT (userId) DO UPDATE SET
       autoSendLinkedIn = EXCLUDED.autoSendLinkedIn,
+      allowDataAnalysis = EXCLUDED.allowDataAnalysis,
       salaryMin = EXCLUDED.salaryMin,
       salaryMax = EXCLUDED.salaryMax,
       availability = EXCLUDED.availability,
@@ -210,6 +219,7 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
   `, [
     userId,
     next.autoSendLinkedIn,
+    next.allowDataAnalysis,
     next.salaryMin,
     next.salaryMax,
     next.availability,

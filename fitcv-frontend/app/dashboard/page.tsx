@@ -8,6 +8,7 @@ import { ExtensionCard } from './ExtensionCard';
 import { DailyAnalysisCard } from './DailyAnalysisCard';
 import { DiagnosisCard } from './DiagnosisCard';
 import { PlanCard } from './PlanCard';
+import AppShell from '@/app/components/AppShell';
 
 // Lo que devuelve GET /api/cv/profile tras el análisis del CV.
 interface CVProfile {
@@ -33,7 +34,7 @@ const SKILL_GROUP_LABELS: Record<string, string> = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<CVProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
@@ -62,7 +63,7 @@ export default function DashboardPage() {
   }, [user]);
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return <div className="aw-loading">Cargando...</div>;
   }
 
   if (!user) {
@@ -70,154 +71,71 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-3xl font-bold text-gray-900">FITCV Dashboard</h1>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">{user.email}</span>
-              <button
-                onClick={() => {
-                  logout();
-                  router.push('/login');
-                }}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded hover:bg-red-700"
-              >
-                Logout
+    <AppShell>
+      {!profileLoading && (
+        profile ? (
+          <section className="aw-card" style={{ marginBottom: 24 }}>
+            <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, marginBottom:16 }}>
+              <div>
+                <h2 className="aw-h2" style={{ marginBottom:2 }}>{profile.fullName || 'Tu perfil'}</h2>
+                {profile.yearsExperience !== null && (
+                  <p className="aw-muted">{profile.yearsExperience} años de experiencia</p>
+                )}
+              </div>
+              <button onClick={() => router.push('/cv')} className="aw-btn-outline aw-btn-sm">
+                Actualizar CV
               </button>
             </div>
-          </div>
 
-          {/* Navigation Menu */}
-          <nav className="flex space-x-4 border-t pt-4">
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded"
-            >
-              📊 Dashboard
-            </button>
-            <button
-              onClick={() => router.push('/cv')}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded"
-            >
-              📄 Upload CV
-            </button>
-            <button
-              onClick={() => router.push('/postulations')}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded"
-            >
-              📝 My Applications
-            </button>
-            <button
-              onClick={() => router.push('/offers')}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded"
-            >
-              💼 Ofertas
-            </button>
-            <button
-              onClick={() => router.push('/preferences')}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded"
-            >
-              ✍️ Mis respuestas
-            </button>
-          </nav>
-        </div>
-      </header>
+            {profile.summary && (
+              <p style={{ color:'#D1CCBF', fontSize:14, marginBottom:20 }}>{profile.summary}</p>
+            )}
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Perfil extraído del CV: es el resultado del análisis y hasta ahora
-            no se mostraba en ninguna pantalla. */}
-        {!profileLoading && (
-          profile ? (
-            <section className="bg-white rounded-lg shadow mb-8 p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {profile.fullName || 'Tu perfil'}
-                  </h2>
-                  {profile.yearsExperience !== null && (
-                    <p className="text-sm text-gray-600">
-                      {profile.yearsExperience} años de experiencia
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={() => router.push('/cv')}
-                  className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50"
-                >
-                  Actualizar CV
-                </button>
-              </div>
-
-              {profile.summary && (
-                <p className="text-gray-700 mb-5">{profile.summary}</p>
-              )}
-
-              {Object.entries(profile.skills || {})
-                .filter(([, list]) => Array.isArray(list) && list.length > 0)
-                .map(([group, list]) => (
-                  <div key={group} className="mb-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
-                      {SKILL_GROUP_LABELS[group] || group}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {list.map((skill) => (
-                        <span
-                          key={skill}
-                          className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-full text-sm"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-              {profile.education?.length > 0 && (
-                <div className="mt-5 pt-4 border-t border-gray-100">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                    Educación
+            {Object.entries(profile.skills || {})
+              .filter(([, list]) => Array.isArray(list) && list.length > 0)
+              .map(([group, list]) => (
+                <div key={group} style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:'#6C7686', marginBottom:8 }}>
+                    {SKILL_GROUP_LABELS[group] || group}
                   </p>
-                  {profile.education.map((ed, i) => (
-                    <p key={i} className="text-sm text-gray-700">
-                      {[ed.degree, ed.field].filter(Boolean).join(' — ')}
-                      {ed.institution ? `, ${ed.institution}` : ''}
-                      {ed.graduationDate ? ` (${ed.graduationDate})` : ''}
-                    </p>
-                  ))}
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                    {list.map((skill) => (
+                      <span key={skill} className="aw-pill aw-pill-blue">{skill}</span>
+                    ))}
+                  </div>
                 </div>
-              )}
-            </section>
-          ) : (
-            <section className="bg-white rounded-lg shadow mb-8 p-6 text-center">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">
-                Todavía no has subido tu CV
-              </h2>
-              <p className="text-gray-600 mb-4">
-                La IA lo analiza y construye tu perfil automáticamente.
-              </p>
-              <button
-                onClick={() => router.push('/cv')}
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
-              >
-                Subir mi CV
-              </button>
-            </section>
-          )
-        )}
+              ))}
 
-        <PlanCard />
+            {profile.education?.length > 0 && (
+              <div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(255,255,255,.08)' }}>
+                <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:'#6C7686', marginBottom:8 }}>
+                  Educación
+                </p>
+                {profile.education.map((ed, i) => (
+                  <p key={i} className="aw-muted">
+                    {[ed.degree, ed.field].filter(Boolean).join(' — ')}
+                    {ed.institution ? `, ${ed.institution}` : ''}
+                    {ed.graduationDate ? ` (${ed.graduationDate})` : ''}
+                  </p>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : (
+          <section className="aw-card" style={{ marginBottom:24, textAlign:'center' }}>
+            <h2 className="aw-h2">Todavía no has subido tu CV</h2>
+            <p className="aw-muted" style={{ marginBottom:16 }}>La IA lo analiza y construye tu perfil automáticamente.</p>
+            <button onClick={() => router.push('/cv')} className="aw-btn-gold">
+              Subir mi CV
+            </button>
+          </section>
+        )
+      )}
 
-        {profile && <DiagnosisCard />}
-
-        {profile && <DailyAnalysisCard />}
-
-        <ExtensionCard />
-
-      </main>
-    </div>
+      <PlanCard />
+      {profile && <DiagnosisCard />}
+      {profile && <DailyAnalysisCard />}
+      <ExtensionCard />
+    </AppShell>
   );
 }

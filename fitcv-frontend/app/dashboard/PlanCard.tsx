@@ -20,9 +20,9 @@ interface PlanState {
 
 const PLAN_LABELS = { free: 'Free', pro: 'Pro', max: 'Max' };
 const PLAN_COLORS = {
-  free: 'bg-gray-100 text-gray-800',
-  pro: 'bg-blue-100 text-blue-800',
-  max: 'bg-purple-100 text-purple-800',
+  free: 'aw-pill aw-pill-gray',
+  pro: 'aw-pill aw-pill-blue',
+  max: 'aw-pill aw-pill-purple',
 };
 
 const clp = (n: number) => `$${n.toLocaleString('es-CL')}`;
@@ -63,33 +63,32 @@ export function PlanCard() {
   };
 
   return (
-    <section className="bg-white rounded-lg shadow mb-8 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Tu plan</h2>
-        <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${PLAN_COLORS[state.plan]}`}>
-          {PLAN_LABELS[state.plan]}
-        </span>
+    <section className="aw-card" style={{ marginBottom: 24 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+        <h2 className="aw-h2" style={{ margin:0 }}>Tu plan</h2>
+        <span className={PLAN_COLORS[state.plan]}>{PLAN_LABELS[state.plan]}</span>
       </div>
 
-      {/* Barra de cuota */}
-      <div className="mb-3">
-        <div className="flex justify-between text-sm text-gray-600 mb-1">
+      <div style={{ marginBottom:12 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:'#A9B6C8', marginBottom:6 }}>
           <span>Postulaciones {isLifetime ? 'vitalicias' : 'este mes'}</span>
-          <span className="font-medium">
+          <span style={{ fontWeight:600, color:'#F4F1E9' }}>
             {state.quotaUsed} / {state.effectiveTotal}
             {state.overageQuota > 0 && (
-              <span className="text-xs text-amber-600 ml-1">(+{state.overageQuota} recarga)</span>
+              <span style={{ fontSize:11, color:'#E1A526', marginLeft:4 }}>(+{state.overageQuota} recarga)</span>
             )}
           </span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          {/* Segmento base */}
+        <div style={{ width:'100%', background:'rgba(255,255,255,.1)', borderRadius:4, height:6 }}>
           <div
-            className={`h-2 rounded-full transition-all ${pct >= 90 ? 'bg-red-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-            style={{ width: `${Math.min(pct, 100)}%` }}
+            style={{
+              height:6, borderRadius:4, transition:'width .3s',
+              background: pct >= 90 ? '#FCA5A5' : pct >= 60 ? '#E1A526' : '#E1A526',
+              width: `${Math.min(pct, 100)}%`,
+            }}
           />
         </div>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="aw-dim" style={{ marginTop:4 }}>
           {state.quotaRemaining} disponibles
           {!isLifetime && state.quotaResetAt
             ? ` · se renueva el ${new Date(state.quotaResetAt).toLocaleDateString('es-CL')}`
@@ -97,45 +96,33 @@ export function PlanCard() {
         </p>
       </div>
 
-      {/* Daily / runCap para planes pagos */}
       {state.plan !== 'free' && (
-        <div className="text-xs text-gray-500 flex gap-4 mb-4">
+        <div className="aw-dim" style={{ display:'flex', gap:16, marginBottom:16 }}>
           <span>Hoy: {state.dailyUsed} / {state.dailyUsed + state.dailyRemaining}</span>
           <span>Por corrida: máx {state.runCap}</span>
         </div>
       )}
 
-      {/* Recarga */}
       {state.overageAvailable && mainExhausted && (
-        <div className="border border-amber-200 rounded-lg p-4 bg-amber-50">
-          <p className="text-sm font-medium text-amber-900 mb-1">
-            Agotaste tus postulaciones de este mes
-          </p>
-          <p className="text-sm text-amber-800 mb-3">
+        <div className="aw-warning" style={{ marginTop:8 }}>
+          <p style={{ fontWeight:600, marginBottom:4 }}>Agotaste tus postulaciones de este mes</p>
+          <p style={{ marginBottom:12 }}>
             Agrega una recarga para seguir postulando antes de que se renueve tu plan.
-            {state.overagePriceCLP && (
-              <> Precio: <strong>{clp(state.overagePriceCLP)}</strong>.</>
-            )}
+            {state.overagePriceCLP && <> Precio: <strong>{clp(state.overagePriceCLP)}</strong>.</>}
           </p>
           {topupMsg ? (
-            <p className="text-sm text-green-700">{topupMsg}</p>
+            <p style={{ color:'#6EE7B7' }}>{topupMsg}</p>
           ) : (
-            <button
-              onClick={handleTopup}
-              disabled={topping}
-              className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50"
-            >
+            <button onClick={handleTopup} disabled={topping} className="aw-btn-gold aw-btn-sm">
               {topping ? 'Procesando...' : 'Comprar recarga'}
             </button>
           )}
         </div>
       )}
 
-      {/* CTA upgrade para Free */}
       {state.plan === 'free' && state.quotaRemaining === 0 && (
-        <p className="text-sm text-amber-700 bg-amber-50 rounded p-3 mt-2">
-          Has usado tus 5 postulaciones gratuitas. Pasa a Pro para postular
-          automáticamente a 150 ofertas al mes.
+        <p className="aw-warning" style={{ marginTop:8 }}>
+          Has usado tus 5 postulaciones gratuitas. Pasa a Pro para postular automáticamente a 150 ofertas al mes.
         </p>
       )}
     </section>
