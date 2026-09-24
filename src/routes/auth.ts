@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import { AuthService } from '../services/auth.js';
 import { AuditLogger } from '../services/logger.js';
+import { db } from '../db/client.js';
 import { validateRequest, schemas } from '../middleware/validation.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import rateLimit from 'express-rate-limit';
 import Joi from 'joi';
 import { requestPasswordReset, resetPassword } from '../services/passwordReset.js';
+import passport from 'passport';
+import { issueTokensForUser } from '../services/googleAuth.js';
+import { env } from '../env.js';
 
 const router = Router();
 
@@ -250,6 +254,34 @@ router.post(
   })
 );
 
+// DELETE /api/auth/me — elimina todos los datos del usuario (Ley 19.628)
+router.delete(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: any) => {
+    if (!req.user) throw new AppError(401, 'Unauthorized');
+    const userId = req.user.id;
+
+    // Borrar en cascada: datos personales, postulaciones, preferencias, tokens
+    await db.query('DELETE FROM apply_preferences WHERE userId = $1', [userId]);
+    await db.query('DELETE FROM postulations WHERE userId = $1', [userId]);
+    await db.query('DELETE FROM cv_profiles WHERE userId = $1', [userId]);
+    await db.query('DELETE FROM plan_usage WHERE userId = $1', [userId]);
+    await db.query('DELETE FROM refresh_tokens WHERE userId = $1', [userId]);
+    await db.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    await AuditLogger.logSecurityEvent({
+      eventType: 'ACCOUNT_DELETED',
+      userId,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    });
+
+    res.clearCookie('refreshToken');
+    res.json({ message: 'Cuenta y datos eliminados.' });
+  })
+);
+
 // POST /api/auth/logout
 router.post(
   '/logout',
@@ -269,6 +301,34 @@ router.post(
 
     res.clearCookie('refreshToken');
     res.json({message: 'Logged out successfully'});
+  })
+);
+
+// GET /api/auth/google
+router.get(
+  '/google',
+  passport.authenticate('google', { scope: ['profile', 'email'], session: false })
+);
+
+// GET /api/auth/google/callback
+router.get(
+  '/google/callback',
+  passport.authenticate('google', { session: false, failureRedirect: `${env.APP_URL}/login?error=google_failed` }),
+  asyncHandler(async (req: any, res: any) => {
+    const user = req.user as { id: string; email: string };
+    const { accessToken, refreshToken } = issueTokensForUser(user.id);
+
+    await AuthService.storeRefreshToken(user.id, refreshToken, req.ip || 'unknown', req.get('User-Agent') || 'unknown');
+    await AuditLogger.logSecurityEvent({ eventType: 'LOGIN', userId: user.id, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.redirect(`${env.APP_URL}/auth/callback?token=${encodeURIComponent(accessToken)}`);
   })
 );
 

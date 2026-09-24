@@ -19,7 +19,20 @@ export const env = {
   CLAUDE_MODEL: process.env.CLAUDE_MODEL || 'claude-sonnet-5',
   CLAUDE_ORCHESTRATOR_MODEL: process.env.CLAUDE_ORCHESTRATOR_MODEL || 'claude-opus-5',
   CLAUDE_TIMEOUT_MS: parseInt(process.env.CLAUDE_TIMEOUT_MS || '120000'),
+
+  // Proveedor primario (Gemini, OpenAI-shape)
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+  GEMINI_API_URL: process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+
+  // Proveedor fallback (DeepSeek, OpenAI-shape)
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
+  DEEPSEEK_API_URL: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions',
+  DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+
+  // MercadoPago — pagos de planes y recargas
+  MP_ACCESS_TOKEN: process.env.MP_ACCESS_TOKEN || '',
+  MP_WEBHOOK_SECRET: process.env.MP_WEBHOOK_SECRET || '',
 
   ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS || 'http://localhost:3001').split(','),
 
@@ -28,6 +41,10 @@ export const env = {
   OFFER_SYNC_MINUTES: parseInt(process.env.OFFER_SYNC_MINUTES || process.env.GETONBRD_SYNC_MINUTES || '0'),
 
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+
+  // Google OAuth
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
 
   // Dirección pública de la web: arma los enlaces de los correos.
   APP_URL: process.env.APP_URL || 'http://localhost:3001',
@@ -53,7 +70,7 @@ export const env = {
 } as const;
 
 // Validation
-const requiredVars = ['CLAUDE_API_KEY'];
+const requiredVars = ['GEMINI_API_KEY'];
 const missing = requiredVars.filter(v => !process.env[v]);
 if (missing.length > 0 && env.NODE_ENV === 'production') {
   throw new Error(`Missing required env vars: ${missing.join(', ')}`);
@@ -97,13 +114,13 @@ if (env.NODE_ENV === 'production') {
 // Una key con forma de placeholder falla recién al primer análisis de CV, que
 // es tarde y confuso. Se avisa al arrancar.
 const keyLooksUnusable =
-  !env.CLAUDE_API_KEY ||
-  env.CLAUDE_API_KEY.length < 50 ||
-  /your|xxx|placeholder|here|changeme/i.test(env.CLAUDE_API_KEY);
+  !env.GEMINI_API_KEY ||
+  env.GEMINI_API_KEY.length < 30 ||
+  /your|xxx|placeholder|here|changeme/i.test(env.GEMINI_API_KEY);
 
 if (keyLooksUnusable) {
   const message =
-    'CLAUDE_API_KEY does not look like a usable key. CV analysis, ranking and CV adaptation will fail until it is set.';
+    'GEMINI_API_KEY does not look like a usable key. CV analysis, ranking and CV adaptation will fail until it is set.';
   if (env.NODE_ENV === 'production') {
     throw new Error(message);
   }

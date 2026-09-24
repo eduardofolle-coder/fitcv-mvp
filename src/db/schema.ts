@@ -433,6 +433,8 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS matchScore DOUBLE PRECISION;
     ALTER TABLE plan_usage ADD COLUMN IF NOT EXISTS overageQuota INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS googleId TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(googleId) WHERE googleId IS NOT NULL;
   `);
 
   console.log('✅ Database schema initialized');

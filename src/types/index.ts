@@ -1,3 +1,13 @@
+// Augmentation for passport — aligns Express.Request.user with AuthenticatedRequest.user
+declare global {
+  namespace Express {
+    interface User {
+      id: string;
+      email: string;
+    }
+  }
+}
+
 // Users
 export interface User {
   id: string;

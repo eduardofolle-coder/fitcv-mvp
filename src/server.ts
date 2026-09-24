@@ -25,6 +25,8 @@ import notificationsRoutes from './routes/notifications.js';
 import plansRoutes from './routes/plans.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
+import passport from 'passport';
+import { initGoogleAuth } from './services/googleAuth.js';
 
 // Lo primero: si algo falla durante el arranque, queremos que quede reportado.
 initErrorTracking();
@@ -65,6 +67,8 @@ app.use(helmet());
 app.use(express.json({limit: '10mb'}));
 app.use(express.urlencoded({limit: '10mb', extended: true}));
 app.use(cookieParser());
+initGoogleAuth();
+app.use(passport.initialize());
 
 // ✅ Root endpoint
 app.get('/', (req, res) => {

@@ -59,24 +59,16 @@ export interface AgentInvocation {
   costTokens?: number;
 }
 
-interface ClaudeAPIRequest {
-  model: string;
+interface AiRequestBody {
   max_tokens: number;
-  messages: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-  }>;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
-interface ClaudeAPIResponse {
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-  };
+interface NormalizedAiResponse {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  stopReason?: string;
 }
 
 // Agent configurations
@@ -84,15 +76,15 @@ interface ClaudeAPIResponse {
 // fueron retirados y la API respondía "model: ..." aunque la clave fuera
 // válida. Se dejan configurables por entorno para que la próxima rotación sea
 // una variable y no un redespliegue.
-const DEFAULT_MODEL = env.CLAUDE_MODEL;
-const ORCHESTRATOR_MODEL = env.CLAUDE_ORCHESTRATOR_MODEL;
+const DEFAULT_MODEL = env.GEMINI_MODEL;
+const ORCHESTRATOR_MODEL = env.GEMINI_MODEL;
 
 // Los límites anteriores (1500-3000) eran menores que el JSON que los propios
 // prompts exigen: la respuesta se cortaba a mitad y llegaba como "no se pudo
 // parsear". El analizador debe emitir perfil, experiencia, educación, skills,
 // idiomas, certificaciones, calidad, gaps y recomendaciones; el adaptador
 // devuelve un CV completo dentro del JSON.
-const AGENT_CONFIG: Record<AgentName, { model: string; maxTokens: number }> = {
+export const AGENT_CONFIG: Record<AgentName, { model: string; maxTokens: number }> = {
   'cv-analyzer': { model: DEFAULT_MODEL, maxTokens: 8000 },
   'postulation-matcher': { model: DEFAULT_MODEL, maxTokens: 4000 },
   'cv-adapter': { model: DEFAULT_MODEL, maxTokens: 16000 },
@@ -105,50 +97,61 @@ const AGENT_CONFIG: Record<AgentName, { model: string; maxTokens: number }> = {
 };
 
 export class AgentInvokerService {
-  private static apiKey = env.CLAUDE_API_KEY;
-  // Configurable para poder apuntar a un gateway propio, y para que los tests
-  // ejerciten el flujo completo contra un upstream simulado.
-  private static apiUrl = env.CLAUDE_API_URL;
-
-  // Reintentos ante fallos transitorios del proveedor de IA. A escala (muchos
-  // usuarios postulando a la vez) el proveedor devuelve 429; un timeout o un 5xx
-  // también son recuperables reintentando. Un 4xx (salvo 429) no se reintenta.
+  // Reintentos ante fallos transitorios del proveedor primario. Un 4xx (salvo
+  // 429) no se reintenta; al agotar reintentos se intenta el fallback una vez.
   private static readonly MAX_RETRIES = 3;
 
-  private static async postWithRetry(body: ClaudeAPIRequest): Promise<{ data: ClaudeAPIResponse }> {
+  private static async postWithRetry(body: AiRequestBody, model: string): Promise<NormalizedAiResponse> {
     let lastError: unknown;
+
+    // Proveedor primario: Gemini (OpenAI shape, Bearer token)
     for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
       try {
-        return await axios.post<ClaudeAPIResponse>(this.apiUrl, body, {
-          headers: { 'x-api-key': this.apiKey, 'anthropic-version': '2023-06-01' },
-          // Rankear ofertas o reescribir un CV completo tarda; sin holgura el
-          // usuario recibía un timeout en vez de su resultado.
-          timeout: env.CLAUDE_TIMEOUT_MS,
-        });
+        const res = await axios.post(
+          env.GEMINI_API_URL,
+          { ...body, model },
+          { headers: { Authorization: `Bearer ${env.GEMINI_API_KEY}` }, timeout: env.CLAUDE_TIMEOUT_MS },
+        );
+        return {
+          text: res.data.choices?.[0]?.message?.content ?? '',
+          inputTokens: res.data.usage?.prompt_tokens ?? 0,
+          outputTokens: res.data.usage?.completion_tokens ?? 0,
+          stopReason: res.data.choices?.[0]?.finish_reason,
+        };
       } catch (error) {
         lastError = error;
-        const status = (error as { response?: { status?: number } })?.response?.status;
-        const timedOut = (error as { code?: string })?.code === 'ECONNABORTED';
+        const status = (error as any)?.response?.status;
+        const timedOut = (error as any)?.code === 'ECONNABORTED';
         const retryable = status === 429 || (typeof status === 'number' && status >= 500) || timedOut;
-        if (!retryable || attempt === this.MAX_RETRIES) throw error;
+        if (!retryable || attempt === this.MAX_RETRIES) break;
 
-        // Respeta Retry-After si el proveedor lo manda; si no, backoff
-        // exponencial con jitter (~1.5s, 3s, 6s) para no golpear en sincronía.
-        const retryAfter = Number(
-          (error as { response?: { headers?: Record<string, string> } })?.response?.headers?.['retry-after']
-        );
+        const retryAfter = Number((error as any)?.response?.headers?.['retry-after']);
         const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
           ? retryAfter * 1000
           : Math.round(2 ** attempt * 1500 + Math.random() * 800);
-        logger.warn('AI call retry', {
-          attempt: attempt + 1,
-          reason: status ?? (timedOut ? 'timeout' : 'error'),
-          waitMs,
-        });
+        logger.warn('AI call retry', { attempt: attempt + 1, provider: 'gemini', reason: status ?? (timedOut ? 'timeout' : 'error'), waitMs });
         await new Promise(resolve => setTimeout(resolve, waitMs));
       }
     }
-    throw lastError;
+
+    // Fallback: DeepSeek (OpenAI shape, Bearer token) — un solo intento
+    logger.warn('Gemini agotó reintentos, usando DeepSeek como fallback');
+    try {
+      const res = await axios.post(
+        env.DEEPSEEK_API_URL,
+        { ...body, model: env.DEEPSEEK_MODEL },
+        { headers: { Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` }, timeout: env.CLAUDE_TIMEOUT_MS },
+      );
+      return {
+        text: res.data.choices?.[0]?.message?.content ?? '',
+        inputTokens: res.data.usage?.prompt_tokens ?? 0,
+        outputTokens: res.data.usage?.completion_tokens ?? 0,
+        stopReason: res.data.choices?.[0]?.finish_reason,
+      };
+    } catch (fallbackError) {
+      logger.error('Gemini y DeepSeek fallaron; sin proveedor disponible');
+      throw fallbackError;
+    }
   }
 
   /**
@@ -169,8 +172,8 @@ export class AgentInvokerService {
 
     try {
       // Validate API key
-      if (!this.apiKey) {
-        throw new Error('CLAUDE_API_KEY not configured');
+      if (!env.GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY not configured');
       }
 
       // Get agent config
@@ -185,51 +188,32 @@ export class AgentInvokerService {
       // Call Claude API
       logger.info(`Invoking agent: ${agentName}`, { userId, agentName });
 
-      const response = await withAiSlot(() => this.postWithRetry({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        messages: [{ role: 'user', content: prompt }],
-      }));
+      const response = await withAiSlot(() => this.postWithRetry(
+        { max_tokens: config.maxTokens, messages: [{ role: 'user', content: prompt }] },
+        config.model,
+      ));
 
-      // La respuesta trae una lista de bloques y no todos son texto: los
-      // modelos actuales pueden anteponer otros tipos. Tomar content[0].text a
-      // ciegas devolvía undefined y el fallo aparecía como "no se pudo parsear"
-      // sin ninguna pista de que el texto ni siquiera se había extraído.
-      const blocks = Array.isArray(response.data.content) ? response.data.content : [];
-      const responseText = blocks
-        .filter(b => b?.type === 'text' && typeof b.text === 'string')
-        .map(b => b.text)
-        .join('\n')
-        .trim();
+      const responseText = response.text.trim();
 
       if (!responseText) {
-        logger.error(`Agent response had no text block: ${agentName}`, {
-          userId,
-          agentName,
-          blockTypes: blocks.map(b => b?.type),
-        });
+        logger.error(`Agent response returned empty text: ${agentName}`, { userId, agentName });
       }
 
       const output = this.parseOutput(responseText);
 
       invocation.success = output.success !== false;
       invocation.output = output;
-      invocation.costTokens = (response.data.usage?.input_tokens || 0) + (response.data.usage?.output_tokens || 0);
+      invocation.costTokens = response.inputTokens + response.outputTokens;
 
       if (invocation.success) {
         logger.info(`Agent invocation successful: ${agentName}`, {
           userId,
           agentName,
           tokens: invocation.costTokens,
-          stopReason: (response.data as any).stop_reason,
+          stopReason: response.stopReason,
         });
       } else {
-        // Antes se registraba "successful" igual, porque solo se miraba si la
-        // llamada HTTP había ido bien. Un modelo que devuelve algo ilegible
-        // quedaba indistinguible de uno que funcionó.
-        // Un JSON cortado a la mitad no es lo mismo que un modelo que no supo
-        // responder, y "no se pudo parsear" los confunde.
-        const truncated = (response.data as any).stop_reason === 'max_tokens';
+        const truncated = response.stopReason === 'length';
         invocation.error = truncated
           ? `The AI response was cut off at the ${config.maxTokens} token limit before it finished.`
           : String(output.error || 'Agent returned success: false');
@@ -237,10 +221,8 @@ export class AgentInvokerService {
           userId,
           agentName,
           reason: invocation.error,
-          // stop_reason === 'max_tokens' delata una respuesta truncada, que es
-          // la causa habitual de un JSON que no parsea.
-          stopReason: (response.data as any).stop_reason,
-          outputTokens: response.data.usage?.output_tokens,
+          stopReason: response.stopReason,
+          outputTokens: response.outputTokens,
           rawResponse: String(output.rawResponse || '').slice(0, 400),
         });
       }
@@ -275,7 +257,7 @@ export class AgentInvokerService {
     const upstream = (error as any)?.response?.data?.error?.message;
 
     if (status === 401 || status === 403) {
-      return 'AI service rejected the credentials (CLAUDE_API_KEY is missing, invalid or expired).';
+      return 'AI service rejected the credentials (GEMINI_API_KEY is missing, invalid or expired).';
     }
     if (status === 429) {
       return 'AI service rate limit reached. Please retry in a moment.';
@@ -293,7 +275,7 @@ export class AgentInvokerService {
   /**
    * Build prompt for agent based on input
    */
-  private static buildPrompt(agentName: AgentName, input: Record<string, any>): string {
+  static buildPrompt(agentName: AgentName, input: Record<string, any>): string {
     const inputJson = JSON.stringify(input, null, 2);
 
     const prompts: Record<AgentName, string> = {
@@ -386,8 +368,8 @@ ${inputJson}
 "hardData" is the candidate's verified record. Each experience has an "id" and a zero-based list "details" with the original wording from the CV. "job" is the offer.
 
 Produce:
-- headline: one line positioning the candidate toward this role, using only facts present in hardData.
-- summary: 2 to 4 sentences telling the candidate's real story as it matters to this offer.
+- headline: one line positioning the candidate toward this role. Must open with the exact title from hardData.experience[0].title — do not rephrase, abbreviate or translate it. After the title you may add context using only facts present in hardData (technologies, domain, achievements). Example pattern: "<exact title> — <fact from hardData>".
+- summary: 2 to 4 sentences telling the candidate's real story as it matters to this offer. Every noun, verb and qualifier must trace back to a literal entry in hardData. Do not use evaluative adjectives ("strong", "specialized", "focused on") unless the original wording uses them.
 - highlights: for each experience id you want to reshape, the details worth emphasizing, in the order that best serves the offer. Each item restates ONE detail, referenced by its "sourceIndex". You may change emphasis, wording and framing. You may not add facts, technologies, scope, team sizes, metrics or results that the detail does not state.
 - skillsFirst: skills from hardData.skills to list first because the offer values them. Only exact entries from that list.
 - language: "es" or "en", whichever language the job description is written in.
@@ -396,7 +378,8 @@ Produce:
 - keywordMatches: offer keywords the candidate genuinely has.
 
 Hard rules:
-- Never write company names, job titles, dates, durations, institutions or degrees anywhere in your output. FITCV inserts them.
+- Never write company names, dates, durations, institutions or degrees anywhere in your output. FITCV inserts them.
+- The headline MUST start with the exact title from hardData.experience[0].title. Never replace it with a different job title, role label, or function name — not even a synonym ("Backend Engineer" when the title is "Desarrollador Full Stack" is forbidden).
 - Never state a number of years of experience, or any other figure, that is not literally present in hardData.
 - If the offer asks for something the candidate does not have, do not claim it. Emphasize real, transferable experience instead.
 - Never mention in headline, summary or highlights what the candidate lacks. The CV goes to the employer; gaps belong only in the rationale, which only the candidate sees.

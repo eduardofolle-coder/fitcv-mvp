@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api-client';
+import { NATIONALITIES, REGIONES, comunasByRegion } from '@/lib/chile';
 
 // Lo que devuelve y acepta /api/applications/preferences.
 interface Preferences {
@@ -287,7 +288,10 @@ export default function PreferencesPage() {
                 <label htmlFor="nationality" className={label}>
                   Nacionalidad
                 </label>
-                <input id="nationality" value={nationality} onChange={e => setNationality(e.target.value)} placeholder="Chilena" className={input} />
+                <select id="nationality" value={nationality} onChange={e => setNationality(e.target.value)} className={input}>
+                  <option value="">Selecciona…</option>
+                  {NATIONALITIES.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="address" className={label}>
@@ -296,16 +300,22 @@ export default function PreferencesPage() {
                 <input id="address" value={address} onChange={e => setAddress(e.target.value)} className={input} />
               </div>
               <div>
-                <label htmlFor="comuna" className={label}>
-                  Comuna
-                </label>
-                <input id="comuna" value={comuna} onChange={e => setComuna(e.target.value)} className={input} />
-              </div>
-              <div>
                 <label htmlFor="region" className={label}>
                   Región
                 </label>
-                <input id="region" value={region} onChange={e => setRegion(e.target.value)} className={input} />
+                <select id="region" value={region} onChange={e => { setRegion(e.target.value); setComuna(''); }} className={input}>
+                  <option value="">Selecciona…</option>
+                  {REGIONES.map(r => <option key={r.nombre} value={r.nombre}>{r.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="comuna" className={label}>
+                  Comuna
+                </label>
+                <select id="comuna" value={comuna} onChange={e => setComuna(e.target.value)} className={input} disabled={!region}>
+                  <option value="">{region ? 'Selecciona…' : 'Elige región primero'}</option>
+                  {comunasByRegion(region).map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
             </div>
           </section>
@@ -348,7 +358,52 @@ export default function PreferencesPage() {
             {saving ? 'Guardando...' : 'Guardar mis respuestas'}
           </button>
         </form>
+
+        <section className="mt-8 border-t pt-6">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Zona de peligro</h2>
+          <DeleteAccountButton onDeleted={() => router.push('/login')} />
+          <p className="mt-2 text-xs text-gray-400">
+            Tus datos son eliminados permanentemente. Ver{' '}
+            <a href="/privacy" className="underline">política de privacidad</a>.
+          </p>
+        </section>
       </div>
+    </div>
+  );
+}
+
+function DeleteAccountButton({ onDeleted }: { onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        className="text-sm text-red-600 underline hover:text-red-800"
+      >
+        Eliminar mi cuenta y todos mis datos
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-sm text-gray-700">¿Seguro? Esta acción no se puede deshacer.</span>
+      <button
+        onClick={async () => {
+          setDeleting(true);
+          await apiClient.delete('/auth/me');
+          onDeleted();
+        }}
+        disabled={deleting}
+        className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 disabled:opacity-50"
+      >
+        {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+      </button>
+      <button onClick={() => setConfirming(false)} className="text-sm text-gray-500 underline">
+        Cancelar
+      </button>
     </div>
   );
 }
