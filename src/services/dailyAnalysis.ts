@@ -13,6 +13,7 @@ import { logger } from './logger.js';
 import { createNotification } from './notifications.js';
 import type { MatchTier } from './offerMatching.js';
 import { countByTier, rankOffersForProfile, type RankedOffer, type TierCounts } from './profileOffers.js';
+import { runAutoPostulate } from './autoPostulate.js';
 
 export const ANALYSIS_TIME_ZONE = 'America/Santiago';
 
@@ -147,6 +148,17 @@ export async function runOfferAnalysis(
   if (options.scheduled) {
     await db.query('UPDATE apply_preferences SET lastAnalysisDate = $1 WHERE userId = $2', [clock.date, userId]);
   }
+
+  // Lanza auto-postulaciones basadas en el matching cacheado.
+  // Errores no deben cortar el análisis: el digest ya está guardado.
+  runAutoPostulate(userId).then(result => {
+    if (result.autoQueued > 0 || result.suggested > 0) {
+      logger.info('Auto-postulate completed', { userId, ...result });
+    }
+  }).catch(err => {
+    logger.error('Auto-postulate failed', { userId, err: String(err) });
+  });
+
   return digest;
 }
 

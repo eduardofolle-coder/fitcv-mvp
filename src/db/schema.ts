@@ -417,5 +417,22 @@ export async function initializeSchema(): Promise<void> {
   // en background). Si hace falta, se crea una vez con CREATE INDEX CONCURRENTLY
   // fuera del arranque.
 
+  // Planes y cuotas de auto-postulación
+  await db.exec(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+
+    CREATE TABLE IF NOT EXISTS plan_usage (
+      userId TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      quotaUsed INTEGER NOT NULL DEFAULT 0,
+      quotaResetAt TIMESTAMPTZ,
+      dailyUsed INTEGER NOT NULL DEFAULT 0,
+      dailyDate TEXT,
+      updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS matchScore DOUBLE PRECISION;
+  `);
+
   console.log('✅ Database schema initialized');
 }

@@ -22,6 +22,7 @@ import { backfillOfferSearch, startOfferSync } from './services/offerSync.js';
 import { startDailyAnalysis } from './services/dailyAnalysis.js';
 import { startWatchdog, getHealthReport } from './services/watchdog.js';
 import notificationsRoutes from './routes/notifications.js';
+import plansRoutes from './routes/plans.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 
@@ -113,6 +114,7 @@ app.use('/api/learning', learningRoutes); // Continuous learning routes
 app.use('/api/applications', applicationsRoutes);
 app.use('/api/extension', extensionRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/plans', plansRoutes);
 
 // ✅ 404 handler
 app.use((req, res) => {
