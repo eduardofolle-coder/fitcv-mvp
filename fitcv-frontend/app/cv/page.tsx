@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
@@ -56,6 +56,13 @@ export default function CVUploadPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [plan, setPlan] = useState<string>('free');
+
+  useEffect(() => {
+    apiClient.get<{ plan: string }>('/plans/me').then(res => {
+      if (res.success && res.data?.plan) setPlan(res.data.plan);
+    });
+  }, []);
 
   if (authLoading) {
     return <div className="aw-loading">Cargando...</div>;
@@ -173,7 +180,16 @@ export default function CVUploadPage() {
               <li>1. La IA extrae tus habilidades y experiencia</li>
               <li>2. Se construye tu perfil automáticamente</li>
               <li>3. Ves las ofertas más afines a tu CV</li>
-              <li>4. Adaptas el CV a cada oportunidad</li>
+              {plan === 'free' ? (
+                <li style={{ color:'#A9B6C8' }}>
+                  4. Postulás con tu CV original —{' '}
+                  <a href="/upgrade" style={{ color:'#E1A526', textDecoration:'underline' }}>
+                    la adaptación automática es función Pro
+                  </a>
+                </li>
+              ) : (
+                <li>4. El CV se adapta automáticamente a cada oferta</li>
+              )}
             </ol>
           </div>
         </div>

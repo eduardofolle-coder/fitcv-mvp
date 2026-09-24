@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { apiClient } from '@/lib/api-client';
 import { ReactNode } from 'react';
 
 const NAV = [
@@ -16,6 +17,12 @@ const NAV = [
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await apiClient.post('/auth/logout', {});
+    logout();
+    window.location.href = '/login';
+  };
 
   return (
     <>
@@ -184,7 +191,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               ))}
             </nav>
             {user?.email && <span className="aw-user">{user.email}</span>}
-            <button className="aw-logout" onClick={logout}>Salir</button>
+            <button className="aw-logout" onClick={() => void handleLogout()}>Salir</button>
           </div>
         </header>
 
