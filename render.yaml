@@ -89,6 +89,18 @@ services:
       # WhatsApp del admin para alertas del watchdog (opcional; vacío = solo Sentry).
       - key: ADMIN_WHATSAPP
         sync: false
+      # Google OAuth — obtén en console.cloud.google.com/apis/credentials
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Gemini — obtén en aistudio.google.com/apikey
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_API_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash-lite
 
   # Worker: corre el trabajo de fondo (crawling de portales, análisis diario,
   # watchdog y el recompute del matching) en un proceso APARTE del que atiende a
