@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api-client';
 import { ExtensionCard } from './ExtensionCard';
 import { DailyAnalysisCard } from './DailyAnalysisCard';
 import { DiagnosisCard } from './DiagnosisCard';
+import { PlanCard } from './PlanCard';
 
 // Lo que devuelve GET /api/cv/profile tras el análisis del CV.
 interface CVProfile {
@@ -207,6 +208,8 @@ export default function DashboardPage() {
             </section>
           )
         )}
+
+        <PlanCard />
 
         {profile && <DiagnosisCard />}
 

@@ -76,13 +76,16 @@ router.get(
   '/',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const { page = 1, limit = 20, estado, prioridad } = req.query;
+    const { page = 1, limit = 20, estado, prioridad, source } = req.query;
 
-    // Los filtros son opcionales, así que el número de parámetros varía y los
-    // $n se numeran sobre la marcha en vez de estar fijos en el texto.
     const params: any[] = [req.user.id];
     let query = `
-      SELECT p.id, p.userId, p.offerId, p.estado, p.prioridad, p.notes, p.cvAdaptedId, p.postulationWeight, p.postuladoAt, p.createdAt, p.updatedAt, p.applyStatus, p.applyReason, p.applyDetail, o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location, o.source
+      SELECT p.id, p.userId, p.offerId, p.estado, p.prioridad, p.notes, p.cvAdaptedId,
+             p.postulationWeight, p.postuladoAt, p.createdAt, p.updatedAt,
+             p.applyStatus, p.applyReason, p.applyDetail,
+             p.source AS postulationSource, p.matchScore,
+             o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location,
+             o.source AS offerSource
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
       WHERE p.userId = $1
@@ -96,6 +99,11 @@ router.get(
     if (prioridad) {
       params.push(prioridad);
       query += ` AND p.prioridad = $${params.length}`;
+    }
+
+    if (source) {
+      params.push(source);
+      query += ` AND p.source = $${params.length}`;
     }
 
     const limitNum = Math.min(Number(limit) || 20, 100);
@@ -134,7 +142,8 @@ router.get(
     const { id } = req.params;
 
     const postulation = await db.queryOne<any>(`
-      SELECT p.*, o.title, o.company, o.level, o.description, o.requirements, o.source, o.url
+      SELECT p.*, o.title, o.company, o.level, o.description, o.requirements, o.url,
+             o.source AS offerSource, p.source AS postulationSource
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
       WHERE p.id = $1 AND p.userId = $2
@@ -268,6 +277,27 @@ router.post(
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
     const result = await declineApplication(req.params.id, req.user.id);
+    res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// POST /api/postulations/:id/approve-suggested - El usuario aprueba una sugerida (la pone en cola)
+router.post(
+  '/:id/approve-suggested',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+    const row = await db.queryOne<{ source: string }>(
+      'SELECT source FROM postulations WHERE id = $1 AND userId = $2',
+      [id, req.user.id]
+    );
+    if (!row) throw new AppError(404, 'Postulation not found');
+    if (row.source !== 'suggested') throw new AppError(409, 'Only suggested postulations can be approved this way');
+    await db.query(
+      'UPDATE postulations SET source = $1, updatedAt = CURRENT_TIMESTAMP WHERE id = $2 AND userId = $3',
+      ['manual', id, req.user.id]
+    );
+    const result = await queueApplication(id, req.user.id);
     res.json({ success: true, data: { applyStatus: result.to } });
   })
 );

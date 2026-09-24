@@ -30,6 +30,8 @@ interface Postulation {
   createdAt: string;
   notes?: string | null;
   applyStatus?: string;
+  postulationSource?: 'manual' | 'auto' | 'suggested';
+  matchScore?: number | null;
 }
 
 interface Offer {
@@ -59,6 +61,7 @@ export default function PostulationsPage() {
   const [queueing, setQueueing] = useState(false);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [actingSuggested, setActingSuggested] = useState<string | null>(null);
 
   // Todos los hooks van antes de cualquier return: la versión anterior salía
   // temprano mientras cargaba la sesión y declaraba el useEffect después, así
@@ -146,8 +149,23 @@ export default function PostulationsPage() {
     setReloadKey((k) => k + 1);
   };
 
+  const approveSuggested = async (id: string) => {
+    setActingSuggested(id);
+    await apiClient.post(`/postulations/${id}/approve-suggested`, {});
+    setActingSuggested(null);
+    setReloadKey((k) => k + 1);
+  };
+
+  const declineSuggested = async (id: string) => {
+    setActingSuggested(id);
+    await apiClient.post(`/postulations/${id}/decline`, {});
+    setActingSuggested(null);
+    setReloadKey((k) => k + 1);
+  };
+
+  const suggestedPostulations = postulations.filter((p) => p.postulationSource === 'suggested');
   const filteredPostulations = postulations.filter(
-    (p) => filter === 'all' || p.estado === filter
+    (p) => (filter === 'all' || p.estado === filter) && p.postulationSource !== 'suggested'
   );
 
   const availableOffers = offers.filter((o) => !postulations.some((p) => p.offerId === o.id));
@@ -231,6 +249,52 @@ export default function PostulationsPage() {
             </p>
           </div>
         </div>
+
+        {/* Bandeja Sugeridas */}
+        {!loading && suggestedPostulations.length > 0 && (
+          <section className="mb-8">
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-lg font-semibold text-gray-900">Sugeridas por FITCV</h2>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">
+                {suggestedPostulations.length}
+              </span>
+              <span className="text-xs text-gray-500">No consumen cuota hasta que las apruebes</span>
+            </div>
+            <div className="space-y-3">
+              {suggestedPostulations.map((p) => (
+                <div key={p.id} className="bg-white rounded-lg shadow p-4 flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-gray-900 truncate">{p.title}</span>
+                      {p.matchScore != null && (
+                        <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-medium">
+                          {Math.round(p.matchScore)}% calce
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600">{p.company}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => approveSuggested(p.id)}
+                      disabled={actingSuggested === p.id}
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Aprobar
+                    </button>
+                    <button
+                      onClick={() => declineSuggested(p.id)}
+                      disabled={actingSuggested === p.id}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Postulations List */}
         {loading ? (
