@@ -69,11 +69,9 @@ export const env = {
   RUN_SCHEDULERS: process.env.RUN_SCHEDULERS !== 'false'
 } as const;
 
-// Validation
-const requiredVars = ['GEMINI_API_KEY'];
-const missing = requiredVars.filter(v => !process.env[v]);
-if (missing.length > 0 && env.NODE_ENV === 'production') {
-  throw new Error(`Missing required env vars: ${missing.join(', ')}`);
+// Validation: al menos un proveedor de IA debe estar configurado
+if (env.NODE_ENV === 'production' && !process.env.CLAUDE_API_KEY && !process.env.DEEPSEEK_API_KEY && !process.env.GEMINI_API_KEY) {
+  throw new Error('Missing AI provider: set CLAUDE_API_KEY (Kimi/Moonshot), GEMINI_API_KEY or DEEPSEEK_API_KEY');
 }
 
 // Los secretos tienen defaults de desarrollo. Arrancar en producción con ellos
@@ -111,16 +109,14 @@ if (env.NODE_ENV === 'production') {
   }
 }
 
-// Una key con forma de placeholder falla recién al primer análisis de CV, que
-// es tarde y confuso. Se avisa al arrancar.
-const keyLooksUnusable =
-  !env.GEMINI_API_KEY ||
-  env.GEMINI_API_KEY.length < 30 ||
-  /your|xxx|placeholder|here|changeme/i.test(env.GEMINI_API_KEY);
+// Si ningún proveedor parece usable, advertir al arrancar.
+const noUsableProvider =
+  (!env.CLAUDE_API_KEY || env.CLAUDE_API_KEY.length < 20) &&
+  (!env.GEMINI_API_KEY || env.GEMINI_API_KEY.length < 20) &&
+  (!env.DEEPSEEK_API_KEY || env.DEEPSEEK_API_KEY.length < 20);
 
-if (keyLooksUnusable) {
-  const message =
-    'GEMINI_API_KEY does not look like a usable key. CV analysis, ranking and CV adaptation will fail until it is set.';
+if (noUsableProvider) {
+  const message = 'No AI provider key looks usable (CLAUDE_API_KEY / GEMINI_API_KEY / DEEPSEEK_API_KEY). CV analysis will fail.';
   if (env.NODE_ENV === 'production') {
     throw new Error(message);
   }

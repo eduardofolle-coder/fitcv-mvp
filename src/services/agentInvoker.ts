@@ -76,8 +76,8 @@ interface NormalizedAiResponse {
 // fueron retirados y la API respondía "model: ..." aunque la clave fuera
 // válida. Se dejan configurables por entorno para que la próxima rotación sea
 // una variable y no un redespliegue.
-const DEFAULT_MODEL = env.GEMINI_MODEL;
-const ORCHESTRATOR_MODEL = env.GEMINI_MODEL;
+const DEFAULT_MODEL = env.CLAUDE_MODEL;
+const ORCHESTRATOR_MODEL = env.CLAUDE_ORCHESTRATOR_MODEL;
 
 // Los límites anteriores (1500-3000) eran menores que el JSON que los propios
 // prompts exigen: la respuesta se cortaba a mitad y llegaba como "no se pudo
@@ -104,13 +104,50 @@ export class AgentInvokerService {
   private static async postWithRetry(body: AiRequestBody, model: string): Promise<NormalizedAiResponse> {
     let lastError: unknown;
 
-    // Proveedor primario: Gemini (OpenAI shape, Bearer token)
-    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+    // Proveedor primario: Kimi/Moonshot (Anthropic-compatible, Bearer token)
+    if (env.CLAUDE_API_KEY) {
+      for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+        try {
+          const res = await axios.post(
+            env.CLAUDE_API_URL,
+            { model, max_tokens: body.max_tokens, messages: body.messages },
+            {
+              headers: { Authorization: `Bearer ${env.CLAUDE_API_KEY}`, 'Content-Type': 'application/json' },
+              timeout: env.CLAUDE_TIMEOUT_MS,
+            },
+          );
+          // Anthropic response shape: {content: [{type:'text', text:'...'}], usage: {input_tokens, output_tokens}}
+          return {
+            text: res.data.content?.[0]?.text ?? '',
+            inputTokens: res.data.usage?.input_tokens ?? 0,
+            outputTokens: res.data.usage?.output_tokens ?? 0,
+            stopReason: res.data.stop_reason,
+          };
+        } catch (error) {
+          lastError = error;
+          const status = (error as any)?.response?.status;
+          const timedOut = (error as any)?.code === 'ECONNABORTED';
+          const retryable = status === 429 || (typeof status === 'number' && status >= 500) || timedOut;
+          if (!retryable || attempt === this.MAX_RETRIES) break;
+
+          const retryAfter = Number((error as any)?.response?.headers?.['retry-after']);
+          const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter * 1000
+            : Math.round(2 ** attempt * 1500 + Math.random() * 800);
+          logger.warn('AI call retry', { attempt: attempt + 1, provider: 'kimi', reason: status ?? (timedOut ? 'timeout' : 'error'), waitMs });
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+      }
+    }
+
+    // Fallback: DeepSeek (OpenAI shape, Bearer token) — un solo intento
+    if (env.DEEPSEEK_API_KEY) {
+      logger.warn('Kimi agotó reintentos, usando DeepSeek como fallback');
       try {
         const res = await axios.post(
-          env.GEMINI_API_URL,
-          { ...body, model },
-          { headers: { Authorization: `Bearer ${env.GEMINI_API_KEY}` }, timeout: env.CLAUDE_TIMEOUT_MS },
+          env.DEEPSEEK_API_URL,
+          { ...body, model: env.DEEPSEEK_MODEL },
+          { headers: { Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` }, timeout: env.CLAUDE_TIMEOUT_MS },
         );
         return {
           text: res.data.choices?.[0]?.message?.content ?? '',
@@ -118,40 +155,13 @@ export class AgentInvokerService {
           outputTokens: res.data.usage?.completion_tokens ?? 0,
           stopReason: res.data.choices?.[0]?.finish_reason,
         };
-      } catch (error) {
-        lastError = error;
-        const status = (error as any)?.response?.status;
-        const timedOut = (error as any)?.code === 'ECONNABORTED';
-        const retryable = status === 429 || (typeof status === 'number' && status >= 500) || timedOut;
-        if (!retryable || attempt === this.MAX_RETRIES) break;
-
-        const retryAfter = Number((error as any)?.response?.headers?.['retry-after']);
-        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
-          ? retryAfter * 1000
-          : Math.round(2 ** attempt * 1500 + Math.random() * 800);
-        logger.warn('AI call retry', { attempt: attempt + 1, provider: 'gemini', reason: status ?? (timedOut ? 'timeout' : 'error'), waitMs });
-        await new Promise(resolve => setTimeout(resolve, waitMs));
+      } catch (fallbackError) {
+        lastError = fallbackError;
       }
     }
 
-    // Fallback: DeepSeek (OpenAI shape, Bearer token) — un solo intento
-    logger.warn('Gemini agotó reintentos, usando DeepSeek como fallback');
-    try {
-      const res = await axios.post(
-        env.DEEPSEEK_API_URL,
-        { ...body, model: env.DEEPSEEK_MODEL },
-        { headers: { Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` }, timeout: env.CLAUDE_TIMEOUT_MS },
-      );
-      return {
-        text: res.data.choices?.[0]?.message?.content ?? '',
-        inputTokens: res.data.usage?.prompt_tokens ?? 0,
-        outputTokens: res.data.usage?.completion_tokens ?? 0,
-        stopReason: res.data.choices?.[0]?.finish_reason,
-      };
-    } catch (fallbackError) {
-      logger.error('Gemini y DeepSeek fallaron; sin proveedor disponible');
-      throw fallbackError;
-    }
+    logger.error('Kimi y DeepSeek fallaron; sin proveedor de IA disponible');
+    throw lastError ?? new Error('No AI provider configured');
   }
 
   /**
@@ -172,8 +182,8 @@ export class AgentInvokerService {
 
     try {
       // Validate API key
-      if (!env.GEMINI_API_KEY) {
-        throw new Error('GEMINI_API_KEY not configured');
+      if (!env.CLAUDE_API_KEY && !env.DEEPSEEK_API_KEY) {
+        throw new Error('No AI provider configured: set CLAUDE_API_KEY (Kimi) or DEEPSEEK_API_KEY');
       }
 
       // Get agent config
