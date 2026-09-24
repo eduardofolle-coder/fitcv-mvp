@@ -432,6 +432,7 @@ export async function initializeSchema(): Promise<void> {
 
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS matchScore DOUBLE PRECISION;
+    ALTER TABLE plan_usage ADD COLUMN IF NOT EXISTS overageQuota INTEGER NOT NULL DEFAULT 0;
   `);
 
   console.log('✅ Database schema initialized');
