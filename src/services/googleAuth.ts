@@ -13,7 +13,7 @@ export function initGoogleAuth() {
     {
       clientID: env.GOOGLE_CLIENT_ID,
       clientSecret: env.GOOGLE_CLIENT_SECRET,
-      callbackURL: `${env.APP_URL.replace('3001', '3000')}/api/auth/google/callback`,
+      callbackURL: '/api/auth/google/callback',
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {
