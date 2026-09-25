@@ -8,6 +8,7 @@ import {
   keywordsFromTerms,
   LISTING_PORTALS,
   parseComputrabajoOffer,
+  parseFirstJobOffer,
 } from '../src/services/sources/listingPortals.js';
 import { buildMatchingProfile } from '../src/services/offerMatching.js';
 
@@ -30,6 +31,13 @@ describe('listing URLs', () => {
     expect(td.listingUrl('comercio exterior', 2)).toBe('https://cl.trabajosdiarios.com/ofertas-trabajo/de-comercio-exterior?page=2');
     expect(td.listingUrl('Logística', 1)).toBe('https://cl.trabajosdiarios.com/ofertas-trabajo/de-logistica');
     expect(td.listingUrl(null, 1)).toBe('https://cl.trabajosdiarios.com/ofertas-trabajo');
+  });
+
+  it('builds FirstJob keyword listings, and the general listing without a keyword', () => {
+    const fj = portal('firstjob');
+    expect(fj.listingUrl('marketing', 1)).toBe('https://firstjob.me/ofertas?keyword=marketing');
+    expect(fj.listingUrl('comercio exterior', 2)).toBe('https://firstjob.me/ofertas?keyword=comercio+exterior&page=2');
+    expect(fj.listingUrl(null, 1)).toBe('https://firstjob.me/ofertas');
   });
 });
 
@@ -91,6 +99,47 @@ describe('parseComputrabajoOffer', () => {
     const closed = html.replace('<p class="fs16">', '<p>Esta oferta ha finalizado</p><p class="fs16">');
     expect(parseComputrabajoOffer(closed, url, 'x')).toBeNull();
     expect(parseComputrabajoOffer('<html><body>Sin título</body></html>', url, 'x')).toBeNull();
+  });
+});
+
+describe('parseFirstJobOffer', () => {
+  const url = 'https://firstjob.me/oferta/56907/programa-de-practicas-transbank-2026-2027';
+  // FirstJob no publica JobPosting; el "Postular" del sitio pide cuenta propia
+  // (queda en "Te necesitamos"), así que solo se lee para tener la oferta.
+  const html = `
+    <div class="job-single-header mb-50">
+      <h3 class="mb-15">Programa de Prácticas Transbank 2026 - 2027 🚀</h3>
+      <div class="job-meta">
+        <a class="company text-md" href="/perfil/transbank-s-a">Transbank S.A</a>
+        <span class="location text-md"><i class="fi-rr-marker"></i>Región Metropolitana de Santiago, Chile</span>
+      </div>
+      <div class="job-tags mt-30">
+        <a href="/ofertas?place=5" class="btn btn-small background-blue-light mr-5">Híbrido</a>
+      </div>
+    </div>
+    <div class="content-single content-offer"><div>En <strong>Transbank</strong> buscamos un practicante.<br><br>Requisitos:</div>
+    <ul><li>Estudiante de Ingeniería Comercial</li></ul></div>
+    <div class="single-apply-jobs"><a class="btn btn-default" href="/usuarios/ingresar">Postular</a></div>`;
+
+  it('reads title, company, location, modality and description', () => {
+    expect(parseFirstJobOffer(html, url, '56907')).toMatchObject({
+      source: 'firstjob',
+      externalId: '56907',
+      title: 'Programa de Prácticas Transbank 2026 - 2027 🚀',
+      company: 'Transbank S.A',
+      location: 'Región Metropolitana de Santiago, Chile',
+      remoteModality: 'Híbrido',
+      description: 'En Transbank buscamos un practicante.\n\nRequisitos:\n\n• Estudiante de Ingeniería Comercial',
+      url,
+      applyUrl: url,
+      country: 'CL',
+    });
+  });
+
+  it('skips a closed offer and a page without a title', () => {
+    const closed = html.replace('</h3>', '</h3><p>Esta oferta ha finalizado</p>');
+    expect(parseFirstJobOffer(closed, url, 'x')).toBeNull();
+    expect(parseFirstJobOffer('<html><body>Sin título</body></html>', url, 'x')).toBeNull();
   });
 });
 

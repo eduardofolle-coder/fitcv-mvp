@@ -69,6 +69,50 @@ export function parseComputrabajoOffer(html: string, url: string, externalId: st
   };
 }
 
+/**
+ * Oferta de FirstJob (prácticas y primer empleo). No publica JobPosting; el
+ * "Postular" del propio sitio pide iniciar sesión en FirstJob, así que la
+ * postulación queda para el candidato — esto solo trae la oferta para que
+ * FITCV la muestre y la adapte.
+ */
+export function parseFirstJobOffer(html: string, url: string, externalId: string): ExternalOffer | null {
+  const header = html.match(/job-single-header[\s\S]{0,4000}/i);
+  if (!header) return null;
+  const block = header[0];
+
+  const heading = block.match(/<h3 class="mb-15">([\s\S]*?)<\/h3>/i);
+  const title = heading ? htmlToText(heading[1]) : '';
+  if (!title) return null;
+  if (CLOSED.test(htmlToText(block.slice(0, 2000)))) return null;
+
+  const company = block.match(/<a class="company text-md"[^>]*>([\s\S]*?)<\/a>/i);
+  const location = block.match(/<span class="location text-md">([\s\S]*?)<\/span>/i);
+  const modality = block.match(/<a[^>]*class="btn btn-small background-blue-light[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+
+  const description = html.match(/<div class="content-single content-offer">([\s\S]*?)<div class="single-apply-jobs">/i);
+
+  return {
+    id: offerIdFor('fjb', externalId),
+    externalId,
+    source: 'firstjob',
+    title: title.slice(0, 300),
+    company: company ? htmlToText(company[1]) : 'Empresa no informada',
+    level: 'N/A',
+    salaryMin: null,
+    salaryMax: null,
+    salaryCurrency: null,
+    location: location ? htmlToText(location[1]) || null : null,
+    description: (description ? htmlToText(description[1]) : '').slice(0, 20000),
+    requirements: [],
+    url,
+    applyUrl: url,
+    country: 'CL',
+    remoteModality: modality ? htmlToText(modality[1]) || null : null,
+    publishedAt: null,
+    validThrough: null,
+  };
+}
+
 export const LISTING_PORTALS: ListingPortal[] = [
   {
     source: 'computrabajo',
@@ -97,6 +141,24 @@ export const LISTING_PORTALS: ListingPortal[] = [
       const posting = findJobPosting(html);
       return posting ? mapJobPosting(posting, { source: 'trabajosdiarios', idPrefix: 'tdi' }, url, externalId) : null;
     },
+  },
+  {
+    // Prácticas y primer empleo. La postulación pide cuenta en FirstJob: queda
+    // en "Te necesitamos" como cualquier portal con login, pero sirve como
+    // fuente de ofertas para candidatos junior.
+    source: 'firstjob',
+    label: 'FirstJob',
+    origin: 'https://firstjob.me',
+    encoding: 'utf-8',
+    listingUrl: (keyword, page) => {
+      const params = new URLSearchParams();
+      if (keyword) params.set('keyword', keyword);
+      if (page > 1) params.set('page', String(page));
+      const query = params.toString();
+      return `https://firstjob.me/ofertas${query ? `?${query}` : ''}`;
+    },
+    offerLink: /href="(\/oferta\/(\d+)\/[a-z0-9-]+)"/g,
+    parseOffer: parseFirstJobOffer,
   },
 ];
 
