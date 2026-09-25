@@ -9,18 +9,13 @@ export const logger = winston.createLogger({
   level: env.LOG_LEVEL,
   format: winston.format.json(),
   defaultMeta: { service: 'fitcv-api' },
+  // stdout siempre activo: en Render (y cualquier PaaS) los archivos son efímeros
+  // y los logs solo llegan si se escriben al proceso.
   transports: [
-    new winston.transports.File({filename: 'logs/error.log', level: 'error'}),
-    new winston.transports.File({filename: 'logs/combined.log'})
+    new winston.transports.Console({ format: winston.format.simple() }),
   ]
 });
 
-// Console logging in development
-if (env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple()
-  }));
-}
 
 // ✅ Security event logger
 export class AuditLogger {
