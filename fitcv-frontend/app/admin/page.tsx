@@ -30,6 +30,8 @@ export default function AdminPage() {
   const [email, setEmail] = useState('');
   const [plan, setPlan] = useState('pro');
   const [reload, setReload] = useState(0);
+  const [pausing, setPausing] = useState<string | null>(null);
+  const [pauseReason, setPauseReason] = useState('');
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -63,9 +65,10 @@ export default function AdminPage() {
 
   // Pausar: la señal ya es clara, no hace falta esperar el umbral automático.
   // Reactivar: quita la pausa manual (vuelve a decidir la fórmula sola).
-  const pausePortal = async (portal: string) => {
-    const reason = window.prompt(`¿Por qué pausas "${portal}"? (opcional, queda como nota)`) ?? '';
-    await apiClient.put(`/admin/portal-health/${encodeURIComponent(portal)}`, { paused: true, reason: reason || null });
+  const confirmPause = async (portal: string) => {
+    await apiClient.put(`/admin/portal-health/${encodeURIComponent(portal)}`, { paused: true, reason: pauseReason || null });
+    setPausing(null);
+    setPauseReason('');
     setReload((r) => r + 1);
   };
   const reactivatePortal = async (portal: string) => {
@@ -106,9 +109,24 @@ export default function AdminPage() {
                     {p.manual && <span className="aw-dim" style={{ marginLeft: 6 }}>(manual{p.manualReason ? `: ${p.manualReason}` : ''})</span>}
                   </td>
                   <td style={cell}>
-                    {p.paused
-                      ? <button className="aw-btn-outline aw-btn-sm" onClick={() => reactivatePortal(p.portal)}>Reactivar</button>
-                      : <button className="aw-btn-outline aw-btn-sm" onClick={() => pausePortal(p.portal)}>Pausar</button>}
+                    {p.paused ? (
+                      <button className="aw-btn-outline aw-btn-sm" onClick={() => reactivatePortal(p.portal)}>Reactivar</button>
+                    ) : pausing === p.portal ? (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <input
+                          className="aw-input"
+                          placeholder="Motivo (opcional)"
+                          value={pauseReason}
+                          onChange={(e) => setPauseReason(e.target.value)}
+                          style={{ width: 160 }}
+                          autoFocus
+                        />
+                        <button className="aw-btn-gold aw-btn-sm" onClick={() => confirmPause(p.portal)}>Confirmar</button>
+                        <button className="aw-btn-outline aw-btn-sm" onClick={() => { setPausing(null); setPauseReason(''); }}>Cancelar</button>
+                      </div>
+                    ) : (
+                      <button className="aw-btn-outline aw-btn-sm" onClick={() => { setPausing(p.portal); setPauseReason(''); }}>Pausar</button>
+                    )}
                   </td>
                 </tr>
               ))}
