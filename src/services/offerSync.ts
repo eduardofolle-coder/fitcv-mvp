@@ -440,10 +440,17 @@ export async function runSyncOnce(): Promise<void> {
       logger.info('Offer sync finished', { ...report, errors: report.errors.slice(0, 5) });
     }
 
-    // Poda: una oferta vencida hace más de una semana ya no sirve y solo hace
-    // más lento cada matching. Sin esto la tabla crece para siempre.
+    // Poda: vencidas hace más de una semana, o sin vencimiento y con más de 60
+    // días. Se conservan las que tienen postulaciones o CVs (FK sin cascade:
+    // borrarlas hacía fallar la poda entera y cortaba el recálculo de abajo).
     const pruned = await db.query(
-      `DELETE FROM offers WHERE validThrough IS NOT NULL AND validThrough < CURRENT_TIMESTAMP - INTERVAL '7 days'`
+      `DELETE FROM offers o
+       WHERE (
+         (o.validThrough IS NOT NULL AND o.validThrough < CURRENT_TIMESTAMP - INTERVAL '7 days')
+         OR (o.validThrough IS NULL AND COALESCE(o.publishedAt, o.createdAt) < CURRENT_TIMESTAMP - INTERVAL '60 days')
+       )
+       AND NOT EXISTS (SELECT 1 FROM postulations p WHERE p.offerId = o.id)
+       AND NOT EXISTS (SELECT 1 FROM adapted_cvs a WHERE a.offerId = o.id)`
     );
     if (pruned.rowCount) logger.info('Pruned expired offers', { removed: pruned.rowCount });
 

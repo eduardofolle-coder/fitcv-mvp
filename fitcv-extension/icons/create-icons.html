@@ -1,0 +1,84 @@
+<!doctype html>
+<!-- Abre este archivo en Chrome, haz click en "Descargar todos" para generar los 4 PNGs de la extensión. -->
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Generador de íconos FITCV</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; padding: 24px; background: #0F1E2F; color: #F4F1E9; }
+    canvas { border: 1px solid rgba(255,255,255,.2); margin: 8px; }
+    button { padding: 10px 20px; background: #E1A526; color: #1B1206; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 16px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <h2>Íconos FITCV — Chrome Web Store</h2>
+  <p>Clic en "Descargar todos" para exportar los 4 PNG requeridos por Chrome Web Store.</p>
+  <div id="canvases"></div>
+  <button onclick="downloadAll()">Descargar todos</button>
+
+  <script>
+    const sizes = [16, 32, 48, 128];
+    const container = document.getElementById('canvases');
+
+    function draw(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      canvas.title = `${size}x${size}`;
+      const ctx = canvas.getContext('2d');
+
+      // Background
+      ctx.fillStyle = '#14273F';
+      const r = size * 0.16;
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(size - r, 0);
+      ctx.quadraticCurveTo(size, 0, size, r);
+      ctx.lineTo(size, size - r);
+      ctx.quadraticCurveTo(size, size, size - r, size);
+      ctx.lineTo(r, size);
+      ctx.quadraticCurveTo(0, size, 0, size - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Gold accent bar at top
+      ctx.fillStyle = '#E1A526';
+      ctx.fillRect(size * 0.12, size * 0.12, size * 0.76, size * 0.07);
+
+      // "fit" text in white
+      ctx.fillStyle = '#F4F1E9';
+      ctx.font = `bold ${size * 0.32}px "Arial Narrow", Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('fit', size * 0.38, size * 0.62);
+
+      // "cv" text in gold
+      ctx.fillStyle = '#E1A526';
+      ctx.fillText('cv', size * 0.72, size * 0.62);
+
+      return canvas;
+    }
+
+    sizes.forEach(size => {
+      const canvas = draw(size);
+      const label = document.createElement('p');
+      label.textContent = `${size}×${size}`;
+      label.style.cssText = 'font-size:12px;color:#A9B6C8;margin:4px 8px 0;';
+      container.appendChild(label);
+      container.appendChild(canvas);
+    });
+
+    function downloadAll() {
+      sizes.forEach(size => {
+        const canvas = draw(size);
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = `icon${size}.png`;
+        a.click();
+      });
+    }
+  </script>
+</body>
+</html>

@@ -12,7 +12,8 @@ import { loadMatchingProfile } from './candidateProfile.js';
 import { logger } from './logger.js';
 import { createNotification } from './notifications.js';
 import type { MatchTier } from './offerMatching.js';
-import { countByTier, rankOffersForProfile, type RankedOffer, type TierCounts } from './profileOffers.js';
+import { ACTIVE_OFFER, countByTier, type RankedOffer, type TierCounts } from './profileOffers.js';
+import { getCachedMatch, recomputeUserMatches } from './matchCache.js';
 import { runAutoPostulate } from './autoPostulate.js';
 
 export const ANALYSIS_TIME_ZONE = 'America/Santiago';
@@ -100,10 +101,28 @@ export async function runOfferAnalysis(
   const profile = await loadMatchingProfile(userId);
   if (!profile) return null;
 
+  // Lee el matching precalculado: recalcularlo aquí tarda ~50s y botaba la petición.
+  let cache = await getCachedMatch(userId);
+  if (!cache) {
+    await recomputeUserMatches(userId);
+    cache = await getCachedMatch(userId);
+  }
+
   const applied = new Set(
     (await db.query<{ offerId: string }>('SELECT offerId FROM postulations WHERE userId = $1', [userId])).rows.map(r => r.offerId)
   );
-  const ranked = (await rankOffersForProfile(profile)).filter(item => !applied.has(item.offer.id));
+  const pending = (cache?.ranked ?? []).filter(r => !applied.has(r.offerId));
+  const rows = pending.length
+    ? (await db.query<{ id: string; title: string; company: string; source: string; createdAt: string }>(
+        `SELECT id, title, company, source, createdAt FROM offers WHERE id = ANY($1) AND ${ACTIVE_OFFER}`,
+        [pending.map(r => r.offerId)]
+      )).rows
+    : [];
+  const byId = new Map(rows.map(o => [o.id, o]));
+  const ranked: RankedOffer[] = pending.flatMap(r => {
+    const offer = byId.get(r.offerId);
+    return offer ? [{ offer, match: { score: r.score, tier: r.tier } as RankedOffer['match'] }] : [];
+  });
 
   const previous = await db.queryOne<{ createdAt: string }>(
     'SELECT createdAt FROM offer_digests WHERE userId = $1 ORDER BY createdAt DESC LIMIT 1',
@@ -152,7 +171,7 @@ export async function runOfferAnalysis(
   // Lanza auto-postulaciones basadas en el matching cacheado.
   // Errores no deben cortar el análisis: el digest ya está guardado.
   runAutoPostulate(userId).then(result => {
-    if (result.autoQueued > 0 || result.suggested > 0) {
+    if (result.autoQueued > 0) {
       logger.info('Auto-postulate completed', { userId, ...result });
     }
   }).catch(err => {

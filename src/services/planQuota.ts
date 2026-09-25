@@ -14,8 +14,8 @@ export const OVERAGE_CONFIG = {
   max: { slots: 50,  priceCLP: 10990 },
 } as const;
 
-/** Thresholds del score de matching para auto-postular o sugerir. */
-export const QUALITY_GATE = { auto: 70, suggest: 40 } as const;
+/** Threshold de matching: todo lo que supere esto entra a la cola automática. */
+export const QUALITY_GATE = { auto: 40 } as const;
 
 function isPlan(v: unknown): v is Plan {
   return v === 'free' || v === 'pro' || v === 'max';

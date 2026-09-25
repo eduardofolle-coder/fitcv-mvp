@@ -281,27 +281,6 @@ router.post(
   })
 );
 
-// POST /api/postulations/:id/approve-suggested - El usuario aprueba una sugerida (la pone en cola)
-router.post(
-  '/:id/approve-suggested',
-  requireAuth,
-  asyncHandler(async (req: any, res: any) => {
-    const { id } = req.params;
-    const row = await db.queryOne<{ source: string }>(
-      'SELECT source FROM postulations WHERE id = $1 AND userId = $2',
-      [id, req.user.id]
-    );
-    if (!row) throw new AppError(404, 'Postulation not found');
-    if (row.source !== 'suggested') throw new AppError(409, 'Only suggested postulations can be approved this way');
-    await db.query(
-      'UPDATE postulations SET source = $1, updatedAt = CURRENT_TIMESTAMP WHERE id = $2 AND userId = $3',
-      ['manual', id, req.user.id]
-    );
-    const result = await queueApplication(id, req.user.id);
-    res.json({ success: true, data: { applyStatus: result.to } });
-  })
-);
-
 // POST /api/postulations/:id/unqueue - Sacarla de la cola
 router.post(
   '/:id/unqueue',

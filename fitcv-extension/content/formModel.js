@@ -42,6 +42,10 @@
     const tag = el.tagName.toLowerCase();
     if (tag === 'select') return 'select';
     if (tag === 'textarea') return 'textarea';
+    if (tag === 'input') return (el.getAttribute('type') || 'text').toLowerCase();
+    // Elemento no nativo con rol de selector (div/span/ul custom dropdown)
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    if (role === 'combobox' || role === 'listbox') return 'combobox';
     return (el.getAttribute('type') || 'text').toLowerCase();
   }
 
@@ -127,7 +131,10 @@
   }
 
   function fillableIn(root) {
-    return [...root.querySelectorAll('input, textarea, select')].filter(isCandidateControl);
+    // Incluye custom dropdowns (div/span con role="combobox") además de los controles nativos
+    const seen = new Set();
+    return [...root.querySelectorAll('input, textarea, select, [role="combobox"]:not(input):not(select):not(textarea)')]
+      .filter(el => !seen.has(el) && seen.add(el) && isCandidateControl(el));
   }
 
   /** El formulario de postulación: un diálogo abierto o el <form> con más campos. */
@@ -200,6 +207,16 @@
         field.options = [...el.options].filter(o => o.value !== '' && !o.disabled).map(textOf);
       }
 
+      if (type === 'combobox') {
+        const listboxId = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
+        const listbox = listboxId
+          ? doc.getElementById(listboxId)
+          : el.parentElement && el.parentElement.querySelector('[role="listbox"]');
+        if (listbox) {
+          field.options = [...listbox.querySelectorAll('[role="option"]')].map(textOf).filter(Boolean);
+        }
+      }
+
       const maxLength = Number(el.getAttribute('maxlength'));
       if (Number.isInteger(maxLength) && maxLength > 0) field.maxLength = maxLength;
 
@@ -263,6 +280,22 @@
     }
 
     if (type === 'file') return false;
+
+    if (type === 'combobox') {
+      const doc = el.ownerDocument;
+      const listboxId = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
+      let listbox = listboxId
+        ? doc.getElementById(listboxId)
+        : el.parentElement && el.parentElement.querySelector('[role="listbox"]');
+      // Abre el dropdown; muchas impl. React renderizan opciones sincrónicamente al click.
+      el.click();
+      if (!listbox) listbox = doc.querySelector('[role="listbox"]');
+      if (!listbox) return false;
+      const option = [...listbox.querySelectorAll('[role="option"]')].find(o => fold(textOf(o)) === target);
+      if (!option) return false;
+      option.click();
+      return true;
+    }
 
     setNativeValue(el, value);
     return el.value === value;

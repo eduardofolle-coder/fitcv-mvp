@@ -72,6 +72,11 @@ export default function OffersPage() {
   const [needsProfile, setNeedsProfile] = useState(false);
   const [tier, setTier] = useState<'' | MatchTier>('');
   const [tierCounts, setTierCounts] = useState<TierCounts>({ alto: 0, medio: 0, bajo: 0 });
+
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('tier');
+    if (fromUrl && (MATCH_TIERS as readonly string[]).includes(fromUrl)) setTier(fromUrl as MatchTier);
+  }, []);
   const [bySource, setBySource] = useState<Array<{ source: string; count: number }>>([]);
   const [applied, setApplied] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');

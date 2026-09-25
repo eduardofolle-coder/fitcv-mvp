@@ -437,6 +437,11 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE plan_usage ADD COLUMN IF NOT EXISTS overageQuota INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS googleId TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(googleId) WHERE googleId IS NOT NULL;
+
+    -- Calce medio ya no se sugiere: entra solo a la cola. Las sugeridas que nadie
+    -- tocó se borran y el próximo análisis las re-encola respetando la cuota.
+    DELETE FROM postulations
+      WHERE source = 'suggested' AND estado = 'Por revisar' AND applyStatus = 'pendiente';
   `);
 
   console.log('✅ Database schema initialized');

@@ -62,7 +62,6 @@ export default function PostulationsPage() {
   const [queueing, setQueueing] = useState(false);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [actingSuggested, setActingSuggested] = useState<string | null>(null);
 
   // Todos los hooks van antes de cualquier return: la versión anterior salía
   // temprano mientras cargaba la sesión y declaraba el useEffect después, así
@@ -150,24 +149,7 @@ export default function PostulationsPage() {
     setReloadKey((k) => k + 1);
   };
 
-  const approveSuggested = async (id: string) => {
-    setActingSuggested(id);
-    await apiClient.post(`/postulations/${id}/approve-suggested`, {});
-    setActingSuggested(null);
-    setReloadKey((k) => k + 1);
-  };
-
-  const declineSuggested = async (id: string) => {
-    setActingSuggested(id);
-    await apiClient.post(`/postulations/${id}/decline`, {});
-    setActingSuggested(null);
-    setReloadKey((k) => k + 1);
-  };
-
-  const suggestedPostulations = postulations.filter((p) => p.postulationSource === 'suggested');
-  const filteredPostulations = postulations.filter(
-    (p) => (filter === 'all' || p.estado === filter) && p.postulationSource !== 'suggested'
-  );
+  const filteredPostulations = postulations.filter((p) => filter === 'all' || p.estado === filter);
 
   const availableOffers = offers.filter((o) => !postulations.some((p) => p.offerId === o.id));
 
@@ -246,32 +228,17 @@ export default function PostulationsPage() {
         </div>
       </div>
 
-      {!loading && suggestedPostulations.length > 0 && (
-        <section style={{ marginBottom:24 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-            <h2 className="aw-h2" style={{ margin:0 }}>Sugeridas por FITCV</h2>
-            <span className="aw-pill aw-pill-gold">{suggestedPostulations.length}</span>
-            <span className="aw-dim">No consumen cuota hasta que las apruebes</span>
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {suggestedPostulations.map((p) => (
-              <div key={p.id} className="aw-card aw-card-sm" style={{ display:'flex', alignItems:'center', gap:16 }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                    <span style={{ fontWeight:600, color:'#F4F1E9', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.title}</span>
-                    {p.matchScore != null && <span className="aw-pill aw-pill-green">{Math.round(p.matchScore)}% calce</span>}
-                  </div>
-                  <p className="aw-muted">{p.company}</p>
-                </div>
-                <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-                  <button onClick={() => approveSuggested(p.id)} disabled={actingSuggested === p.id} className="aw-btn-gold aw-btn-sm">Aprobar</button>
-                  <button onClick={() => declineSuggested(p.id)} disabled={actingSuggested === p.id} className="aw-btn-outline aw-btn-sm">Descartar</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="aw-card aw-card-sm" style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap', marginBottom:24 }}>
+        <div style={{ flex:1, minWidth:220 }}>
+          <h2 className="aw-h2" style={{ margin:0 }}>Calce bajo: revísalas tú</h2>
+          <p className="aw-muted">
+            Las ofertas de calce alto y medio FITCV las postula solo. Las de calce bajo esperan tu criterio.
+          </p>
+        </div>
+        <button onClick={() => router.push('/offers?tier=bajo')} className="aw-btn-outline aw-btn-sm" style={{ flexShrink:0 }}>
+          Ver ofertas de calce bajo →
+        </button>
+      </section>
 
       {loading ? (
         <div style={{ textAlign:'center', padding:'48px 0', color:'#A9B6C8' }}>Cargando...</div>

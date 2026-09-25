@@ -9,6 +9,7 @@ import { DailyAnalysisCard } from './DailyAnalysisCard';
 import { DiagnosisCard } from './DiagnosisCard';
 import { PlanCard } from './PlanCard';
 import AppShell from '@/app/components/AppShell';
+import { ExtensionInstallModal } from './ExtensionInstallModal';
 
 // Lo que devuelve GET /api/cv/profile tras el análisis del CV.
 interface CVProfile {
@@ -37,6 +38,7 @@ export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<CVProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [showExtModal, setShowExtModal] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -44,22 +46,28 @@ export default function DashboardPage() {
     }
   }, [authLoading, user, router]);
 
-  // El perfil se carga aparte de la analítica: sin CV subido la API responde
-  // 404, y eso no es un error que mostrar sino el estado inicial de todos.
   useEffect(() => {
     if (!user) return;
 
     let cancelled = false;
     (async () => {
-      const res = await apiClient.get<CVProfile>('/cv/profile');
+      const [profileRes, tokensRes] = await Promise.all([
+        apiClient.get<CVProfile>('/cv/profile'),
+        apiClient.get<unknown[]>('/extension/tokens'),
+      ]);
       if (cancelled) return;
-      if (res.success && res.data) setProfile(res.data);
+      if (profileRes.success && profileRes.data) setProfile(profileRes.data);
       setProfileLoading(false);
+
+      // Mostrar modal de instalación si: tiene CV, no tiene extensión vinculada, y no lo descartó.
+      const hasTokens = tokensRes.success && Array.isArray(tokensRes.data) && tokensRes.data.length > 0;
+      const dismissed = (() => { try { return !!localStorage.getItem('fitcv.extModalDismissed'); } catch { return false; } })();
+      if (profileRes.success && profileRes.data && !hasTokens && !dismissed) {
+        setShowExtModal(true);
+      }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user]);
 
   if (authLoading) {
@@ -70,8 +78,14 @@ export default function DashboardPage() {
     return null;
   }
 
+  const dismissExtModal = () => {
+    try { localStorage.setItem('fitcv.extModalDismissed', '1'); } catch {}
+    setShowExtModal(false);
+  };
+
   return (
     <AppShell>
+      {showExtModal && <ExtensionInstallModal onDismiss={dismissExtModal} />}
       {!profileLoading && (
         profile ? (
           <section className="aw-card" style={{ marginBottom: 24 }}>
