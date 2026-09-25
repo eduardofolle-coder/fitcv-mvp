@@ -9,6 +9,7 @@ import { db } from '../db/client.js';
 import { env } from '../env.js';
 import { getPortalHealth, PAUSE_RULE } from '../services/portalHealth.js';
 import { PLAN_CONFIG } from '../services/planQuota.js';
+import { ACTIVE_OFFER } from '../services/profileOffers.js';
 
 const router = Router();
 
@@ -23,6 +24,20 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // GET /api/admin/portal-health
 router.get('/portal-health', asyncHandler(async (_req: any, res: any) => {
   res.json({ success: true, data: { rule: PAUSE_RULE, portals: await getPortalHealth(true) } });
+}));
+
+// GET /api/admin/sources - Cuántas ofertas trae cada portal: si "nuevas 24 h" cae a 0
+// varios días, el portal probablemente cambió su HTML.
+router.get('/sources', asyncHandler(async (_req: any, res: any) => {
+  const rows = (await db.query(`
+    SELECT source,
+      COUNT(*) FILTER (WHERE ${ACTIVE_OFFER}) AS active,
+      COUNT(*) FILTER (WHERE createdAt > CURRENT_TIMESTAMP - INTERVAL '24 hours') AS new24h,
+      COUNT(*) FILTER (WHERE createdAt > CURRENT_TIMESTAMP - INTERVAL '7 days') AS new7d,
+      MAX(createdAt) AS newest
+    FROM offers GROUP BY source ORDER BY active DESC
+  `)).rows;
+  res.json({ success: true, data: rows });
 }));
 
 // GET /api/admin/users - Candidatos con plan y resultados

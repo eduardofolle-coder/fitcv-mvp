@@ -54,14 +54,8 @@ export const JOB_POSTING_PORTALS: JobPostingPortal[] = [
     encoding: 'windows-1252',
     titleFromHeading: true,
   },
-  {
-    source: 'jobrapido',
-    label: 'Jobrapido',
-    sitemap: 'https://www.jobrapido.com/sitemap_jobs_cl.xml',
-    offerUrl: /^https:\/\/www\.jobrapido\.com\/[a-z]{2}\/job\/(\d+)-[^/?#]*$/,
-    idPrefix: 'jrd',
-    encoding: 'utf-8',
-  },
+  // Jobrapido salió en 2026-09: es un agregador de otros portales, movió su sitemap
+  // a fichas que responden 404 y su robots.txt bloquea /jobpreview/.
 ];
 
 export interface SitemapEntry {

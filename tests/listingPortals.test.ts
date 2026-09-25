@@ -27,7 +27,8 @@ describe('listing URLs', () => {
 
   it('builds Trabajos Diarios searches and the recent listing', () => {
     const td = portal('trabajosdiarios');
-    expect(td.listingUrl('comercio exterior', 2)).toBe('https://cl.trabajosdiarios.com/ofertas-trabajo?q=comercio+exterior&page=2');
+    expect(td.listingUrl('comercio exterior', 2)).toBe('https://cl.trabajosdiarios.com/ofertas-trabajo/de-comercio-exterior?page=2');
+    expect(td.listingUrl('Logística', 1)).toBe('https://cl.trabajosdiarios.com/ofertas-trabajo/de-logistica');
     expect(td.listingUrl(null, 1)).toBe('https://cl.trabajosdiarios.com/ofertas-trabajo');
   });
 });
@@ -51,6 +52,14 @@ describe('extractOfferLinks', () => {
       <a href="/trabajo/3083051/supervisor-operaciones-en-antofagasta">b</a>
       <a href="/ofertas-trabajo?page=2">siguiente</a>`;
     expect(extractOfferLinks(html, portal('trabajosdiarios')).map(l => l.externalId)).toEqual(['3085424', '3083051']);
+  });
+
+  it('reads Trabajos Diarios links that only appear in the JSON-LD list', () => {
+    const html = `<script type="application/ld+json">{"itemListElement":[
+      {"@type":"ListItem","name":"Conductor","url": "https://cl.trabajosdiarios.com/trabajo/3081950/conductor-de-reparto"}]}</script>`;
+    expect(extractOfferLinks(html, portal('trabajosdiarios'))).toEqual([
+      { externalId: '3081950', url: 'https://cl.trabajosdiarios.com/trabajo/3081950/conductor-de-reparto' },
+    ]);
   });
 });
 

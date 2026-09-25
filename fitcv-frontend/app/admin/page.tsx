@@ -10,6 +10,7 @@ type Outcome = 'limpia' | 'asistida' | 'bloqueada' | 'atencion' | 'error';
 interface Portal { portal: string; attempts: number; counts: Record<Outcome, number>; cleanRate: number | null; paused: boolean }
 interface Health { rule: { days: number; minAttempts: number; minCleanRate: number }; portals: Portal[] }
 interface Invite { email: string; plan: string; createdAt: string; usedAt: string | null }
+interface SourceRow { source: string; active: string; new24h: string; new7d: string; newest: string | null }
 interface UserRow { id: string; email: string; plan: string; sent: string; queued: string; attention: string; interviews: string; mail: string | null }
 
 const PLANS = ['free', 'pro', 'max'];
@@ -24,6 +25,7 @@ export default function AdminPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [invites, setInvites] = useState<{ closed: boolean; invites: Invite[] } | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [sources, setSources] = useState<SourceRow[]>([]);
   const [forbidden, setForbidden] = useState(false);
   const [email, setEmail] = useState('');
   const [plan, setPlan] = useState('pro');
@@ -36,15 +38,17 @@ export default function AdminPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const [h, i, u] = await Promise.all([
+      const [h, i, u, s] = await Promise.all([
         apiClient.get<Health>('/admin/portal-health'),
         apiClient.get<{ closed: boolean; invites: Invite[] }>('/admin/invites'),
         apiClient.get<UserRow[]>('/admin/users'),
+        apiClient.get<SourceRow[]>('/admin/sources'),
       ]);
       if (!h.success) { setForbidden(true); return; }
       setHealth(h.data ?? null);
       setInvites(i.data ?? null);
       setUsers(u.data ?? []);
+      setSources(s.data ?? []);
     })();
   }, [user, reload]);
 
@@ -91,6 +95,31 @@ export default function AdminPage() {
               {health?.portals.length === 0 && (
                 <tr><td style={cell} colSpan={9}><span className="aw-muted">Aún no hay intentos de envío en la ventana.</span></td></tr>
               )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="aw-card" style={{ marginBottom: 24 }}>
+        <h2 className="aw-h2">Ofertas por fuente</h2>
+        <p className="aw-muted" style={{ marginBottom: 12 }}>
+          Si una fuente pasa días sin ofertas nuevas, probablemente el portal cambió su página y hay que ajustar el lector.
+        </p>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, color: '#F4F1E9', fontVariantNumeric: 'tabular-nums' }}>
+            <thead>
+              <tr>{['Fuente', 'Vigentes', 'Nuevas 24 h', 'Nuevas 7 días', 'Última'].map((h) => <th key={h} style={cell}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {sources.map((s) => (
+                <tr key={s.source}>
+                  <td style={cell}>{s.source}</td>
+                  <td style={cell}>{s.active}</td>
+                  <td style={cell}>{s.new24h}</td>
+                  <td style={cell}>{s.new7d}</td>
+                  <td style={cell}>{s.newest ? new Date(s.newest).toLocaleString('es-CL') : '—'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

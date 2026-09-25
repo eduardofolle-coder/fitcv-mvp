@@ -22,7 +22,9 @@ export interface ListingPortal {
   parseOffer: (html: string, url: string, externalId: string) => ExternalOffer | null;
 }
 
-const slug = (keyword: string): string => keyword.trim().toLowerCase().replace(/\s+/g, '-');
+// Sin tildes: los portales usan "de-logistica", no "de-logística".
+const slug = (keyword: string): string =>
+  keyword.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, '-');
 
 // Aviso de oferta cerrada cerca del título: no sirve para postular.
 const CLOSED = /(oferta (ha )?(finalizado|caducado|cerrad[ao])|ya no est[aá] disponible|proceso de selecci[oó]n (ha )?finalizado)/i;
@@ -84,14 +86,13 @@ export const LISTING_PORTALS: ListingPortal[] = [
     label: 'Trabajos Diarios',
     origin: 'https://cl.trabajosdiarios.com',
     encoding: 'utf-8',
+    // Desde 2026-09 el buscador ignora ?q=: la búsqueda por área es /ofertas-trabajo/de-<área>.
     listingUrl: (keyword, page) => {
-      const params = new URLSearchParams();
-      if (keyword) params.set('q', keyword);
-      if (page > 1) params.set('page', String(page));
-      const query = params.toString();
-      return `https://cl.trabajosdiarios.com/ofertas-trabajo${query ? `?${query}` : ''}`;
+      const base = keyword ? `https://cl.trabajosdiarios.com/ofertas-trabajo/de-${slug(keyword)}` : 'https://cl.trabajosdiarios.com/ofertas-trabajo';
+      return page > 1 ? `${base}?page=${page}` : base;
     },
-    offerLink: /href="(?:https:\/\/cl\.trabajosdiarios\.com)?(\/trabajo\/(\d+)\/[a-z0-9-]+)"/g,
+    // Los enlaces vienen como href o, desde 2026-09, solo en el JSON-LD del listado ("url": "...").
+    offerLink: /(?:href="|"url":\s*")(?:https:\/\/cl\.trabajosdiarios\.com)?(\/trabajo\/(\d+)\/[a-z0-9-]+)"/g,
     parseOffer: (html, url, externalId) => {
       const posting = findJobPosting(html);
       return posting ? mapJobPosting(posting, { source: 'trabajosdiarios', idPrefix: 'tdi' }, url, externalId) : null;
