@@ -90,6 +90,68 @@ describe('extractFields', () => {
   });
 });
 
+describe('combobox sin ARIA (react-select y clones)', () => {
+  // El widget más común en portales de empleo: un <input> de solo lectura sin
+  // role="combobox" (solo aria-autocomplete) y opciones sin role="option",
+  // ocultas hasta que un mousedown en el control las revela. Visto en
+  // HiringRoom (custom-hr-select__*) y muchos "trabaja con nosotros" propios.
+  const REACT_SELECT_FORM = `
+    <form id="apply">
+      <label for="doc_type">Tipo de documento *</label>
+      <div>
+        <div class="rs__control">
+          <input id="doc_type" readonly aria-autocomplete="list" value="">
+        </div>
+        <div class="rs__menu" style="display:none">
+          <div class="rs__option">Cédula de identidad</div>
+          <div class="rs__option">Pasaporte</div>
+        </div>
+      </div>
+      <button type="submit">Postular</button>
+    </form>`;
+
+  beforeEach(() => {
+    load(REACT_SELECT_FORM);
+    const control = document.querySelector('.rs__control') as HTMLElement;
+    const menu = document.querySelector('.rs__menu') as HTMLElement;
+    const input = document.getElementById('doc_type') as HTMLInputElement;
+    control.addEventListener('mousedown', () => (menu.style.display = 'block'));
+    input.addEventListener('keydown', e => {
+      if ((e as KeyboardEvent).key === 'Escape') menu.style.display = 'none';
+    });
+    menu.querySelectorAll('.rs__option').forEach(opt =>
+      opt.addEventListener('click', () => {
+        (document.getElementById('doc_type') as HTMLInputElement).value = opt.textContent || '';
+        menu.style.display = 'none';
+      })
+    );
+  });
+
+  it('lo detecta como combobox y lee sus opciones abriendo y cerrando el desplegable', () => {
+    const fields = F.extractFields(document);
+    expect(byLabel(fields, 'Tipo de documento')).toMatchObject({
+      type: 'combobox',
+      options: ['Cédula de identidad', 'Pasaporte'],
+      required: true,
+    });
+    // No deja el desplegable abierto tras leerlo.
+    expect((document.querySelector('.rs__menu') as HTMLElement).style.display).toBe('none');
+  });
+
+  it('elige la opción por su texto, sin depender de role="option"', () => {
+    const fields = F.extractFields(document);
+    const id = byLabel(fields, 'Tipo de documento').id;
+    expect(F.fillField(document, id, 'Pasaporte')).toBe(true);
+    expect((document.getElementById('doc_type') as HTMLInputElement).value).toBe('Pasaporte');
+  });
+
+  it('no inventa una opción que no está en la lista', () => {
+    const fields = F.extractFields(document);
+    const id = byLabel(fields, 'Tipo de documento').id;
+    expect(F.fillField(document, id, 'Licencia de conducir')).toBe(false);
+  });
+});
+
 describe('filling', () => {
   it('sets text so that framework listeners see it', () => {
     const fields = F.extractFields(document);

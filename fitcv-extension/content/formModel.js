@@ -42,11 +42,50 @@
     const tag = el.tagName.toLowerCase();
     if (tag === 'select') return 'select';
     if (tag === 'textarea') return 'textarea';
-    if (tag === 'input') return (el.getAttribute('type') || 'text').toLowerCase();
+    // Librerías como react-select arman un <input> de solo lectura para el
+    // desplegable, sin role="combobox": aria-autocomplete es la pista que sí
+    // ponen casi todas (es del patrón WAI-ARIA combobox que imitan).
+    if (tag === 'input') {
+      if (el.hasAttribute('aria-autocomplete')) return 'combobox';
+      return (el.getAttribute('type') || 'text').toLowerCase();
+    }
     // Elemento no nativo con rol de selector (div/span/ul custom dropdown)
     const role = (el.getAttribute('role') || '').toLowerCase();
     if (role === 'combobox' || role === 'listbox') return 'combobox';
     return (el.getAttribute('type') || 'text').toLowerCase();
+  }
+
+  // Contenedor donde react-select (y clones) rinden el control clicable: el
+  // input suele ser de solo lectura y el mousedown real cae en el div que lo
+  // envuelve. Sin esto, el clic para abrir el desplegable no dispara nada.
+  function comboboxOpener(el) {
+    return el.closest('[class*="__control"], [class*="-control"]') || el;
+  }
+
+  const OPTION_SELECTOR = '[role="option"], [class*="__option"], [class*="-option"]';
+
+  // Abre el desplegable (si hace falta), junta el texto de cada opción visible
+  // y lo vuelve a cerrar. Cubre tanto un listbox con role="option" como los
+  // clones sin ARIA que solo marcan sus opciones por clase.
+  function comboboxOptionNodes(doc, el) {
+    const listboxId = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
+    const owned = listboxId ? doc.getElementById(listboxId) : null;
+    const already = owned
+      ? [...owned.querySelectorAll(OPTION_SELECTOR)]
+      : [...doc.querySelectorAll(OPTION_SELECTOR)].filter(isVisible);
+    if (already.length > 0) return already;
+
+    const opener = comboboxOpener(el);
+    opener.dispatchEvent(new (doc.defaultView || window).MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+    el.click();
+    return [...doc.querySelectorAll(OPTION_SELECTOR)].filter(isVisible);
+  }
+
+  // Escape en el propio control, no en el documento: así llega como si el
+  // candidato lo hubiera presionado con el foco puesto, que es lo que casi
+  // todo widget de combobox escucha para cerrarse.
+  function closeCombobox(doc, el) {
+    (el || doc.body).dispatchEvent(new (doc.defaultView || window).KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   }
 
   // Los campos se ubican dentro del formulario de postulación, no en el buscador del sitio.
@@ -208,13 +247,9 @@
       }
 
       if (type === 'combobox') {
-        const listboxId = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
-        const listbox = listboxId
-          ? doc.getElementById(listboxId)
-          : el.parentElement && el.parentElement.querySelector('[role="listbox"]');
-        if (listbox) {
-          field.options = [...listbox.querySelectorAll('[role="option"]')].map(textOf).filter(Boolean);
-        }
+        const options = comboboxOptionNodes(doc, el).map(textOf).filter(Boolean);
+        closeCombobox(doc, el);
+        if (options.length > 0) field.options = options;
       }
 
       const maxLength = Number(el.getAttribute('maxlength'));
@@ -283,16 +318,11 @@
 
     if (type === 'combobox') {
       const doc = el.ownerDocument;
-      const listboxId = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
-      let listbox = listboxId
-        ? doc.getElementById(listboxId)
-        : el.parentElement && el.parentElement.querySelector('[role="listbox"]');
-      // Abre el dropdown; muchas impl. React renderizan opciones sincrónicamente al click.
-      el.click();
-      if (!listbox) listbox = doc.querySelector('[role="listbox"]');
-      if (!listbox) return false;
-      const option = [...listbox.querySelectorAll('[role="option"]')].find(o => fold(textOf(o)) === target);
-      if (!option) return false;
+      const option = comboboxOptionNodes(doc, el).find(o => fold(textOf(o)) === target);
+      if (!option) {
+        closeCombobox(doc, el);
+        return false;
+      }
       option.click();
       return true;
     }
