@@ -7,7 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { db } from '../db/client.js';
 import { env } from '../env.js';
-import { getPortalHealth, PAUSE_RULE } from '../services/portalHealth.js';
+import { getPortalHealth, PAUSE_RULE, setPortalOverride, clearPortalOverride } from '../services/portalHealth.js';
 import { PLAN_CONFIG } from '../services/planQuota.js';
 import { ACTIVE_OFFER } from '../services/profileOffers.js';
 
@@ -24,6 +24,21 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // GET /api/admin/portal-health
 router.get('/portal-health', asyncHandler(async (_req: any, res: any) => {
   res.json({ success: true, data: { rule: PAUSE_RULE, portals: await getPortalHealth(true) } });
+}));
+
+// PUT /api/admin/portal-health/:portal { paused, reason? } - pausa o reactiva a mano,
+// sin esperar el umbral automático (o forzando activo aunque las estadísticas digan pausar).
+router.put('/portal-health/:portal', asyncHandler(async (req: any, res: any) => {
+  if (typeof req.body?.paused !== 'boolean') throw new AppError(400, 'paused must be a boolean.');
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) || null : null;
+  await setPortalOverride(req.params.portal, req.body.paused, reason);
+  res.json({ success: true, data: await getPortalHealth(true) });
+}));
+
+// DELETE /api/admin/portal-health/:portal - vuelve a decidirlo solo por las estadísticas
+router.delete('/portal-health/:portal', asyncHandler(async (req: any, res: any) => {
+  await clearPortalOverride(req.params.portal);
+  res.json({ success: true, data: await getPortalHealth(true) });
 }));
 
 // GET /api/admin/sources - Cuántas ofertas trae cada portal: si "nuevas 24 h" cae a 0

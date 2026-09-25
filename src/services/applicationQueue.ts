@@ -23,6 +23,8 @@ import {
 } from './applyStatus.js';
 import { queuePolicy } from './portalHealth.js';
 import { extractApplyEmail } from './applyEmail.js';
+import { notifyUrgentAttention } from './notifications.js';
+import { logger } from './logger.js';
 
 export interface TransitionRequest {
   postulationId: string;
@@ -96,6 +98,13 @@ export async function transitionApplication(req: TransitionRequest): Promise<{ f
     INSERT INTO application_events (id, postulationId, userId, fromStatus, toStatus, mode, reason, detail, createdAt)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
   `, [uuidv4(), req.postulationId, req.userId, from, to, mode, req.reason ?? null, req.detail ?? null]);
+
+  // Fire-and-forget: un aviso que tarda o falla no debe demorar el reporte de la extensión.
+  if (to === 'requiere-atencion' && req.reason) {
+    notifyUrgentAttention(req.userId, req.reason).catch(err =>
+      logger.error('notifyUrgentAttention rejected', { userId: req.userId, err: String(err) })
+    );
+  }
 
   return { from, to };
 }

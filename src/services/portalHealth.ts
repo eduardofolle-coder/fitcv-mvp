@@ -27,6 +27,9 @@ export interface PortalHealth {
   counts: Record<Outcome, number>;
   cleanRate: number | null;
   paused: boolean;
+  /** true si `paused` viene de una decisión del dueño, no del umbral automático. */
+  manual: boolean;
+  manualReason: string | null;
 }
 
 /** Suavizado de Laplace: un portal sin historia parte en 50% y no en 0 ni 100. */
@@ -41,6 +44,29 @@ const PORTAL_SQL = `CASE WHEN p.channel = 'email' THEN 'correo' ELSE o.source EN
 
 let cache: { at: number; data: PortalHealth[] } | null = null;
 const CACHE_MS = 5 * 60 * 1000;
+
+/** Pausas y reactivaciones que el dueño fijó a mano, por nombre de portal. */
+export async function getPortalOverrides(): Promise<Map<string, { paused: boolean; reason: string | null }>> {
+  const rows = (await db.query<{ portal: string; paused: boolean; reason: string | null }>(
+    'SELECT portal, paused, reason FROM portal_overrides'
+  )).rows;
+  return new Map(rows.map(r => [r.portal, { paused: r.paused, reason: r.reason }]));
+}
+
+/** Fija o quita una pausa manual. Invalida la caché para que se vea al toque. */
+export async function setPortalOverride(portal: string, paused: boolean, reason: string | null): Promise<void> {
+  await db.query(`
+    INSERT INTO portal_overrides (portal, paused, reason, updatedAt) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+    ON CONFLICT (portal) DO UPDATE SET paused = $2, reason = $3, updatedAt = CURRENT_TIMESTAMP
+  `, [portal, paused, reason]);
+  cache = null;
+}
+
+/** Quita la pausa manual: el portal vuelve a decidirse solo por sus estadísticas. */
+export async function clearPortalOverride(portal: string): Promise<void> {
+  await db.query('DELETE FROM portal_overrides WHERE portal = $1', [portal]);
+  cache = null;
+}
 
 export async function getPortalHealth(fresh = false): Promise<PortalHealth[]> {
   if (!fresh && cache && Date.now() - cache.at < CACHE_MS) return cache.data;
@@ -65,14 +91,41 @@ export async function getPortalHealth(fresh = false): Promise<PortalHealth[]> {
       counts: { limpia: 0, asistida: 0, bloqueada: 0, atencion: 0, error: 0 },
       cleanRate: null,
       paused: false,
+      manual: false,
+      manualReason: null,
     };
     h.counts[outcome] += Number(row.n);
     h.attempts += Number(row.n);
     byPortal.set(row.portal, h);
   }
 
+  const overrides = await getPortalOverrides();
+  // Un portal pausado a mano sin ningún intento aún también debe verse en la tabla.
+  for (const portal of overrides.keys()) {
+    if (!byPortal.has(portal)) {
+      byPortal.set(portal, {
+        portal,
+        attempts: 0,
+        counts: { limpia: 0, asistida: 0, bloqueada: 0, atencion: 0, error: 0 },
+        cleanRate: null,
+        paused: false,
+        manual: false,
+        manualReason: null,
+      });
+    }
+  }
+
   const data = [...byPortal.values()]
-    .map(h => ({ ...h, cleanRate: h.attempts ? h.counts.limpia / h.attempts : null, paused: isPaused(h) }))
+    .map(h => {
+      const override = overrides.get(h.portal);
+      return {
+        ...h,
+        cleanRate: h.attempts ? h.counts.limpia / h.attempts : null,
+        paused: override ? override.paused : isPaused(h),
+        manual: override !== undefined,
+        manualReason: override?.reason ?? null,
+      };
+    })
     .sort((a, b) => b.attempts - a.attempts);
   cache = { at: Date.now(), data };
   return data;

@@ -7,7 +7,7 @@ import { apiClient } from '@/lib/api-client';
 import AppShell from '@/app/components/AppShell';
 
 type Outcome = 'limpia' | 'asistida' | 'bloqueada' | 'atencion' | 'error';
-interface Portal { portal: string; attempts: number; counts: Record<Outcome, number>; cleanRate: number | null; paused: boolean }
+interface Portal { portal: string; attempts: number; counts: Record<Outcome, number>; cleanRate: number | null; paused: boolean; manual: boolean; manualReason: string | null }
 interface Health { rule: { days: number; minAttempts: number; minCleanRate: number }; portals: Portal[] }
 interface Invite { email: string; plan: string; createdAt: string; usedAt: string | null }
 interface SourceRow { source: string; active: string; new24h: string; new7d: string; newest: string | null }
@@ -61,6 +61,18 @@ export default function AdminPage() {
     if (res.success) { setEmail(''); setReload((r) => r + 1); }
   };
 
+  // Pausar: la señal ya es clara, no hace falta esperar el umbral automático.
+  // Reactivar: quita la pausa manual (vuelve a decidir la fórmula sola).
+  const pausePortal = async (portal: string) => {
+    const reason = window.prompt(`¿Por qué pausas "${portal}"? (opcional, queda como nota)`) ?? '';
+    await apiClient.put(`/admin/portal-health/${encodeURIComponent(portal)}`, { paused: true, reason: reason || null });
+    setReload((r) => r + 1);
+  };
+  const reactivatePortal = async (portal: string) => {
+    await apiClient.delete(`/admin/portal-health/${encodeURIComponent(portal)}`);
+    setReload((r) => r + 1);
+  };
+
   return (
     <AppShell>
       <h1 className="aw-h1">Panel FITCV</h1>
@@ -79,7 +91,7 @@ export default function AdminPage() {
               <tr>
                 <th style={cell}>Portal</th><th style={cell}>Intentos</th>
                 {OUTCOMES.map(([, label]) => <th key={label} style={cell}>{label}</th>)}
-                <th style={cell}>Salida limpia</th><th style={cell}>Estado</th>
+                <th style={cell}>Salida limpia</th><th style={cell}>Estado</th><th style={cell}>Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -89,11 +101,19 @@ export default function AdminPage() {
                   <td style={cell}>{p.attempts}</td>
                   {OUTCOMES.map(([k]) => <td key={k} style={cell}>{p.counts[k]}</td>)}
                   <td style={cell}>{pct(p.cleanRate)}</td>
-                  <td style={cell}><span className={p.paused ? 'aw-pill aw-pill-red' : 'aw-pill aw-pill-green'}>{p.paused ? 'En pausa' : 'Activo'}</span></td>
+                  <td style={cell}>
+                    <span className={p.paused ? 'aw-pill aw-pill-red' : 'aw-pill aw-pill-green'}>{p.paused ? 'En pausa' : 'Activo'}</span>
+                    {p.manual && <span className="aw-dim" style={{ marginLeft: 6 }}>(manual{p.manualReason ? `: ${p.manualReason}` : ''})</span>}
+                  </td>
+                  <td style={cell}>
+                    {p.paused
+                      ? <button className="aw-btn-outline aw-btn-sm" onClick={() => reactivatePortal(p.portal)}>Reactivar</button>
+                      : <button className="aw-btn-outline aw-btn-sm" onClick={() => pausePortal(p.portal)}>Pausar</button>}
+                  </td>
                 </tr>
               ))}
               {health?.portals.length === 0 && (
-                <tr><td style={cell} colSpan={9}><span className="aw-muted">Aún no hay intentos de envío en la ventana.</span></td></tr>
+                <tr><td style={cell} colSpan={10}><span className="aw-muted">Aún no hay intentos de envío en la ventana.</span></td></tr>
               )}
             </tbody>
           </table>

@@ -489,5 +489,18 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS consentAt TIMESTAMPTZ;
   `);
 
+  // Pausa manual de un portal (E1): cuando la señal ya es clara con pocos
+  // intentos, el dueño no tiene que esperar el umbral automático (20 intentos)
+  // para sacarlo de la cola. paused=false fuerza lo contrario: mantenerlo
+  // activo aunque las estadísticas digan pausarlo.
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS portal_overrides (
+      portal TEXT PRIMARY KEY,
+      paused BOOLEAN NOT NULL DEFAULT FALSE,
+      reason TEXT,
+      updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   console.log('✅ Database schema initialized');
 }
