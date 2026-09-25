@@ -61,6 +61,29 @@ export default function PrivacyPage() {
         </div>
 
         <div>
+          <h2 className="font-semibold text-gray-900 mb-1">3 bis. Datos de tu cuenta de Google o Microsoft</h2>
+          <p>
+            Si conectas tu Gmail, FITCV solicita únicamente el permiso <code>gmail.send</code> y lo usa solo para enviar,
+            desde tu cuenta, las postulaciones que tú autorizaste: un correo al reclutador de cada oferta, con tu CV adaptado
+            adjunto. No leemos, guardamos ni analizamos tus correos, contactos ni ningún otro dato de tu cuenta de Google.
+            Guardamos tu dirección de correo y un token de acceso cifrado, que se borra al desconectar tu correo o eliminar tu cuenta.
+          </p>
+          <p className="mt-2">
+            El uso y la transferencia a cualquier otra aplicación de la información recibida de las APIs de Google cumplen la{' '}
+            <a
+              href="https://developers.google.com/terms/api-services-user-data-policy"
+              className="text-blue-600 underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Política de Datos de Usuario de los Servicios de API de Google
+            </a>
+            , incluidos los requisitos de Uso Limitado. No usamos datos de Google para publicidad, no los vendemos y no los
+            usamos para entrenar modelos de inteligencia artificial. Lo mismo aplica al permiso <code>Mail.Send</code> de Outlook.
+          </p>
+        </div>
+
+        <div>
           <h2 className="font-semibold text-gray-900 mb-1">4. Retención de datos</h2>
           <p>Conservamos tus datos mientras tengas una cuenta activa. Al eliminar tu cuenta los borramos de inmediato de la base principal y revocamos el permiso de envío de tu correo; las copias de respaldo se eliminan en un plazo máximo de 30 días.</p>
           <p className="mt-2">Si ocurre una vulneración de seguridad que afecte tus datos, te avisaremos a ti y a la Agencia sin dilaciones indebidas.</p>
