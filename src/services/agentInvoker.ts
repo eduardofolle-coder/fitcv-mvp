@@ -112,13 +112,17 @@ export class AgentInvokerService {
             env.CLAUDE_API_URL,
             { model, max_tokens: body.max_tokens, messages: body.messages },
             {
-              headers: { Authorization: `Bearer ${env.CLAUDE_API_KEY}`, 'Content-Type': 'application/json' },
+              headers: {
+                'x-api-key': env.CLAUDE_API_KEY,
+                'anthropic-version': '2023-06-01',
+                'Content-Type': 'application/json',
+              },
               timeout: env.CLAUDE_TIMEOUT_MS,
             },
           );
-          // Anthropic response shape: {content: [{type:'text', text:'...'}], usage: {input_tokens, output_tokens}}
+          // Anthropic response shape; filter out thinking blocks (kimi-k2 emits them before the text block)
           return {
-            text: res.data.content?.[0]?.text ?? '',
+            text: (res.data.content ?? []).find((c: any) => c.type === 'text')?.text ?? '',
             inputTokens: res.data.usage?.input_tokens ?? 0,
             outputTokens: res.data.usage?.output_tokens ?? 0,
             stopReason: res.data.stop_reason,
