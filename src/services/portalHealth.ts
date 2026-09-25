@@ -4,16 +4,18 @@
  * Cada vez que la extensión (o el canal correo) reporta un envío queda un
  * evento desde "enviando". De ahí sale, por portal y en los últimos 7 días,
  * cuántos salieron limpios, cuántos necesitaron al candidato, cuántos se
- * bloquearon y cuántos fallaron. La salida limpia es la métrica que ordena la
- * cola y la que pausa un portal que se está portando mal.
+ * bloquearon y cuántos fallaron. La salida limpia ordena la cola; el portal
+ * se pausa para TODOS los candidatos solo si el propio lector está roto
+ * (errores técnicos) — un CAPTCHA o login bloquea nada más a ese candidato
+ * puntual (aviso + "requiere-atención"), nunca pausa el portal para los demás.
  */
 import { db } from '../db/client.js';
 
 export type Outcome = 'limpia' | 'asistida' | 'bloqueada' | 'atencion' | 'error';
 
-export const PAUSE_RULE = { days: 7, minCleanRate: 0.5, confidence: 0.95 } as const;
+export const PAUSE_RULE = { days: 7, maxErrorRate: 0.5, confidence: 0.95 } as const;
 export const CAPTCHA_STREAK = 3;
-const Z = 1.96; // 95% de confianza (cota superior del intervalo de Wilson)
+const Z = 1.96; // 95% de confianza (intervalo de Wilson)
 
 export function classifyOutcome(e: { toStatus: string; mode: string | null; reason: string | null }): Outcome | null {
   if (e.toStatus === 'enviada') return e.mode === 'manual' ? 'asistida' : 'limpia';
@@ -38,21 +40,24 @@ export const cleanScore = (h: Pick<PortalHealth, 'attempts' | 'counts'>): number
   (h.counts.limpia + 1) / (h.attempts + 2);
 
 /**
- * ¿Hay evidencia suficiente (95% de confianza) de que la salida limpia real
- * está bajo el mínimo? No exige un número fijo de intentos: un portal que
- * sale mal siempre se pausa con pocos intentos (ej. 0/5); uno parejo necesita
- * más datos antes de que se le pueda echar la culpa. Cota superior del
- * intervalo de Wilson para la proporción observada.
+ * ¿Hay evidencia suficiente (95% de confianza) de que el portal está roto de
+ * verdad — su HTML cambió, el lector ya no encuentra el formulario — y no
+ * que un candidato puntual se topó con un CAPTCHA o un login? Solo cuenta
+ * "error" (falla técnica real); "bloqueada" (CAPTCHA/login) nunca pausa el
+ * portal para todos, se resuelve avisando a ese candidato. No exige un
+ * número fijo de intentos: una racha de errores consistente pausa rápido con
+ * pocos intentos; una racha chica o mezclada espera más datos. Cota inferior
+ * del intervalo de Wilson para la proporción de errores.
  */
 export const isPaused = (h: Pick<PortalHealth, 'attempts' | 'counts'>): boolean => {
   const n = h.attempts;
   if (n === 0) return false;
-  const p = h.counts.limpia / n;
+  const p = h.counts.error / n;
   const denominator = 1 + (Z * Z) / n;
   const center = p + (Z * Z) / (2 * n);
   const margin = Z * Math.sqrt((p * (1 - p)) / n + (Z * Z) / (4 * n * n));
-  const upperBound = (center + margin) / denominator;
-  return upperBound < PAUSE_RULE.minCleanRate;
+  const lowerBound = (center - margin) / denominator;
+  return lowerBound > PAUSE_RULE.maxErrorRate;
 };
 
 // El correo es un canal propio: no se mezcla con el portal donde apareció la oferta.

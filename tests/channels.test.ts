@@ -6,6 +6,7 @@ import { classifyByKeywords } from '../src/services/inbox';
 import { composeApplication } from '../src/services/mailChannel';
 
 const counts = (limpia: number, rest: number) => ({ limpia, asistida: 0, bloqueada: rest, atencion: 0, error: 0 });
+const errorCounts = (error: number, limpia: number) => ({ limpia, asistida: 0, bloqueada: 0, atencion: 0, error });
 
 describe('E1 salud por portal', () => {
   it('clasifica cada resultado', () => {
@@ -17,17 +18,17 @@ describe('E1 salud por portal', () => {
     expect(classifyOutcome({ toStatus: 'en-cola', mode: null, reason: null })).toBeNull();
   });
 
-  it('se pausa con evidencia clara, sin depender de un número fijo de intentos', () => {
-    // Extremo con pocos intentos: 0 limpias de 5 ya alcanza (como chiletrabajos real).
-    expect(isPaused({ attempts: 5, counts: counts(0, 5) })).toBe(true);
-    // Muy pocos intentos: ni con 0 limpias hay evidencia suficiente todavía.
-    expect(isPaused({ attempts: 2, counts: counts(0, 2) })).toBe(false);
-    // Cerca del 50%: con solo 20 intentos no alcanza para estar seguros, aunque el promedio ya esté abajo.
-    expect(isPaused({ attempts: 20, counts: counts(9, 11) })).toBe(false);
-    // Con más intentos, sí: 30% limpio en 100 intentos es evidencia suficiente.
-    expect(isPaused({ attempts: 100, counts: counts(30, 70) })).toBe(true);
-    // Buen desempeño no se pausa nunca.
-    expect(isPaused({ attempts: 20, counts: counts(10, 10) })).toBe(false);
+  it('se pausa solo por fallas técnicas reales, nunca por CAPTCHA/login', () => {
+    // 5/5 en error (selector roto, ej.) ya alcanza para pausar, aunque sean pocos intentos.
+    expect(isPaused({ attempts: 5, counts: errorCounts(5, 0) })).toBe(true);
+    // La misma racha de 5/5 mala, pero es CAPTCHA/login (bloqueada): nunca pausa el portal.
+    expect(isPaused({ attempts: 5, counts: counts(0, 5) })).toBe(false);
+    // Pocos intentos en error: no alcanza la certeza todavía.
+    expect(isPaused({ attempts: 2, counts: errorCounts(2, 0) })).toBe(false);
+    // Con más intentos, una tasa de error sostenida sí pausa.
+    expect(isPaused({ attempts: 100, counts: errorCounts(70, 30) })).toBe(true);
+    // Portal sano (0 errores) no se pausa nunca, tenga los intentos que tenga.
+    expect(isPaused({ attempts: 20, counts: errorCounts(0, 20) })).toBe(false);
   });
 
   it('un portal sin historia pesa 50%', () => {
