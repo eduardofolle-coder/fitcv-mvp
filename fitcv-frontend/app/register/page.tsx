@@ -12,6 +12,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+  // Ley 21.719: el consentimiento es explícito, la casilla parte desmarcada.
+  const [consent, setConsent] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -19,9 +21,12 @@ export default function RegisterPage() {
     if (!email || !password || !confirmPassword) { setLocalError('Completa todos los campos.'); return; }
     if (password !== confirmPassword) { setLocalError('Las contraseñas no coinciden.'); return; }
     if (password.length < 12) { setLocalError('La contraseña debe tener al menos 12 caracteres.'); return; }
-    const result = await register({ email, password });
+    if (!consent) { setLocalError('Para crear tu cuenta debes aceptar la política de privacidad.'); return; }
+    const result = await register({ email, password, consent });
     if (result.ok) { router.push('/cv'); }
-    else { setLocalError(result.error === 'Email already in use' ? 'Ese correo ya tiene una cuenta. Ingresa o recupera tu contraseña.' : result.error ?? 'No se pudo crear la cuenta.'); }
+    else if (result.error === 'Email already in use') setLocalError('Ese correo ya tiene una cuenta. Ingresa o recupera tu contraseña.');
+    else if (result.error?.includes('closed beta')) setLocalError('FITCV está en beta cerrada: por ahora solo pueden crear cuenta los correos invitados.');
+    else setLocalError(result.error ?? 'No se pudo crear la cuenta.');
   };
 
   return (
@@ -147,6 +152,14 @@ export default function RegisterPage() {
                 />
               </div>
 
+              <label style={{ display:'flex', gap:10, alignItems:'flex-start', fontSize:13.5, color:'#14273F', lineHeight:1.45 }}>
+                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop:3 }} />
+                <span>
+                  Acepto la <Link href="/privacy" style={{ color:'#B9820D', fontWeight:600 }}>política de privacidad</Link> y
+                  autorizo a FITCV a tratar mi CV y datos de contacto para postular en mi nombre.
+                </span>
+              </label>
+
               <button type="submit" className="lp-btn-gold" disabled={submitting}>
                 {submitting ? 'Creando cuenta…' : 'Crear cuenta'}
               </button>
@@ -154,8 +167,11 @@ export default function RegisterPage() {
               <div className="lp-divider"><span>o</span></div>
 
               <a
-                href={`${process.env.NEXT_PUBLIC_API_URL}/auth/google`}
+                href={consent ? `${process.env.NEXT_PUBLIC_API_URL}/auth/google` : undefined}
+                onClick={(e) => { if (!consent) { e.preventDefault(); setLocalError('Marca la casilla de privacidad antes de continuar con Google.'); } }}
+                aria-disabled={!consent}
                 className="lp-btn-google"
+                style={consent ? undefined : { opacity:.55 }}
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

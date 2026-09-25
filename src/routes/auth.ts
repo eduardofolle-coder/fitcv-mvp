@@ -11,6 +11,10 @@ import { requestPasswordReset, resetPassword } from '../services/passwordReset.j
 import passport from 'passport';
 import { issueTokensForUser } from '../services/googleAuth.js';
 import { env } from '../env.js';
+import { BETA_CLOSED_MESSAGE, invitedPlan, onboardUser } from '../services/betaAccess.js';
+import { loadHardData } from '../services/candidateProfile.js';
+import { disconnectMailAccount } from '../services/mailAccounts.js';
+import { loadAnswerPreferences } from '../services/savedAnswers.js';
 
 const router = Router();
 
@@ -54,8 +58,12 @@ router.post(
       throw new AppError(400, 'Email already in use');
     }
 
+    const plan = await invitedPlan(email);
+    if (plan === null) throw new AppError(403, BETA_CLOSED_MESSAGE);
+
     // ✅ Crear usuario
     const user = await AuthService.createUser(email, password);
+    await onboardUser(user.id, user.email, plan);
     const { accessToken, refreshToken, expiresIn } = AuthService.generateTokens(user.id);
 
     // ✅ Guardar refresh token
@@ -254,6 +262,33 @@ router.post(
   })
 );
 
+// GET /api/auth/me/export — portabilidad (Ley 21.719): todos tus datos en JSON
+router.get(
+  '/me/export',
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: any) => {
+    if (!req.user) throw new AppError(401, 'Unauthorized');
+    const userId = req.user.id;
+    const rows = async (sql: string) => (await db.query(sql, [userId])).rows;
+    res.json({
+      success: true,
+      data: {
+        exportedAt: new Date().toISOString(),
+        account: await db.queryOne('SELECT email, plan, createdAt, consentAt FROM users WHERE id = $1', [userId]),
+        cv: await loadHardData(userId).catch(() => null),
+        answers: await loadAnswerPreferences(userId).catch(() => null),
+        postulations: await rows(`
+          SELECT p.estado, p.applyStatus, p.channel, p.applyEmail, p.sentAt, p.createdAt, o.title, o.company, o.url
+          FROM postulations p JOIN offers o ON o.id = p.offerId WHERE p.userId = $1 ORDER BY p.createdAt`),
+        applicationEvents: await rows('SELECT postulationId, fromStatus, toStatus, mode, reason, createdAt FROM application_events WHERE userId = $1 ORDER BY createdAt'),
+        notifications: await rows('SELECT kind, title, body, createdAt FROM notifications WHERE userId = $1 ORDER BY createdAt'),
+        mailAccount: await db.queryOne('SELECT provider, address, connectedAt FROM mail_accounts WHERE userId = $1', [userId]),
+        repliesReceived: await rows('SELECT fromAddress, subject, category, createdAt FROM inbound_messages WHERE userId = $1 ORDER BY createdAt'),
+      },
+    });
+  })
+);
+
 // DELETE /api/auth/me — elimina todos los datos del usuario (Ley 19.628)
 router.delete(
   '/me',
@@ -262,12 +297,8 @@ router.delete(
     if (!req.user) throw new AppError(401, 'Unauthorized');
     const userId = req.user.id;
 
-    // Borrar en cascada: datos personales, postulaciones, preferencias, tokens
-    await db.query('DELETE FROM apply_preferences WHERE userId = $1', [userId]);
-    await db.query('DELETE FROM postulations WHERE userId = $1', [userId]);
-    await db.query('DELETE FROM cv_profiles WHERE userId = $1', [userId]);
-    await db.query('DELETE FROM plan_usage WHERE userId = $1', [userId]);
-    await db.query('DELETE FROM refresh_tokens WHERE userId = $1', [userId]);
+    // Todas las tablas del usuario cuelgan de users con ON DELETE CASCADE.
+    await disconnectMailAccount(userId); // también revoca el permiso de envío en Google
     await db.query('DELETE FROM users WHERE id = $1', [userId]);
 
     await AuditLogger.logSecurityEvent({

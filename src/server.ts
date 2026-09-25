@@ -23,6 +23,9 @@ import { startDailyAnalysis } from './services/dailyAnalysis.js';
 import { startWatchdog, getHealthReport } from './services/watchdog.js';
 import notificationsRoutes from './routes/notifications.js';
 import plansRoutes from './routes/plans.js';
+import mailRoutes from './routes/mail.js';
+import adminRoutes from './routes/admin.js';
+import { startChannelJobs } from './services/channelJobs.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
 import passport from 'passport';
@@ -119,6 +122,8 @@ app.use('/api/applications', applicationsRoutes);
 app.use('/api/extension', extensionRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/plans', plansRoutes);
+app.use('/api/mail', mailRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ✅ 404 handler
 app.use((req, res) => {
@@ -226,6 +231,7 @@ initializeDatabase()
         startDailyAnalysis();
         // Vigila BD y frescura del sync; auto-recupera y alerta lo que no.
         startWatchdog(env.WATCHDOG_MINUTES, env.OFFER_SYNC_MINUTES);
+        startChannelJobs();
       }
     });
   })

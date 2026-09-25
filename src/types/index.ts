@@ -1,5 +1,6 @@
 // Augmentation for passport — aligns Express.Request.user with AuthenticatedRequest.user
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- así se aumenta Express.User
   namespace Express {
     interface User {
       id: string;

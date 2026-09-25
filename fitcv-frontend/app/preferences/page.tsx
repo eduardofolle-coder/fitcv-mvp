@@ -305,7 +305,8 @@ export default function PreferencesPage() {
       </form>
 
       <section style={{ marginTop:32, paddingTop:24, borderTop:'1px solid rgba(255,255,255,.08)' }}>
-        <p className="aw-dim" style={{ textTransform:'uppercase', letterSpacing:'.06em', fontSize:11, marginBottom:12 }}>Zona de peligro</p>
+        <p className="aw-dim" style={{ textTransform:'uppercase', letterSpacing:'.06em', fontSize:11, marginBottom:12 }}>Tus datos</p>
+        <ExportDataButton />
         <DeleteAccountButton onDeleted={() => router.push('/login')} />
         <p className="aw-dim" style={{ marginTop:8 }}>
           Tus datos son eliminados permanentemente. Ver{' '}
@@ -313,6 +314,29 @@ export default function PreferencesPage() {
         </p>
       </section>
     </AppShell>
+  );
+}
+
+// Portabilidad (Ley 21.719): el candidato se lleva todos sus datos en un archivo.
+function ExportDataButton() {
+  const [busy, setBusy] = useState(false);
+  const download = async () => {
+    setBusy(true);
+    const res = await apiClient.get<unknown>('/auth/me/export');
+    if (res.success) {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mis-datos-fitcv.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    setBusy(false);
+  };
+  return (
+    <button onClick={download} disabled={busy} style={{ display:'block', marginBottom:12, fontSize:13, color:'#A9B6C8', background:'none', border:'none', cursor:'pointer', textDecoration:'underline', padding:0 }}>
+      {busy ? 'Preparando…' : 'Descargar todos mis datos (JSON)'}
+    </button>
   );
 }
 

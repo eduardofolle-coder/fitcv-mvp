@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
-import { APPLY_STATUS_LABELS, applyStatusOf } from '@/lib/applyStatus';
+import { APPLY_STATUS_LABELS, ATTENTION_REASON_LABELS, applyStatusOf } from '@/lib/applyStatus';
 import AppShell from '@/app/components/AppShell';
 
 // Los estados los define el backend en español; traducirlos a un juego propio
@@ -33,6 +33,23 @@ interface Postulation {
   applyStatus?: string;
   postulationSource?: 'manual' | 'auto' | 'suggested';
   matchScore?: number | null;
+  applyReason?: string | null;
+  applyDetail?: string | null;
+  applyUrl?: string | null;
+  offerUrl?: string | null;
+  channel?: 'portal' | 'email';
+  mailScheduledAt?: string | null;
+}
+
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+
+/** Lo que el candidato ve del envío por correo: nunca "en espera", sino cuándo sale. */
+function mailNote(p: Postulation): string | null {
+  if (p.channel !== 'email') return null;
+  const status = applyStatusOf(p.applyStatus);
+  if (status === 'enviada') return 'Enviada por correo';
+  if (status !== 'en-cola') return null;
+  return p.mailScheduledAt ? `Se envía hoy a las ${hhmm(p.mailScheduledAt)}` : 'Conecta tu correo en el tablero para enviarla';
 }
 
 interface Offer {
@@ -62,6 +79,7 @@ export default function PostulationsPage() {
   const [queueing, setQueueing] = useState(false);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [acting, setActing] = useState<string | null>(null);
 
   // Todos los hooks van antes de cualquier return: la versión anterior salía
   // temprano mientras cargaba la sesión y declaraba el useEffect después, así
@@ -150,6 +168,17 @@ export default function PostulationsPage() {
   };
 
   const filteredPostulations = postulations.filter((p) => filter === 'all' || p.estado === filter);
+
+  // "Te necesitamos": lo único que FITCV no puede hacer solo.
+  const needsYou = postulations.filter((p) => ['requiere-atencion', 'error'].includes(applyStatusOf(p.applyStatus)));
+
+  const act = async (id: string, request: () => Promise<{ success: boolean; error?: string }>) => {
+    setActing(id);
+    const res = await request();
+    if (!res.success) setQueueMessage(res.error || 'No se pudo completar la acción.');
+    setActing(null);
+    setReloadKey((k) => k + 1);
+  };
 
   const availableOffers = offers.filter((o) => !postulations.some((p) => p.offerId === o.id));
 
@@ -240,6 +269,50 @@ export default function PostulationsPage() {
         </button>
       </section>
 
+      {!loading && needsYou.length > 0 && (
+        <section className="aw-card" style={{ marginBottom:24, borderColor:'#E1A526' }}>
+          <h2 className="aw-h2" style={{ margin:0 }}>Te necesitamos ({needsYou.length})</h2>
+          <p className="aw-muted" style={{ marginBottom:12 }}>
+            Esto es lo único que FITCV no puede hacer solo. Si la pestaña de la extensión sigue abierta, resuélvelo ahí y pulsa
+            {' '}&quot;Listo, continúa&quot;: FITCV sigue solo.
+          </p>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {needsYou.map((p) => {
+              const link = p.applyUrl || p.offerUrl;
+              return (
+                <div key={p.id} style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
+                  <div style={{ flex:1, minWidth:220 }}>
+                    <p style={{ fontWeight:600, color:'#F4F1E9' }}>{p.title} · <span className="aw-muted">{p.company}</span></p>
+                    <p className="aw-dim">
+                      {applyStatusOf(p.applyStatus) === 'error'
+                        ? `No se pudo enviar${p.applyDetail ? `: ${p.applyDetail}` : '.'}`
+                        : ATTENTION_REASON_LABELS[p.applyReason ?? 'otro'] ?? ATTENTION_REASON_LABELS.otro}
+                    </p>
+                  </div>
+                  {link && (
+                    <a href={link} target="_blank" rel="noopener noreferrer" className="aw-btn-outline aw-btn-sm">Abrir y resolver</a>
+                  )}
+                  <button
+                    disabled={acting === p.id}
+                    onClick={() => act(p.id, () => apiClient.post(`/postulations/${p.id}/mark-sent`))}
+                    className="aw-btn-gold aw-btn-sm"
+                  >
+                    Ya la envié
+                  </button>
+                  <button
+                    disabled={acting === p.id}
+                    onClick={() => act(p.id, () => apiClient.post(`/postulations/${p.id}/queue`))}
+                    className="aw-btn-outline aw-btn-sm"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {loading ? (
         <div style={{ textAlign:'center', padding:'48px 0', color:'#A9B6C8' }}>Cargando...</div>
       ) : error ? (
@@ -264,8 +337,19 @@ export default function PostulationsPage() {
                       <span className={applyStatusColors[applyStatus] ?? 'aw-pill aw-pill-gray'}>{APPLY_STATUS_LABELS[applyStatus]}</span>
                     </div>
                     <p className="aw-muted">{post.company}</p>
+                    {mailNote(post) && <p className="aw-dim" style={{ marginTop:4, color:'#E1A526' }}>✉ {mailNote(post)}</p>}
                     <p className="aw-dim" style={{ marginTop:4 }}>Creada el {new Date(post.createdAt).toLocaleDateString()}</p>
                   </div>
+                  {applyStatus === 'enviada' && post.estado !== 'Entrevista' && (
+                    <button
+                      disabled={acting === post.id}
+                      onClick={() => act(post.id, () => apiClient.put(`/postulations/${post.id}`, { estado: 'Entrevista' }))}
+                      className="aw-btn-outline aw-btn-sm"
+                      style={{ flexShrink:0 }}
+                    >
+                      Me contactaron
+                    </button>
+                  )}
                   <button onClick={() => router.push(`/postulations/${post.id}`)} className="aw-btn-outline aw-btn-sm" style={{ flexShrink:0 }}>
                     {applyStatus === 'requiere-atencion' ? 'Revisar' : 'Ver CV'}
                   </button>

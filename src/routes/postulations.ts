@@ -82,10 +82,11 @@ router.get(
     let query = `
       SELECT p.id, p.userId, p.offerId, p.estado, p.prioridad, p.notes, p.cvAdaptedId,
              p.postulationWeight, p.postuladoAt, p.createdAt, p.updatedAt,
-             p.applyStatus, p.applyReason, p.applyDetail,
+             p.applyStatus, p.applyReason, p.applyDetail, p.applyUrl, p.sentAt,
+             p.channel, p.applyEmail, p.mailScheduledAt,
              p.source AS postulationSource, p.matchScore,
              o.title, o.company, o.level, o.salaryMin, o.salaryMax, o.location,
-             o.source AS offerSource
+             o.source AS offerSource, o.url AS offerUrl
       FROM postulations p
       JOIN offers o ON p.offerId = o.id
       WHERE p.userId = $1

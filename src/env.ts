@@ -61,6 +61,25 @@ export const env = {
   // WhatsApp del admin para alertas del watchdog (E.164). Vacío = solo Sentry+log.
   ADMIN_WHATSAPP: process.env.ADMIN_WHATSAPP || '',
 
+  // Dirección pública de la API: arma las URL de retorno de OAuth del correo.
+  API_URL: process.env.API_URL || `http://localhost:${process.env.PORT || '3000'}`,
+
+  // Canal correo (E3). Gmail usa GOOGLE_CLIENT_ID/SECRET con el permiso
+  // gmail.send; Outlook necesita su propia app en Microsoft Entra.
+  MS_CLIENT_ID: process.env.MS_CLIENT_ID || '',
+  MS_CLIENT_SECRET: process.env.MS_CLIENT_SECRET || '',
+  // Remitente de respaldo (dominio con SPF/DKIM/DMARC), p. ej. postula@postula.fitcv.cl.
+  // Vacío = sin respaldo: sin correo conectado, la postulación espera.
+  MAIL_BACKUP_FROM: process.env.MAIL_BACKUP_FROM || '',
+
+  // Respuestas (E4): dominio de los alias (inbox.fitcv.cl) y secreto del webhook de entrada.
+  INBOX_DOMAIN: process.env.INBOX_DOMAIN || '',
+  INBOUND_SECRET: process.env.INBOUND_SECRET || '',
+
+  // Beta cerrada (E6): solo se registran correos invitados. Admins separados por coma.
+  BETA_CLOSED: process.env.BETA_CLOSED === 'true',
+  ADMIN_EMAILS: (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
+
   // Cada cuántos minutos revisa el watchdog. 0 = apagado.
   WATCHDOG_MINUTES: parseInt(process.env.WATCHDOG_MINUTES || '10'),
 

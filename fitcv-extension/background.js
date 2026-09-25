@@ -138,6 +138,9 @@ async function report(outcome, payload = {}) {
   clearTimeout(current.timer);
   clearTimeout(current.recheck);
 
+  // Si el candidato tuvo que destrabarla, el envío cuenta como asistido.
+  if (outcome === 'enviada' && current.resumed) payload = { ...payload, mode: 'manual' };
+
   try {
     await api(`/extension/postulations/${current.postulationId}/report`, { method: 'POST', body: { outcome, ...payload } });
     await log(
@@ -175,6 +178,7 @@ async function runStep() {
         {
           step: current.step,
           submitted: current.submitted,
+          resumed: current.resumed === true,
           autoSend: current.autoSend,
           source: current.offer.source,
           sourceHost: SOURCE_HOSTS[current.offer.source] || null,
@@ -285,6 +289,24 @@ async function captureTab(tabId) {
   return saved;
 }
 
+async function resumeFromTab(tabId) {
+  const key = `attention:${tabId}`;
+  const postulationId = (await chrome.storage.session.get(key))[key];
+  if (!postulationId) throw new Error('FITCV no tiene una postulación pendiente en esta pestaña.');
+  if (session) throw new Error('FITCV está enviando otra postulación; inténtalo en un minuto.');
+
+  const item = await api(`/extension/postulations/${postulationId}/resume`, { method: 'POST' });
+  await chrome.storage.session.remove(key);
+  const current = { ...item, tabId, step: 0, submitted: false, waits: 0, resumed: true };
+  current.timer = setTimeout(() => {
+    if (session === current) void report('error', { detail: 'La página no respondió a tiempo.' });
+  }, APPLICATION_TIMEOUT_MS);
+  session = current;
+  await log(`Continuando: ${item.offer.title} (${item.offer.company}).`);
+  void runStep();
+  return { ok: true };
+}
+
 async function markSentFromTab(tabId) {
   const key = `attention:${tabId}`;
   const stored = await chrome.storage.session.get(key);
@@ -317,6 +339,9 @@ async function handleMessage(message, sender) {
       if (!session || !sender.tab || sender.tab.id !== session.tabId) throw new Error('No hay una postulación en curso en esta pestaña.');
       return api(`/extension/postulations/${session.postulationId}/adapted-cv`, { method: 'POST' });
     }
+    case 'fitcv:resume':
+      if (!sender.tab) throw new Error('Falta la pestaña.');
+      return resumeFromTab(sender.tab.id);
     case 'fitcv:manual-sent':
       if (!sender.tab) throw new Error('Falta la pestaña.');
       return markSentFromTab(sender.tab.id);

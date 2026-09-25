@@ -444,5 +444,50 @@ export async function initializeSchema(): Promise<void> {
       WHERE source = 'suggested' AND estado = 'Por revisar' AND applyStatus = 'pendiente';
   `);
 
+  // Canal correo (E3): una oferta que pide el CV por correo se envía desde el
+  // correo del candidato (OAuth, solo permiso de envío) o, sin él, desde el
+  // dominio de respaldo en un horario repartido. Los tokens van cifrados.
+  // Respuestas (E4): cada candidato tiene un alias en el dominio de entrada.
+  // Beta cerrada (E6): solo se registran correos invitados, con su plan.
+  await db.exec(`
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'portal';
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyEmail TEXT;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS mailScheduledAt TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS idx_postulations_mail ON postulations(channel, applyStatus, mailScheduledAt);
+    CREATE INDEX IF NOT EXISTS idx_application_events_created ON application_events(createdAt);
+
+    CREATE TABLE IF NOT EXISTS mail_accounts (
+      userId TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL,          -- google | microsoft
+      address TEXT NOT NULL,
+      refreshToken TEXT NOT NULL,      -- cifrado
+      connectedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      lastError TEXT
+    );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS inboxAlias TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_inbox_alias ON users(inboxAlias) WHERE inboxAlias IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS inbound_messages (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      postulationId TEXT REFERENCES postulations(id) ON DELETE SET NULL,
+      fromAddress TEXT,
+      subject TEXT,
+      category TEXT NOT NULL,          -- entrevista | rechazo | otro
+      forwarded BOOLEAN NOT NULL DEFAULT FALSE,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS beta_invites (
+      email TEXT PRIMARY KEY,
+      plan TEXT NOT NULL DEFAULT 'pro',
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      usedAt TIMESTAMPTZ
+    );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS consentAt TIMESTAMPTZ;
+  `);
+
   console.log('✅ Database schema initialized');
 }

@@ -284,7 +284,7 @@ export default function Landing() {
         <section style={{ paddingTop: 16 }}>
           <div className="kicker">Tu seguimiento</div>
           <h2 className="h2">Tu búsqueda completa, en un solo tablero.</h2>
-          <p className="sub">FITCV marca automáticamente hasta «Enviada». Desde ahí, tú registras tu avance —en revisión, entrevista— como en tu propio panel. <b>Nunca leemos tu correo</b>: el seguimiento lo llevas tú.</p>
+          <p className="sub">FITCV marca automáticamente hasta «Enviada». Si un reclutador responde a una postulación hecha por correo, te lo reenviamos y, si es una entrevista, la marcamos por ti. <b>Nunca leemos tu bandeja</b>: solo vemos las respuestas a tus postulaciones.</p>
 
           <div className="dash" aria-label="Ejemplo de tablero de postulaciones">
             <div className="dash-head">
@@ -332,6 +332,32 @@ export default function Landing() {
             </div>
           </div>
           <p className="price-note" style={{ marginTop: 14 }}>FITCV completa hasta «Enviada» automáticamente · los estados posteriores los marcas tú</p>
+        </section>
+
+        <section id="correo" style={{ paddingTop: 16 }}>
+          <div className="kicker">Postulamos desde tu correo</div>
+          <h2 className="h2">Muchas ofertas piden el CV por correo. Lo enviamos desde el tuyo.</h2>
+          <p className="sub">
+            Al entrar te pediremos conectar tu <b>Gmail, Outlook u otro correo</b>. Así cada postulación sale desde tu dirección,
+            con tu CV adaptado adjunto, y queda como «Postulado» al instante.
+          </p>
+          <div className="steps">
+            <div className="step">
+              <div className="idx">✓</div>
+              <h3>Solo permiso de envío</h3>
+              <p>Google y Microsoft te mostrarán el permiso exacto: <b>enviar correos en tu nombre</b>. FITCV no puede leer tu bandeja ni tus contactos.</p>
+            </div>
+            <div className="step">
+              <div className="idx">✓</div>
+              <h3>Tú lo apruebas y lo quitas</h3>
+              <p>Lo autorizas una vez desde tu tablero y lo desconectas cuando quieras, con un clic, desde FITCV o desde tu cuenta de Google o Microsoft.</p>
+            </div>
+            <div className="step">
+              <div className="idx">✓</div>
+              <h3>Las respuestas te llegan a ti</h3>
+              <p>Si el reclutador responde, te reenviamos el correo y te avisamos por WhatsApp. Si no conectas tu correo, enviamos desde el dominio de FITCV con respuesta a ti.</p>
+            </div>
+          </div>
         </section>
 
         <section style={{ paddingTop: 16 }}>

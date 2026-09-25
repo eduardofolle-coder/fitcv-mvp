@@ -44,7 +44,10 @@ export const schemas = {
       .messages({
         'string.min': 'Password must be at least 12 characters',
         'string.pattern.base': 'Password must include uppercase, lowercase, numbers, and symbols'
-      })
+      }),
+    // Ley 21.719: consentimiento explícito, la casilla parte desmarcada.
+    consent: Joi.boolean().valid(true).required()
+      .messages({'any.only': 'You must accept the privacy policy', 'any.required': 'You must accept the privacy policy'})
   }),
 
   // Login

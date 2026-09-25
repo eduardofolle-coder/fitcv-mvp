@@ -15,6 +15,7 @@ import { initializeSchema } from './db/schema.js';
 import { backfillOfferSearch, startOfferSync } from './services/offerSync.js';
 import { startDailyAnalysis } from './services/dailyAnalysis.js';
 import { startWatchdog } from './services/watchdog.js';
+import { startChannelJobs } from './services/channelJobs.js';
 import { env } from './env.js';
 import { logger } from './services/logger.js';
 import { initErrorTracking, captureException } from './services/errorTracking.js';
@@ -33,13 +34,13 @@ async function main(): Promise<void> {
   startOfferSync(env.OFFER_SYNC_MINUTES);
   startDailyAnalysis();
   startWatchdog(env.WATCHDOG_MINUTES, env.OFFER_SYNC_MINUTES);
+  startChannelJobs();
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, async () => {
+  process.on(signal, () => {
     logger.info('Worker recibió ' + signal + ', cerrando');
-    await db.close();
-    process.exit(0);
+    void db.close().finally(() => process.exit(0));
   });
 }
 

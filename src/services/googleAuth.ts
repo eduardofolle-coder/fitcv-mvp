@@ -5,6 +5,7 @@ import { AuthService } from './auth.js';
 import { env } from '../env.js';
 import { logger } from './logger.js';
 import { randomUUID } from 'crypto';
+import { invitedPlan, onboardUser } from './betaAccess.js';
 
 export function initGoogleAuth() {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return;
@@ -15,7 +16,7 @@ export function initGoogleAuth() {
       clientSecret: env.GOOGLE_CLIENT_SECRET,
       callbackURL: '/api/auth/google/callback',
     },
-    async (_accessToken, _refreshToken, profile, done) => {
+    (_accessToken, _refreshToken, profile, done) => void (async () => {
       try {
         const email = profile.emails?.[0]?.value;
         if (!email) return done(new Error('Google no devolvió un email'));
@@ -27,11 +28,14 @@ export function initGoogleAuth() {
         );
 
         if (!user) {
+          const plan = await invitedPlan(email);
+          if (plan === null) return done(null, false);
           const id = randomUUID();
           await db.query(
             'INSERT INTO users (id, email, passwordHash, googleId) VALUES ($1, $2, $3, $4)',
             [id, email, '', profile.id],
           );
+          await onboardUser(id, email, plan);
           user = { id, email };
           logger.info('Google OAuth: nuevo usuario creado', { userId: id, email });
         } else {
@@ -46,7 +50,7 @@ export function initGoogleAuth() {
       } catch (err) {
         done(err as Error);
       }
-    },
+    })(),
   ));
 }
 

@@ -21,6 +21,8 @@ import {
   type ApplyStatus,
   type ResolutionRecord,
 } from './applyStatus.js';
+import { queuePolicy } from './portalHealth.js';
+import { extractApplyEmail } from './applyEmail.js';
 
 export interface TransitionRequest {
   postulationId: string;
@@ -117,6 +119,25 @@ export interface ClaimedApplication {
  * a entregarse.
  */
 export async function claimQueuedApplications(userId: string, limit: number): Promise<ClaimedApplication[]> {
+  // Primero lo que más calza en los portales que más salen limpios; los
+  // portales en pausa (globales o por racha de CAPTCHA del candidato) esperan.
+  const policy = await queuePolicy(userId);
+  const candidates = (await db.query<{ id: string }>(`
+    SELECT p.id FROM postulations p
+    JOIN offers o ON o.id = p.offerId
+    WHERE p.userId = $1 AND p.channel = 'portal'
+      AND (
+        p.applyStatus = 'en-cola'
+        OR (p.applyStatus = 'enviando' AND p.applyClaimedAt < CURRENT_TIMESTAMP - make_interval(mins => $2))
+      )
+      AND NOT (o.source = ANY($3))
+    ORDER BY COALESCE(p.matchScore, 50) * COALESCE((($4::jsonb) ->> o.source)::float, 0.5) DESC,
+             p.applyQueuedAt ASC NULLS LAST
+    LIMIT $5
+  `, [userId, CLAIM_LEASE_MINUTES, policy.skip, JSON.stringify(policy.weights), limit])).rows.map(r => r.id);
+  if (candidates.length === 0) return [];
+
+  // Se re-verifica el estado al tomarlas: otra pestaña pudo ganar la carrera.
   const claimed = await db.query<{ id: string }>(`
     UPDATE postulations SET
       applyStatus = 'enviando',
@@ -125,31 +146,25 @@ export async function claimQueuedApplications(userId: string, limit: number): Pr
       applyResolution = NULL,
       applyUpdatedAt = CURRENT_TIMESTAMP,
       updatedAt = CURRENT_TIMESTAMP
-    WHERE id IN (
-      SELECT id FROM postulations
-      WHERE userId = $1
-        AND (
-          applyStatus = 'en-cola'
-          OR (applyStatus = 'enviando' AND applyClaimedAt < CURRENT_TIMESTAMP - make_interval(mins => $2))
-        )
-      ORDER BY applyQueuedAt ASC NULLS LAST, createdAt ASC
-      LIMIT $3
-      FOR UPDATE SKIP LOCKED
-    )
+    WHERE id = ANY($1) AND userId = $2
+      AND (
+        applyStatus = 'en-cola'
+        OR (applyStatus = 'enviando' AND applyClaimedAt < CURRENT_TIMESTAMP - make_interval(mins => $3))
+      )
     RETURNING id
-  `, [userId, CLAIM_LEASE_MINUTES, limit]);
+  `, [candidates, userId, CLAIM_LEASE_MINUTES]);
 
-  const ids = claimed.rows.map(r => r.id);
+  const won = new Set(claimed.rows.map(r => r.id));
+  const ids = candidates.filter(id => won.has(id));
   if (ids.length === 0) return [];
 
-  const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
   const rows = await db.query<any>(`
     SELECT p.id, p.applyAttempts, o.id AS offerId, o.title, o.company, o.source, o.url, o.applyUrl
     FROM postulations p
     JOIN offers o ON o.id = p.offerId
-    WHERE p.userId = $1 AND p.id IN (${placeholders})
-    ORDER BY p.applyQueuedAt ASC NULLS LAST, p.createdAt ASC
-  `, [userId, ...ids]);
+    WHERE p.userId = $1 AND p.id = ANY($2)
+  `, [userId, ids]);
+  rows.rows.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
 
   return rows.rows.map(r => ({
     postulationId: r.id,
@@ -163,6 +178,29 @@ export async function claimQueuedApplications(userId: string, limit: number): Pr
       applyUrl: r.applyUrl ?? null,
     },
   }));
+}
+
+/**
+ * El candidato resolvió lo que trabó el envío (CAPTCHA, login) en la pestaña que
+ * dejó abierta la extensión y pulsó "Continuar": vuelve a "enviando" en el acto,
+ * sin esperar turno en la cola.
+ */
+export async function resumeApplication(postulationId: string, userId: string): Promise<ClaimedApplication> {
+  await transitionApplication({ postulationId, userId, to: 'en-cola', mode: 'manual', reason: 'reanudada' });
+  const row = await db.queryOne<any>(`
+    UPDATE postulations p SET
+      applyStatus = 'enviando', applyClaimedAt = CURRENT_TIMESTAMP, applyAttempts = p.applyAttempts + 1,
+      applyResolution = NULL, applyUpdatedAt = CURRENT_TIMESTAMP, updatedAt = CURRENT_TIMESTAMP
+    FROM offers o
+    WHERE p.id = $1 AND p.userId = $2 AND p.applyStatus = 'en-cola' AND o.id = p.offerId
+    RETURNING p.id, p.applyAttempts, o.id AS offerId, o.title, o.company, o.source, o.url, o.applyUrl
+  `, [postulationId, userId]);
+  if (!row) throw new AppError(409, 'The application changed while FITCV was resuming it.');
+  return {
+    postulationId: row.id,
+    attempts: Number(row.applyAttempts) || 0,
+    offer: { id: row.offerId, title: row.title, company: row.company, source: row.source, url: row.url ?? null, applyUrl: row.applyUrl ?? null },
+  };
 }
 
 /**
@@ -242,12 +280,19 @@ export async function getApplyPreferences(userId: string): Promise<{ autoSendLin
  */
 export async function queueApplication(postulationId: string, userId: string): Promise<{ from: ApplyStatus; to: ApplyStatus }> {
   const row = await db.queryOne<any>(`
-    SELECT p.salaryAuthorized, o.salaryMin, o.salaryMax, o.salaryCurrency
+    SELECT p.salaryAuthorized, o.salaryMin, o.salaryMax, o.salaryCurrency, o.description
     FROM postulations p
     JOIN offers o ON o.id = p.offerId
     WHERE p.id = $1 AND p.userId = $2
   `, [postulationId, userId]);
   if (!row) throw new AppError(404, 'Postulation not found');
+
+  // Si la oferta pide el CV por correo, va por el canal correo y no por la extensión.
+  const applyEmail = extractApplyEmail(row.description);
+  await db.query(
+    `UPDATE postulations SET channel = $1, applyEmail = $2 WHERE id = $3 AND userId = $4`,
+    [applyEmail ? 'email' : 'portal', applyEmail, postulationId, userId]
+  );
 
   const prefs = await db.queryOne<{ salaryMin: number | null }>('SELECT salaryMin FROM apply_preferences WHERE userId = $1', [userId]);
   const below = payBelowMinimum(

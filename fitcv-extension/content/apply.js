@@ -31,7 +31,7 @@
 
   const BANNER_ID = 'fitcv-banner';
 
-  function banner(message, { manualSend = false } = {}) {
+  function banner(message, { manualSend = false, resume = false } = {}) {
     const doc = document;
     let box = doc.getElementById(BANNER_ID);
     if (!box) {
@@ -44,13 +44,27 @@
       doc.body.appendChild(box);
     }
     box.textContent = `FITCV: ${message}`;
+    const buttonCss =
+      'display:inline-block;margin:8px 8px 0 0;padding:6px 10px;border:0;border-radius:6px;background:#fff;color:#1e3a8a;font-weight:600;cursor:pointer';
+
+    if (resume) {
+      // Un clic y FITCV sigue solo desde donde quedó.
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Listo, continúa';
+      button.style.cssText = buttonCss;
+      button.addEventListener('click', () => {
+        box.textContent = 'FITCV: sigo con la postulación…';
+        send({ type: 'fitcv:resume' }).catch(error => (box.textContent = `FITCV: no pude seguir (${error.message}).`));
+      });
+      box.appendChild(button);
+    }
 
     if (manualSend) {
       const button = doc.createElement('button');
       button.type = 'button';
       button.textContent = 'Ya la envié';
-      button.style.cssText =
-        'display:block;margin-top:8px;padding:6px 10px;border:0;border-radius:6px;background:#fff;color:#1e3a8a;font-weight:600;cursor:pointer';
+      button.style.cssText = buttonCss;
       button.addEventListener('click', () => {
         send({ type: 'fitcv:manual-sent' }).then(
           () => (box.textContent = 'FITCV: registrada como enviada por ti.'),
@@ -80,13 +94,16 @@
       return { kind: 'waiting' };
     }
 
-    const blocker = form.detectBlocker(doc);
+    const found = form.detectBlocker(doc);
+    // El widget del CAPTCHA sigue en la página después de resolverlo: si el
+    // candidato dijo "listo", se le cree.
+    const blocker = found === 'captcha' && session.resumed ? null : found;
     if (blocker) {
       banner(
         blocker === 'captcha'
-          ? 'El portal pide un CAPTCHA. FITCV no los resuelve: complétalo y envía tú.'
-          : 'El portal pide iniciar sesión. Entra con tu cuenta y FITCV podrá seguir.',
-        { manualSend: blocker === 'captcha' }
+          ? 'El portal pide un CAPTCHA. FITCV no los resuelve: complétalo y pulsa "Listo, continúa".'
+          : 'El portal pide iniciar sesión. Entra con tu cuenta y pulsa "Listo, continúa".',
+        { manualSend: blocker === 'captcha', resume: true }
       );
       return attention(blocker, blocker === 'captcha' ? 'El portal pidió un CAPTCHA.' : 'El portal pide iniciar sesión.');
     }

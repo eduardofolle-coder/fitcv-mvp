@@ -111,7 +111,7 @@ describe('auth', () => {
   const email = unique();
 
   it('registers a user and returns a token in the shape the frontend reads', async () => {
-    const { status, data } = await call('POST', '/auth/register', { email, password: PASSWORD }, false);
+    const { status, data } = await call('POST', '/auth/register', { email, password: PASSWORD, consent: true }, false);
     expect(status).toBe(201);
     expect(data.success).toBe(true);
     // El frontend lee data.data.accessToken / userId; cambiar esta forma
@@ -123,20 +123,20 @@ describe('auth', () => {
   });
 
   it('reports the real reason for a duplicate email, not a generic failure', async () => {
-    const { status, data } = await call('POST', '/auth/register', { email, password: PASSWORD }, false);
+    const { status, data } = await call('POST', '/auth/register', { email, password: PASSWORD, consent: true }, false);
     expect(status).toBe(400);
     expect(data.error).toMatch(/already in use/i);
   });
 
   it('explains which rule a weak password broke', async () => {
-    const { status, data } = await call('POST', '/auth/register', { email: unique(), password: 'short' }, false);
+    const { status, data } = await call('POST', '/auth/register', { email: unique(), password: 'short', consent: true }, false);
     expect(status).toBe(400);
     expect(data.error).not.toBe('Validation error');
     expect(String(data.error).length).toBeGreaterThan(10);
   });
 
   it('logs in with correct credentials', async () => {
-    const { status, data } = await call('POST', '/auth/login', { email, password: PASSWORD }, false);
+    const { status, data } = await call('POST', '/auth/login', { email, password: PASSWORD, consent: true }, false);
     expect(status).toBe(200);
     expect(typeof data.data.accessToken).toBe('string');
   });
@@ -160,7 +160,7 @@ describe('session tokens and password recovery', () => {
     const res = await fetch(`${API}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: unique(), password: PASSWORD }),
+      body: JSON.stringify({ email: unique(), password: PASSWORD, consent: true }),
     });
     const { data } = await res.json();
     const refresh = cookieToken(res);
@@ -187,7 +187,7 @@ describe('session tokens and password recovery', () => {
   it('resets a forgotten password with a one-time link', async () => {
     const email = unique();
     const NEW_PASSWORD = 'OtraClaveSegura456!';
-    await call('POST', '/auth/register', { email, password: PASSWORD }, false);
+    await call('POST', '/auth/register', { email, password: PASSWORD, consent: true }, false);
 
     // La respuesta es igual exista o no la cuenta.
     const unknown = await call('POST', '/auth/forgot-password', { email: unique() }, false);
@@ -206,7 +206,7 @@ describe('session tokens and password recovery', () => {
     expect((await call('POST', '/auth/reset-password', { token: resetToken, password: NEW_PASSWORD }, false)).status).toBe(400);
 
     expect((await call('POST', '/auth/login', { email, password: NEW_PASSWORD }, false)).status).toBe(200);
-    expect((await call('POST', '/auth/login', { email, password: PASSWORD }, false)).status).toBe(401);
+    expect((await call('POST', '/auth/login', { email, password: PASSWORD, consent: true }, false)).status).toBe(401);
   });
 });
 
@@ -215,13 +215,13 @@ describe('persistence', () => {
   it('keeps users across a full server restart', async () => {
     const email = unique();
 
-    const created = await call('POST', '/auth/register', { email, password: PASSWORD }, false);
+    const created = await call('POST', '/auth/register', { email, password: PASSWORD, consent: true }, false);
     expect(created.status).toBe(201);
 
     await stopServer();
     await startServer();
 
-    const after = await call('POST', '/auth/login', { email, password: PASSWORD }, false);
+    const after = await call('POST', '/auth/login', { email, password: PASSWORD, consent: true }, false);
     expect(after.status).toBe(200);
     expect(after.data.data.email).toBe(email);
 
@@ -301,7 +301,7 @@ describe('postulations', () => {
   });
 
   it('does not leak another user postulation', async () => {
-    const outsider = await call('POST', '/auth/register', { email: unique(), password: PASSWORD }, false);
+    const outsider = await call('POST', '/auth/register', { email: unique(), password: PASSWORD, consent: true }, false);
     const mine = token;
     token = outsider.data.data.accessToken;
 
@@ -361,6 +361,8 @@ describe('applications sent by the extension', () => {
     expect((await asExtension('GET', '/extension/me')).status).toBe(200);
     expect((await asExtension('GET', '/cv/profile')).status).toBe(401);
     expect((await call('GET', '/extension/me')).status).toBe(401);
+    // El panel del dueño no se abre a un candidato cualquiera.
+    expect((await call('GET', '/admin/users')).status).toBe(403);
   });
 
   it('hands queued applications to the extension exactly once', async () => {
@@ -436,6 +438,25 @@ describe('applications sent by the extension', () => {
     expect(manual.status).toBe(200);
   });
 
+  it('resumes a CAPTCHA-blocked application in one click and counts it as assisted', async () => {
+    const { id } = await newPostulation();
+    await call('POST', `/postulations/${id}/queue`);
+    await asExtension('GET', '/extension/queue?limit=10');
+    await asExtension('POST', `/extension/postulations/${id}/report`, { outcome: 'requiere-atencion', reason: 'captcha' });
+
+    const resumed = await asExtension('POST', `/extension/postulations/${id}/resume`);
+    expect(resumed.status).toBe(200);
+    expect(resumed.data.data.postulationId).toBe(id);
+
+    const { data } = await call('GET', `/postulations/${id}`);
+    expect(data.data.applyStatus).toBe('enviando');
+
+    const sent = await asExtension('POST', `/extension/postulations/${id}/report`, { outcome: 'enviada', mode: 'manual' });
+    expect(sent.status).toBe(200);
+    const events = await call('GET', `/postulations/${id}/events`);
+    expect(events.data.data.map((e: any) => e.toStatus)).toEqual(['en-cola', 'requiere-atencion', 'en-cola', 'enviada']);
+  });
+
   it('captures an offer seen while browsing and queues it', async () => {
     const { status, data } = await asExtension('POST', '/extension/offers', {
       url: 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-analista-ABC123?utm=x',
@@ -474,7 +495,7 @@ describe('saved answers and salary authorisation', () => {
 
   beforeAll(async () => {
     mine = token;
-    const reg = await call('POST', '/auth/register', { email: unique(), password: PASSWORD }, false);
+    const reg = await call('POST', '/auth/register', { email: unique(), password: PASSWORD, consent: true }, false);
     token = reg.data.data.accessToken;
   });
 

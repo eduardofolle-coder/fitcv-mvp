@@ -184,6 +184,7 @@ beforeAll(async () => {
   const reg = await call('POST', '/auth/register', {
     email: `agents-${Date.now()}@example.com`,
     password: 'AgentTestPass123!',
+    consent: true,
   });
   token = reg.data.data.accessToken;
 
@@ -725,6 +726,7 @@ describe('cuando el modelo o el servicio fallan', () => {
     const reg = await call('POST', '/auth/register', {
       email: `agent-errors-${Date.now()}@example.com`,
       password: 'AgentTestPass123!',
+      consent: true,
     });
     token = reg.data.data.accessToken;
   }, 30_000);

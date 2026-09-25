@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { addOverage, getPlanState, OVERAGE_CONFIG, type Plan } from '../services/planQuota.js';
 import { createTopupCheckout, verifyWebhookSignature } from '../services/mercadopago.js';
@@ -13,7 +14,7 @@ router.get('/overage-config', (_req, res) => {
 });
 
 // POST /api/plans/webhook — MercadoPago IPN (sin requireAuth, viene de MP)
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', asyncHandler(async (req: any, res: any) => {
   try {
     const sig = req.headers['x-signature'] as string ?? '';
     const reqId = req.headers['x-request-id'] as string ?? '';
@@ -40,20 +41,20 @@ router.post('/webhook', async (req, res) => {
     logger.error('MercadoPago webhook error', { err });
     res.sendStatus(500);
   }
-});
+}));
 
 router.use(requireAuth);
 
-router.get('/me', async (req, res, next) => {
+router.get('/me', asyncHandler(async (req: any, res: any, next: any) => {
   try {
     res.json(await getPlanState((req as any).user.id));
   } catch (err) {
     next(err);
   }
-});
+}));
 
 // POST /api/plans/me/checkout — crea preferencia MP y devuelve URL de pago
-router.post('/me/checkout', async (req, res, next) => {
+router.post('/me/checkout', asyncHandler(async (req: any, res: any, next: any) => {
   try {
     const userId = (req as any).user.id;
     const state = await getPlanState(userId);
@@ -79,17 +80,8 @@ router.post('/me/checkout', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
-// POST /api/plans/me/topup — uso interno / admin; el pago real pasa por /checkout + webhook
-router.post('/me/topup', async (req, res, next) => {
-  try {
-    const userId = (req as any).user.id;
-    const result = await addOverage(userId);
-    res.json({ success: true, data: result });
-  } catch (err) {
-    next(err);
-  }
-});
+// Las recargas solo entran por /checkout + webhook: el antiguo /me/topup las regalaba.
 
 export default router;

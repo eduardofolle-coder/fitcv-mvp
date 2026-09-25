@@ -14,7 +14,10 @@ export default function PrivacyPage() {
           <h2 className="font-semibold text-gray-900 mb-1">1. Quién trata tus datos</h2>
           <p>
             FITCV (en adelante "nosotros") es el responsable del tratamiento de tus datos personales, en
-            conformidad con la Ley N.° 19.628 sobre protección de la vida privada (Chile) y sus modificaciones.
+            conformidad con la Ley N.° 19.628 sobre protección de la vida privada y la Ley N.° 21.719, que la
+            reforma y crea la Agencia de Protección de Datos Personales (vigente desde el 1 de diciembre de 2026).
+            Tratamos tus datos solo con tu <strong>consentimiento expreso</strong>, que das al crear tu cuenta
+            marcando una casilla que parte desmarcada, y que puedes revocar en cualquier momento.
           </p>
         </div>
 
@@ -25,7 +28,11 @@ export default function PrivacyPage() {
             <li>Contenido de tu CV en texto plano, cifrado en reposo con AES-256-GCM.</li>
             <li>RUT y dirección, cifrados en reposo con AES-256-GCM.</li>
             <li>Preferencias de postulación: región, comuna, nacionalidad, disponibilidad, pretensión de renta.</li>
-            <li>Historial de postulaciones y resultados de matching.</li>
+            <li>Historial de postulaciones, resultados de matching y respuestas de reclutadores a tus postulaciones.</li>
+            <li>
+              Si conectas tu Gmail u Outlook: tu dirección y un permiso cifrado <strong>solo para enviar</strong> correos
+              (Gmail <code>gmail.send</code>, Outlook <code>Mail.Send</code>). No podemos leer tu bandeja.
+            </li>
             <li>Registro de accesos (IP, user-agent) por razones de seguridad.</li>
           </ul>
         </div>
@@ -36,24 +43,40 @@ export default function PrivacyPage() {
             <li>Adaptar tu CV a cada oferta laboral usando inteligencia artificial.</li>
             <li>Completar formularios de postulación en portales de empleo en tu nombre.</li>
             <li>Mostrarte un ranking personalizado de ofertas.</li>
+            <li>Enviar postulaciones por correo desde tu cuenta (si la conectas) o desde nuestro dominio, con respuesta a tu alias.</li>
+            <li>Reenviarte las respuestas de los reclutadores y clasificarlas con IA (por ejemplo, invitación a entrevista).</li>
             <li>Enviarte notificaciones por correo y WhatsApp sobre el estado de tus postulaciones.</li>
           </ul>
-          <p className="mt-2">No vendemos ni compartimos tus datos con terceros salvo proveedores de infraestructura (servidores, IA) que los tratan únicamente para prestarnos el servicio.</p>
+          <p className="mt-2">
+            <strong>Decisiones automatizadas:</strong> FITCV calcula automáticamente el calce entre tu CV y cada oferta, y
+            postula solo a las de calce medio o alto. Puedes revisar y cambiar esas decisiones en tu tablero, pedir que una
+            persona las revise y oponerte a ellas escribiéndonos.
+          </p>
+          <p className="mt-2">No vendemos ni compartimos tus datos con terceros salvo proveedores que los tratan únicamente para prestarnos el servicio.</p>
+          <p className="mt-2">
+            <strong>Transferencias internacionales:</strong> algunos proveedores procesan datos fuera de Chile: servidores
+            (Render, EE. UU.), inteligencia artificial para adaptar tu CV (Moonshot/Kimi y DeepSeek), correo (Resend, Google,
+            Microsoft) y WhatsApp (Twilio). Enviamos solo lo necesario para cada tarea.
+          </p>
         </div>
 
         <div>
           <h2 className="font-semibold text-gray-900 mb-1">4. Retención de datos</h2>
-          <p>Conservamos tus datos mientras tengas una cuenta activa. Al eliminar tu cuenta, borramos todos tus datos personales en un plazo de 30 días.</p>
+          <p>Conservamos tus datos mientras tengas una cuenta activa. Al eliminar tu cuenta los borramos de inmediato de la base principal y revocamos el permiso de envío de tu correo; las copias de respaldo se eliminan en un plazo máximo de 30 días.</p>
+          <p className="mt-2">Si ocurre una vulneración de seguridad que afecte tus datos, te avisaremos a ti y a la Agencia sin dilaciones indebidas.</p>
         </div>
 
         <div>
           <h2 className="font-semibold text-gray-900 mb-1">5. Tus derechos</h2>
-          <p>Conforme a la Ley 19.628 tienes derecho a:</p>
+          <p>Conforme a las leyes 19.628 y 21.719 tienes derecho a:</p>
           <ul className="list-disc pl-5 space-y-1 mt-1">
             <li><strong>Acceder</strong> a tus datos personales.</li>
-            <li><strong>Rectificar</strong> datos incorrectos.</li>
-            <li><strong>Eliminar</strong> tu cuenta y todos tus datos desde Configuración → Eliminar cuenta, o escribiéndonos.</li>
-            <li><strong>Oponerte</strong> al tratamiento o revocar tu consentimiento en cualquier momento.</li>
+            <li><strong>Rectificar</strong> datos incorrectos (desde Mis respuestas y tu CV, o escribiéndonos).</li>
+            <li><strong>Suprimir</strong> tu cuenta y todos tus datos desde Mis respuestas → Eliminar mi cuenta, o escribiéndonos.</li>
+            <li><strong>Portabilidad:</strong> descargar todos tus datos en un archivo desde Mis respuestas → Descargar todos mis datos.</li>
+            <li><strong>Oponerte</strong> al tratamiento, a las decisiones automatizadas, o revocar tu consentimiento en cualquier momento.</li>
+            <li><strong>Bloqueo</strong> temporal del tratamiento mientras resolvemos una solicitud tuya.</li>
+            <li>Reclamar ante la <strong>Agencia de Protección de Datos Personales</strong> si no respondemos o no estás conforme.</li>
           </ul>
           <p className="mt-2">
             Para ejercer estos derechos escríbenos a{' '}

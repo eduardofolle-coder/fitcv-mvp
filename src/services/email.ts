@@ -8,8 +8,14 @@ import { logger } from './logger.js';
 
 export const emailConfigured = (): boolean => Boolean(env.RESEND_API_KEY && env.EMAIL_FROM);
 
-export async function sendEmail(to: string, subject: string, text: string): Promise<boolean> {
-  if (!emailConfigured()) {
+export interface EmailExtras {
+  from?: string;
+  replyTo?: string | null;
+  attachments?: Array<{ filename: string; content: string }>; // content en base64
+}
+
+export async function sendEmail(to: string, subject: string, text: string, extras: EmailExtras = {}): Promise<boolean> {
+  if (!env.RESEND_API_KEY || !(extras.from || env.EMAIL_FROM)) {
     logger.warn('Email not sent: RESEND_API_KEY and EMAIL_FROM are not configured', { subject });
     return false;
   }
@@ -18,7 +24,14 @@ export async function sendEmail(to: string, subject: string, text: string): Prom
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: env.EMAIL_FROM, to, subject, text }),
+      body: JSON.stringify({
+        from: extras.from || env.EMAIL_FROM,
+        to,
+        subject,
+        text,
+        ...(extras.replyTo ? { reply_to: extras.replyTo } : {}),
+        ...(extras.attachments ? { attachments: extras.attachments } : {}),
+      }),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {

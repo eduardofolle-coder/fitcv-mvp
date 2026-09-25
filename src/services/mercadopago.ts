@@ -51,9 +51,10 @@ export async function createTopupCheckout(opts: {
 
   logger.info('MercadoPago preference created', { userId: opts.userId, preferenceId: result.id });
 
+  if (!result.init_point || !result.id) throw new Error('MercadoPago did not return a checkout URL');
   return {
-    checkoutUrl: result.init_point!,
-    preferenceId: result.id!,
+    checkoutUrl: result.init_point,
+    preferenceId: result.id,
   };
 }
 

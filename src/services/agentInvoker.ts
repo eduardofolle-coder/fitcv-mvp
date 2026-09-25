@@ -101,6 +101,13 @@ export class AgentInvokerService {
   // 429) no se reintenta; al agotar reintentos se intenta el fallback una vez.
   private static readonly MAX_RETRIES = 3;
 
+  /** Pregunta corta de texto libre (clasificaciones), con el mismo proveedor y reintentos. */
+  static async ask(prompt: string, maxTokens = 50): Promise<string> {
+    return withAiSlot(async () =>
+      (await this.postWithRetry({ max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }, DEFAULT_MODEL)).text
+    );
+  }
+
   private static async postWithRetry(body: AiRequestBody, model: string): Promise<NormalizedAiResponse> {
     let lastError: unknown;
 

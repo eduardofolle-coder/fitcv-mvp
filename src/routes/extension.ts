@@ -32,6 +32,7 @@ import {
   getApplyPreferences,
   queueApplication,
   recordResolution,
+  resumeApplication,
   transitionApplication,
 } from '../services/applicationQueue.js';
 import { parseFields, resolveFields } from '../services/fieldResolver.js';
@@ -271,6 +272,17 @@ router.post(
     });
 
     res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// POST /api/extension/postulations/:id/resume - El candidato destrabó la pestaña: seguir solo
+router.post(
+  '/postulations/:id/resume',
+  requireExtension,
+  asyncHandler(async (req: any, res: any) => {
+    const item = await resumeApplication(req.params.id, req.user.id);
+    const prefs = await getApplyPreferences(req.user.id);
+    res.json({ success: true, data: { ...item, autoSend: item.offer.source === 'linkedin' ? prefs.autoSendLinkedIn : true } });
   })
 );
 
