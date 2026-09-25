@@ -17,9 +17,16 @@ describe('E1 salud por portal', () => {
     expect(classifyOutcome({ toStatus: 'en-cola', mode: null, reason: null })).toBeNull();
   });
 
-  it('pausa solo con 20+ intentos y menos de 50% limpio', () => {
-    expect(isPaused({ attempts: 19, counts: counts(0, 19) })).toBe(false);
-    expect(isPaused({ attempts: 20, counts: counts(9, 11) })).toBe(true);
+  it('se pausa con evidencia clara, sin depender de un número fijo de intentos', () => {
+    // Extremo con pocos intentos: 0 limpias de 5 ya alcanza (como chiletrabajos real).
+    expect(isPaused({ attempts: 5, counts: counts(0, 5) })).toBe(true);
+    // Muy pocos intentos: ni con 0 limpias hay evidencia suficiente todavía.
+    expect(isPaused({ attempts: 2, counts: counts(0, 2) })).toBe(false);
+    // Cerca del 50%: con solo 20 intentos no alcanza para estar seguros, aunque el promedio ya esté abajo.
+    expect(isPaused({ attempts: 20, counts: counts(9, 11) })).toBe(false);
+    // Con más intentos, sí: 30% limpio en 100 intentos es evidencia suficiente.
+    expect(isPaused({ attempts: 100, counts: counts(30, 70) })).toBe(true);
+    // Buen desempeño no se pausa nunca.
     expect(isPaused({ attempts: 20, counts: counts(10, 10) })).toBe(false);
   });
 

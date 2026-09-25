@@ -11,8 +11,9 @@ import { db } from '../db/client.js';
 
 export type Outcome = 'limpia' | 'asistida' | 'bloqueada' | 'atencion' | 'error';
 
-export const PAUSE_RULE = { days: 7, minAttempts: 20, minCleanRate: 0.5 } as const;
+export const PAUSE_RULE = { days: 7, minCleanRate: 0.5, confidence: 0.95 } as const;
 export const CAPTCHA_STREAK = 3;
+const Z = 1.96; // 95% de confianza (cota superior del intervalo de Wilson)
 
 export function classifyOutcome(e: { toStatus: string; mode: string | null; reason: string | null }): Outcome | null {
   if (e.toStatus === 'enviada') return e.mode === 'manual' ? 'asistida' : 'limpia';
@@ -36,8 +37,23 @@ export interface PortalHealth {
 export const cleanScore = (h: Pick<PortalHealth, 'attempts' | 'counts'>): number =>
   (h.counts.limpia + 1) / (h.attempts + 2);
 
-export const isPaused = (h: Pick<PortalHealth, 'attempts' | 'counts'>): boolean =>
-  h.attempts >= PAUSE_RULE.minAttempts && h.counts.limpia / h.attempts < PAUSE_RULE.minCleanRate;
+/**
+ * ¿Hay evidencia suficiente (95% de confianza) de que la salida limpia real
+ * está bajo el mínimo? No exige un número fijo de intentos: un portal que
+ * sale mal siempre se pausa con pocos intentos (ej. 0/5); uno parejo necesita
+ * más datos antes de que se le pueda echar la culpa. Cota superior del
+ * intervalo de Wilson para la proporción observada.
+ */
+export const isPaused = (h: Pick<PortalHealth, 'attempts' | 'counts'>): boolean => {
+  const n = h.attempts;
+  if (n === 0) return false;
+  const p = h.counts.limpia / n;
+  const denominator = 1 + (Z * Z) / n;
+  const center = p + (Z * Z) / (2 * n);
+  const margin = Z * Math.sqrt((p * (1 - p)) / n + (Z * Z) / (4 * n * n));
+  const upperBound = (center + margin) / denominator;
+  return upperBound < PAUSE_RULE.minCleanRate;
+};
 
 // El correo es un canal propio: no se mezcla con el portal donde apareció la oferta.
 const PORTAL_SQL = `CASE WHEN p.channel = 'email' THEN 'correo' ELSE o.source END`;

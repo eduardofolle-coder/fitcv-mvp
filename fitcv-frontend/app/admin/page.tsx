@@ -8,7 +8,7 @@ import AppShell from '@/app/components/AppShell';
 
 type Outcome = 'limpia' | 'asistida' | 'bloqueada' | 'atencion' | 'error';
 interface Portal { portal: string; attempts: number; counts: Record<Outcome, number>; cleanRate: number | null; paused: boolean; manual: boolean; manualReason: string | null }
-interface Health { rule: { days: number; minAttempts: number; minCleanRate: number }; portals: Portal[] }
+interface Health { rule: { days: number; minCleanRate: number; confidence: number }; portals: Portal[] }
 interface Invite { email: string; plan: string; createdAt: string; usedAt: string | null }
 interface SourceRow { source: string; active: string; new24h: string; new7d: string; newest: string | null }
 interface UserRow { id: string; email: string; plan: string; sent: string; queued: string; attention: string; interviews: string; mail: string | null }
@@ -84,8 +84,10 @@ export default function AdminPage() {
         <h2 className="aw-h2">Salud por portal</h2>
         {health && (
           <p className="aw-muted" style={{ marginBottom: 12 }}>
-            Últimos {health.rule.days} días. Un portal se pausa solo si tiene {health.rule.minAttempts}+ intentos y menos de{' '}
-            {pct(health.rule.minCleanRate)} de salida limpia. La cola prioriza calce × salida limpia.
+            Últimos {health.rule.days} días. Un portal se pausa solo, sin esperar un número fijo de intentos: si hay evidencia
+            clara de que sale bajo {pct(health.rule.minCleanRate)} limpio (una racha mala con pocos intentos ya alcanza), se
+            pausa; con datos parejos o insuficientes, espera. La cola prioriza calce × salida limpia. "Pausar" a mano queda
+            para casos que la estadística todavía no ve, como que el dueño se entere de algo aparte.
           </p>
         )}
         <div style={{ overflowX: 'auto' }}>
