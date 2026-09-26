@@ -11,6 +11,7 @@ import { sendWhatsApp, whatsappEnabled } from './whatsapp.js';
 import { sendEmail } from './email.js';
 import { ATTENTION_REASON_LABELS, type AttentionReason } from './applyStatus.js';
 import { logger } from './logger.js';
+import { isKnownPortal } from './portals.js';
 
 /**
  * Manda el aviso por WhatsApp en segundo plano. No espera ni propaga fallos: el
@@ -44,9 +45,18 @@ const URGENT_THROTTLE_MIN = 20;
  * no espera a mañana. Nunca lanza: un aviso que falla no debe tumbar el
  * reporte que lo generó.
  */
-export async function notifyUrgentAttention(userId: string, reason: string): Promise<void> {
+export async function notifyUrgentAttention(userId: string, reason: string, postulationId?: string): Promise<void> {
   if (reason !== 'captcha' && reason !== 'login') return;
   try {
+    // Sin sesión en un portal conocido: ya llega el aviso "Conecta tu cuenta", uno solo por portal.
+    if (reason === 'login' && postulationId) {
+      const offer = await db.queryOne<{ source: string }>(
+        'SELECT o.source FROM postulations p JOIN offers o ON o.id = p.offerId WHERE p.id = $1',
+        [postulationId]
+      );
+      if (offer && isKnownPortal(offer.source)) return;
+    }
+
     const recent = await db.queryOne(
       `SELECT id FROM notifications WHERE userId = $1 AND kind = 'urgent-atencion'
        AND createdAt > CURRENT_TIMESTAMP - make_interval(mins => $2) LIMIT 1`,

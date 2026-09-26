@@ -12,6 +12,7 @@ const NAV = [
   { href: '/cv', label: 'Mi CV' },
   { href: '/offers', label: 'Ofertas' },
   { href: '/postulations', label: 'Postulaciones' },
+  { href: '/portales', label: 'Mis portales' },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {

@@ -101,7 +101,7 @@ export async function transitionApplication(req: TransitionRequest): Promise<{ f
 
   // Fire-and-forget: un aviso que tarda o falla no debe demorar el reporte de la extensión.
   if (to === 'requiere-atencion' && req.reason) {
-    notifyUrgentAttention(req.userId, req.reason).catch(err =>
+    notifyUrgentAttention(req.userId, req.reason, req.postulationId).catch(err =>
       logger.error('notifyUrgentAttention rejected', { userId: req.userId, err: String(err) })
     );
   }
@@ -129,7 +129,7 @@ export interface ClaimedApplication {
  */
 export async function claimQueuedApplications(userId: string, limit: number): Promise<ClaimedApplication[]> {
   // Primero lo que más calza en los portales que más salen limpios; los
-  // portales en pausa (globales o por racha de CAPTCHA del candidato) esperan.
+  // portales en pausa (globales, por racha de CAPTCHA o sin sesión del candidato) esperan.
   const policy = await queuePolicy(userId);
   const candidates = (await db.query<{ id: string }>(`
     SELECT p.id FROM postulations p

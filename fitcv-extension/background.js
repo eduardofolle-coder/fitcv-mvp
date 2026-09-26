@@ -73,8 +73,80 @@ async function pair(apiBase, code) {
   const me = await api('/extension/me');
   await chrome.storage.local.set({ email: me.email });
   await log(`Vinculada a ${me.email}.`);
+  void checkPortals();
   return me;
 }
+
+// --- Sesión en los portales ----------------------------------------------------
+// FITCV nunca ve ni guarda contraseñas. Solo pide, con la sesión que el candidato
+// ya tiene en este navegador, una página del portal que exige estar conectado:
+// si el portal la muestra, hay sesión; si redirige al login, no.
+
+const PORTAL_RECHECK_MS = 60 * 1000;
+let portalChecks = null;
+const lastPortalCheck = new Map();
+
+async function loadPortalChecks() {
+  if (!portalChecks) portalChecks = await api('/extension/portal-checks');
+  return portalChecks;
+}
+
+const trimPath = url => new URL(url).pathname.replace(/\/+$/, '') || '/';
+
+async function hasSession(checkUrl) {
+  const res = await fetch(checkUrl, { credentials: 'include', redirect: 'follow', cache: 'no-store' });
+  const landed = trimPath(res.url);
+  const asked = trimPath(checkUrl);
+  if (/login|acceso|sign_?in|ingres/i.test(landed)) return false;
+  // Mandado "hacia arriba" (de /candidatos/postulaciones a /candidatos): es el login.
+  if (landed !== asked && asked.startsWith(`${landed}/`)) return false;
+  return res.ok ? true : null;
+}
+
+async function checkPortals(only = null) {
+  const { token } = await settings();
+  if (!token) return;
+  let checks;
+  try {
+    checks = await loadPortalChecks();
+  } catch {
+    return;
+  }
+
+  const results = [];
+  for (const check of checks) {
+    if (only && check.portal !== only) continue;
+    lastPortalCheck.set(check.portal, Date.now());
+    try {
+      const connected = await hasSession(check.checkUrl);
+      if (connected !== null) results.push({ portal: check.portal, connected });
+    } catch {
+      // Sin red o el portal no respondió: mejor no informar nada que informar mal.
+    }
+  }
+  if (results.length === 0) return;
+  await api('/extension/portal-sessions', { method: 'POST', body: { results } }).catch(() => undefined);
+}
+
+// Si el candidato navega en un portal (por ejemplo, recién inició sesión desde
+// "Mis portales" en FITCV), se verifica ese portal en el acto.
+async function checkPortalForTab(url) {
+  if (!url || !/^https?:/.test(url)) return;
+  let checks;
+  try {
+    checks = await loadPortalChecks();
+  } catch {
+    return;
+  }
+  const host = new URL(url).hostname;
+  const check = checks.find(c => host === c.domain || host.endsWith(`.${c.domain}`));
+  if (!check || Date.now() - (lastPortalCheck.get(check.portal) || 0) < PORTAL_RECHECK_MS) return;
+  await checkPortals(check.portal);
+}
+
+chrome.alarms.get('fitcv-portals').then(alarm => {
+  if (!alarm) chrome.alarms.create('fitcv-portals', { delayInMinutes: 1, periodInMinutes: 60 });
+});
 
 // --- Cola --------------------------------------------------------------------
 
@@ -92,7 +164,8 @@ async function start() {
 
 async function stop() {
   await chrome.storage.local.set({ running: false });
-  await chrome.alarms.clearAll();
+  await chrome.alarms.clear('fitcv-poll');
+  await chrome.alarms.clear('fitcv-next');
   await log('Envío automático detenido. La postulación en curso termina sola.');
   return status();
 }
@@ -236,7 +309,8 @@ async function handleResult(current, result) {
 
 // --- Eventos -------------------------------------------------------------------
 
-chrome.tabs.onUpdated.addListener((tabId, info) => {
+chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+  if (info.status === 'complete' && (!session || tabId !== session.tabId)) void checkPortalForTab(tab && tab.url);
   if (!session || tabId !== session.tabId) return;
   if (info.status === 'loading') clearTimeout(session.recheck);
   if (info.status === 'complete') void runStep();
@@ -252,6 +326,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === 'fitcv-next' || alarm.name === 'fitcv-poll') void processNext();
+  if (alarm.name === 'fitcv-portals') void checkPortals();
 });
 
 async function status() {

@@ -500,6 +500,15 @@ export async function initializeSchema(): Promise<void> {
       reason TEXT,
       updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS portal_sessions (
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      portal TEXT NOT NULL,
+      connected BOOLEAN NOT NULL,
+      source TEXT NOT NULL,
+      checkedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (userId, portal)
+    );
   `);
 
   console.log('✅ Database schema initialized');

@@ -40,6 +40,8 @@ import { getAdaptedCv, tailorCv } from '../services/cvTailoring.js';
 import { pdfFileName, renderCvPdf } from '../services/cvPdf.js';
 import { upsertOffers } from '../services/offerSync.js';
 import { offerIdFor, type ExternalOffer } from '../services/sources/getOnBoard.js';
+import { getPortalSessions, setPortalSession } from '../services/portalSessions.js';
+import { PORTALS, isKnownPortal } from '../services/portals.js';
 
 const router = Router();
 
@@ -115,6 +117,28 @@ router.delete(
       throw new AppError(404, 'Extension not found');
     }
     res.json({ success: true, message: 'Extension disconnected' });
+  })
+);
+
+// GET /api/extension/portals - En qué portales el candidato tiene sesión iniciada
+router.get(
+  '/portals',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    res.json({ success: true, data: await getPortalSessions(req.user.id) });
+  })
+);
+
+// POST /api/extension/portals/:portal/connected - "Ya inicié sesión" en un portal
+// que la extensión no puede verificar sola. Si no era cierto, el primer intento
+// que tope con el login lo vuelve a marcar desconectado.
+router.post(
+  '/portals/:portal/connected',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    if (!isKnownPortal(req.params.portal)) throw new AppError(404, 'Unknown portal');
+    await setPortalSession(req.user.id, req.params.portal, true, 'candidato');
+    res.json({ success: true, data: await getPortalSessions(req.user.id) });
   })
 );
 
@@ -271,7 +295,43 @@ router.post(
       applyUrl,
     });
 
+    // Cada envío real enseña si hay sesión: salió → conectado; pidió login → no.
+    if (outcome === 'enviada' || reason === 'login') {
+      const offer = await db.queryOne<{ source: string }>(
+        'SELECT o.source FROM postulations p JOIN offers o ON o.id = p.offerId WHERE p.id = $1 AND p.userId = $2',
+        [req.params.id, req.user.id]
+      );
+      if (offer) await setPortalSession(req.user.id, offer.source, outcome === 'enviada', 'intento');
+    }
+
     res.json({ success: true, data: { applyStatus: result.to } });
+  })
+);
+
+// GET /api/extension/portal-checks - Qué página abrir para saber si hay sesión en cada portal
+router.get(
+  '/portal-checks',
+  requireExtension,
+  asyncHandler(async (_req: any, res: any) => {
+    res.json({
+      success: true,
+      data: PORTALS.filter(p => p.checkUrl).map(p => ({ portal: p.id, domain: p.domain, checkUrl: p.checkUrl })),
+    });
+  })
+);
+
+// POST /api/extension/portal-sessions { results: [{ portal, connected }] } - Lo que verificó la extensión
+router.post(
+  '/portal-sessions',
+  requireExtension,
+  asyncHandler(async (req: any, res: any) => {
+    const results = Array.isArray(req.body?.results) ? req.body.results.slice(0, PORTALS.length) : [];
+    for (const r of results) {
+      if (typeof r?.portal === 'string' && typeof r?.connected === 'boolean' && isKnownPortal(r.portal)) {
+        await setPortalSession(req.user.id, r.portal, r.connected, 'verificacion');
+      }
+    }
+    res.json({ success: true });
   })
 );
 

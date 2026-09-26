@@ -179,6 +179,11 @@ export async function captchaPausedPortals(userId: string): Promise<string[]> {
 export async function queuePolicy(userId: string): Promise<{ skip: string[]; weights: Record<string, number> }> {
   const health = await getPortalHealth();
   const weights = Object.fromEntries(health.map(h => [h.portal, cleanScore(h)]));
-  const skip = [...health.filter(h => h.paused).map(h => h.portal), ...(await captchaPausedPortals(userId))];
+  // Donde el candidato no tiene sesión, sus postulaciones esperan a que se conecte.
+  const disconnected = (await db.query<{ portal: string }>(
+    'SELECT portal FROM portal_sessions WHERE userId = $1 AND connected = FALSE',
+    [userId]
+  )).rows.map(r => r.portal);
+  const skip = [...health.filter(h => h.paused).map(h => h.portal), ...(await captchaPausedPortals(userId)), ...disconnected];
   return { skip, weights };
 }
