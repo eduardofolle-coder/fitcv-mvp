@@ -26,6 +26,8 @@ interface Preferences {
   acceptPortalTerms: boolean;
   acceptPortalTermsAt: string | null;
   dailyAnalysisHour: number | null;
+  workRegions: string[] | null;
+  acceptRemote: boolean;
 }
 
 type YesNo = '' | 'si' | 'no';
@@ -68,6 +70,8 @@ export default function PreferencesPage() {
   const [acceptPortalTerms, setAcceptPortalTerms] = useState(false);
   const [acceptedAt, setAcceptedAt] = useState<string | null>(null);
   const [analysisHour, setAnalysisHour] = useState('');
+  const [workRegions, setWorkRegions] = useState<string[]>([]);
+  const [acceptRemote, setAcceptRemote] = useState(true);
   // Llega desde la subida del CV, cuando todavía no eligió la hora del análisis.
   const [firstTime, setFirstTime] = useState(false);
 
@@ -100,6 +104,8 @@ export default function PreferencesPage() {
         setAcceptPortalTerms(p.acceptPortalTerms);
         setAcceptedAt(p.acceptPortalTermsAt);
         setAnalysisHour(p.dailyAnalysisHour === null ? '' : String(p.dailyAnalysisHour));
+        setWorkRegions(p.workRegions ?? []);
+        setAcceptRemote(p.acceptRemote);
       } else {
         setError(res.error || 'No se pudieron cargar tus respuestas');
       }
@@ -145,11 +151,18 @@ export default function PreferencesPage() {
       workPermit: fromYesNo(workPermit),
       acceptPortalTerms,
       dailyAnalysisHour: analysisHour === '' ? null : Number(analysisHour),
+      workRegions: workRegions.length ? workRegions : null,
+      acceptRemote,
     });
 
     if (res.success && res.data) {
       setAcceptedAt(res.data.acceptPortalTermsAt);
-      setMessage('Guardado. FITCV usará estas respuestas en tus próximas postulaciones.');
+      const queue = (res as { queue?: { withdrawn: number; requeued: number } | null }).queue;
+      const moved = [
+        queue?.withdrawn ? `${queue.withdrawn} postulación(es) en cola quedaron fuera de tus regiones y no se enviarán` : '',
+        queue?.requeued ? `${queue.requeued} volvieron a la cola` : '',
+      ].filter(Boolean).join('; ');
+      setMessage(`Guardado. FITCV usará estas respuestas en tus próximas postulaciones.${moved ? ` ${moved}.` : ''}`);
     } else {
       setError(res.error || 'No se pudieron guardar tus respuestas');
     }
@@ -186,6 +199,33 @@ export default function PreferencesPage() {
       )}
 
       <form onSubmit={save} style={{ display:'flex', flexDirection:'column', gap:16 }}>
+        <section className="aw-card" style={sectionStyle} id="regiones">
+          <h2 className="aw-h2">¿Dónde quieres trabajar?</h2>
+          <p className="aw-muted" style={{ marginBottom:12 }}>
+            FITCV solo postula sola a ofertas en las regiones que marques. Las de otras regiones, o las que no dicen dónde
+            son, igual las ves en Ofertas y decides tú. Si no marcas ninguna, FITCV postula en todo Chile.
+          </p>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(190px, 1fr))', gap:8, marginBottom:12 }}>
+            {REGIONES.map(r => (
+              <label key={r.codigo} style={{ display:'flex', gap:8, alignItems:'center', color:'#F4F1E9', cursor:'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={workRegions.includes(r.codigo)}
+                  onChange={e => setWorkRegions(prev => (e.target.checked ? [...prev, r.codigo] : prev.filter(c => c !== r.codigo)))}
+                />
+                {r.nombre}
+              </label>
+            ))}
+          </div>
+          <label style={{ display:'flex', gap:8, alignItems:'center', color:'#F4F1E9', cursor:'pointer' }}>
+            <input type="checkbox" checked={acceptRemote} onChange={e => setAcceptRemote(e.target.checked)} />
+            También acepto trabajo 100% remoto, sin importar la región
+          </label>
+          <p className="aw-dim" style={{ marginTop:8 }}>
+            {workRegions.length ? `${workRegions.length} región(es) marcada(s).` : 'Sin regiones marcadas: todo Chile.'}
+          </p>
+        </section>
+
         <section className="aw-card" style={sectionStyle}>
           <h2 className="aw-h2">Análisis diario de ofertas</h2>
           <p className="aw-muted" style={{ marginBottom:12 }}>

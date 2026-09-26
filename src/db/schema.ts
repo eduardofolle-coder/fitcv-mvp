@@ -363,6 +363,8 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS dailyAnalysisHour INTEGER;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS lastAnalysisDate TEXT;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS allowDataAnalysis BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS workRegions TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS acceptRemote BOOLEAN NOT NULL DEFAULT TRUE;
 
     CREATE TABLE IF NOT EXISTS offer_digests (
       id TEXT PRIMARY KEY,

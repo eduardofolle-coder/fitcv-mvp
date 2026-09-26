@@ -125,6 +125,18 @@ export async function reserveQuota(userId: string, requested: number): Promise<n
   return updated ? grant : 0;
 }
 
+/** Devuelve cupo reservado que no se llegó a usar (la postulación se retiró antes de enviarse). */
+export async function releaseQuota(userId: string, count: number): Promise<void> {
+  if (count <= 0) return;
+  await db.query(`
+    UPDATE plan_usage SET
+      quotaUsed = GREATEST(0, quotaUsed - $1),
+      dailyUsed = CASE WHEN dailyDate = $3 THEN GREATEST(0, dailyUsed - $1) ELSE dailyUsed END,
+      updatedAt = CURRENT_TIMESTAMP
+    WHERE userId = $2
+  `, [count, userId, chileToday()]);
+}
+
 /**
  * Agrega un paquete de recarga (overage). Valida que el plan sea Pro o Max.
  * En producción, este método solo debe llamarse tras verificar el pago.

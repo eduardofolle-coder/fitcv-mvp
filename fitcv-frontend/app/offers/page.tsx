@@ -20,6 +20,9 @@ interface Offer {
   salaryMax?: number | null;
   salaryCurrency?: string | null;
   match?: { score: number; tier: MatchTier; reasons: string[] };
+  /** Región normalizada y si calza con dónde acepta trabajar el candidato. */
+  region?: string | null;
+  regionVerdict?: 'dentro' | 'fuera' | 'sin-ubicacion';
 }
 
 interface OffersResponse {
@@ -30,6 +33,7 @@ interface OffersResponse {
   needsProfile?: boolean;
   profileTerms?: string[];
   tierCounts?: TierCounts;
+  regionFilter?: { active: boolean; outside: number; showingOutside: boolean };
 }
 
 interface Postulation {
@@ -86,6 +90,8 @@ export default function OffersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyOffer, setBusyOffer] = useState<string | null>(null);
+  const [showOutside, setShowOutside] = useState(false);
+  const [regionFilter, setRegionFilter] = useState<{ active: boolean; outside: number } | null>(null);
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -120,6 +126,7 @@ export default function OffersPage() {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (mode === 'profile') params.set('match', 'profile');
       if (mode === 'profile' && tier) params.set('tier', tier);
+      if (mode === 'profile' && showOutside) params.set('regions', 'all');
       if (search) params.set('search', search);
       if (source) params.set('source', source);
 
@@ -131,6 +138,7 @@ export default function OffersPage() {
         setNeedsProfile(res.needsProfile === true);
         setProfileTerms(res.profileTerms ?? []);
         if (res.tierCounts) setTierCounts(res.tierCounts);
+        setRegionFilter(res.regionFilter ?? null);
       } else {
         setError(res.error || 'No se pudieron cargar las ofertas');
       }
@@ -139,7 +147,7 @@ export default function OffersPage() {
     return () => {
       cancelled = true;
     };
-  }, [initializing, user, mode, page, search, source, tier]);
+  }, [initializing, user, mode, page, search, source, tier, showOutside]);
 
   if (initializing) {
     return <div className="aw-loading">Cargando...</div>;
@@ -227,6 +235,30 @@ export default function OffersPage() {
         </p>
       )}
 
+      {mode === 'profile' && !needsProfile && regionFilter && (
+        <p className="aw-muted" style={{ marginBottom:12 }}>
+          {!regionFilter.active ? (
+            <>FITCV postula en todo Chile. <a href="/preferences#regiones" style={{ color:'#E1A526' }}>Elegir solo algunas regiones →</a></>
+          ) : showOutside ? (
+            <>
+              Mostrando también las ofertas fuera de tus regiones (FITCV no postula sola a esas).{' '}
+              <button type="button" onClick={() => { setShowOutside(false); setPage(1); }} style={{ color:'#E1A526', background:'none', border:'none', cursor:'pointer', padding:0 }}>Ocultarlas</button>
+            </>
+          ) : (
+            <>
+              Mostrando solo ofertas en tus regiones.
+              {regionFilter.outside > 0 && (
+                <>
+                  {' '}{regionFilter.outside.toLocaleString('es-CL')} fuera de ellas ·{' '}
+                  <button type="button" onClick={() => { setShowOutside(true); setPage(1); }} style={{ color:'#E1A526', background:'none', border:'none', cursor:'pointer', padding:0 }}>Verlas igual</button>
+                </>
+              )}
+              {' '}· <a href="/preferences#regiones" style={{ color:'#E1A526' }}>Cambiar regiones</a>
+            </>
+          )}
+        </p>
+      )}
+
       {mode === 'profile' && !needsProfile && (
         <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:12 }}>
           {(['', ...MATCH_TIERS] as const).map(value => {
@@ -304,7 +336,16 @@ export default function OffersPage() {
                 <div style={{ display:'flex', alignItems:'flex-start', gap:16 }}>
                   <div style={{ minWidth:0, flex:1 }}>
                     <p style={{ fontWeight:600, color:'#F4F1E9' }}>{offer.title}</p>
-                    <p className="aw-muted">{offer.company}{offer.location ? ` · ${offer.location}` : ''}</p>
+                    <p className="aw-muted">
+                      {offer.company}{offer.location ? ` · ${offer.location}` : ''}
+                      {offer.region && !(offer.location ?? '').toLowerCase().includes(offer.region.toLowerCase()) ? ` (${offer.region})` : ''}
+                    </p>
+                    {offer.regionVerdict === 'fuera' && (
+                      <p style={{ marginTop:6 }}><span className="aw-pill aw-pill-red">Fuera de tus regiones: FITCV no postula sola</span></p>
+                    )}
+                    {offer.regionVerdict === 'sin-ubicacion' && (
+                      <p style={{ marginTop:6 }}><span className="aw-pill aw-pill-orange">No dice dónde es: decide tú si postular</span></p>
+                    )}
                     {offer.match && (() => {
                       const d = TIER_DARK[offer.match.tier];
                       return (

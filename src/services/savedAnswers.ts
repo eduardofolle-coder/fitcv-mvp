@@ -6,6 +6,8 @@ import { db } from '../db/client.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { EncryptionService } from './encryption.js';
 import type { SavedAnswers } from './fieldClassifier.js';
+import { isRegionCode, type RegionCode } from './regions.js';
+import { safeJsonParse } from '../utils/safeJson.js';
 
 export interface AnswerPreferences extends SavedAnswers {
   autoSendLinkedIn: boolean;
@@ -13,6 +15,9 @@ export interface AnswerPreferences extends SavedAnswers {
   acceptPortalTermsAt: string | null;
   /** Hora de Chile (0-23) del análisis diario de ofertas; null si no la eligió. */
   dailyAnalysisHour: number | null;
+  /** Regiones donde acepta trabajar; null = todo Chile. */
+  workRegions: RegionCode[] | null;
+  acceptRemote: boolean;
 }
 
 const EMPTY: AnswerPreferences = {
@@ -34,6 +39,8 @@ const EMPTY: AnswerPreferences = {
   acceptPortalTerms: false,
   acceptPortalTermsAt: null,
   dailyAnalysisHour: null,
+  workRegions: null,
+  acceptRemote: true,
 };
 
 const decrypt = (value: unknown): string | null => {
@@ -43,6 +50,12 @@ const decrypt = (value: unknown): string | null => {
   } catch {
     return null;
   }
+};
+
+const parseRegions = (value: unknown): RegionCode[] | null => {
+  const list = safeJsonParse<unknown>(value, []);
+  const codes = Array.isArray(list) ? list.filter(isRegionCode) : [];
+  return codes.length ? codes : null;
 };
 
 const bool = (value: unknown): boolean | null => (typeof value === 'boolean' ? value : null);
@@ -95,6 +108,8 @@ export async function loadAnswerPreferences(userId: string): Promise<AnswerPrefe
     acceptPortalTerms: row.acceptPortalTerms === true,
     acceptPortalTermsAt: row.acceptPortalTermsAt ? new Date(row.acceptPortalTermsAt).toISOString() : null,
     dailyAnalysisHour: int(row.dailyAnalysisHour),
+    workRegions: parseRegions(row.workRegions),
+    acceptRemote: row.acceptRemote !== false,
   };
 }
 
@@ -172,6 +187,19 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.dailyAnalysisHour = value as number | null;
   }
 
+  if (has('workRegions')) {
+    const value = body.workRegions;
+    if (value !== null && !(Array.isArray(value) && value.every(isRegionCode))) {
+      throw new AppError(400, 'workRegions must be a list of region codes (RM, VS, ...), or null for all of Chile.');
+    }
+    next.workRegions = value && value.length ? [...new Set(value as RegionCode[])] : null;
+  }
+
+  if (has('acceptRemote')) {
+    if (typeof body.acceptRemote !== 'boolean') throw new AppError(400, 'acceptRemote must be true or false.');
+    next.acceptRemote = body.acceptRemote;
+  }
+
   if (has('allowDataAnalysis')) {
     if (typeof body.allowDataAnalysis !== 'boolean') throw new AppError(400, 'allowDataAnalysis must be true or false.');
     next.allowDataAnalysis = body.allowDataAnalysis;
@@ -194,8 +222,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     INSERT INTO apply_preferences (
       userId, autoSendLinkedIn, allowDataAnalysis, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
       driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt,
-      dailyAnalysisHour, updatedAt
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP)
+      dailyAnalysisHour, workRegions, acceptRemote, updatedAt
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP)
     ON CONFLICT (userId) DO UPDATE SET
       autoSendLinkedIn = EXCLUDED.autoSendLinkedIn,
       allowDataAnalysis = EXCLUDED.allowDataAnalysis,
@@ -215,6 +243,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
       acceptPortalTerms = EXCLUDED.acceptPortalTerms,
       acceptPortalTermsAt = EXCLUDED.acceptPortalTermsAt,
       dailyAnalysisHour = EXCLUDED.dailyAnalysisHour,
+      workRegions = EXCLUDED.workRegions,
+      acceptRemote = EXCLUDED.acceptRemote,
       updatedAt = CURRENT_TIMESTAMP
   `, [
     userId,
@@ -236,6 +266,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.acceptPortalTerms,
     next.acceptPortalTermsAt,
     next.dailyAnalysisHour,
+    next.workRegions ? JSON.stringify(next.workRegions) : null,
+    next.acceptRemote,
   ]);
 
   return loadAnswerPreferences(userId);

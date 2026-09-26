@@ -3,13 +3,17 @@
  *
  * Calce alto (≥70%) y calce medio (40-69%) → cola automática, consume cuota.
  * Calce bajo (<40%) → visible en el listado de ofertas para revisión manual.
+ * Solo se postula sola donde el candidato acepta trabajar: una oferta fuera de
+ * sus regiones, o que no dice dónde es, queda en el listado para que decida él.
  * Respeta runCap, dailyCap y cuota mensual/vitalicia del plan del usuario.
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { logger } from './logger.js';
-import { reserveQuota, QUALITY_GATE } from './planQuota.js';
-import { queueApplication } from './applicationQueue.js';
+import { reserveQuota, releaseQuota, QUALITY_GATE } from './planQuota.js';
+import { queueApplication, transitionApplication } from './applicationQueue.js';
+import { loadAnswerPreferences } from './savedAnswers.js';
+import { regionVerdict } from './regions.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import type { CachedRankedOffer } from './matchCache.js';
 
@@ -35,7 +39,19 @@ export async function runAutoPostulate(userId: string): Promise<AutoPostulateRes
     )).rows.map(r => r.offerId)
   );
 
-  const autoOffers = ranked.filter(r => r.score >= QUALITY_GATE.auto && !existingOffers.has(r.offerId));
+  const candidates = ranked.filter(r => r.score >= QUALITY_GATE.auto && !existingOffers.has(r.offerId));
+  const prefs = await loadAnswerPreferences(userId);
+  const places = candidates.length
+    ? (await db.query<{ id: string; location: string | null; remoteModality: string | null }>(
+        'SELECT id, location, remoteModality FROM offers WHERE id = ANY($1)',
+        [candidates.map(c => c.offerId)]
+      )).rows
+    : [];
+  const placeById = new Map(places.map(p => [p.id, p]));
+  const autoOffers = candidates.filter(r => {
+    const place = placeById.get(r.offerId);
+    return place !== undefined && regionVerdict(place, prefs) === 'dentro';
+  });
 
   const slots = await reserveQuota(userId, autoOffers.length);
   const skippedQuota = slots < autoOffers.length;
@@ -58,4 +74,47 @@ export async function runAutoPostulate(userId: string): Promise<AutoPostulateRes
   }
 
   return { autoQueued, skippedQuota };
+}
+
+/**
+ * El candidato cambió dónde acepta trabajar. Lo que FITCV encoló sola y aún no
+ * salió se ajusta: lo que quedó fuera vuelve a "pendiente" (y devuelve su
+ * cupo); lo que se había retirado por región y ahora calza, vuelve a la cola.
+ * Lo que el candidato encoló a mano no se toca: fue su decisión.
+ */
+export async function syncQueueWithRegions(userId: string): Promise<{ withdrawn: number; requeued: number }> {
+  const prefs = await loadAnswerPreferences(userId);
+  const rows = (await db.query<{ id: string; applyStatus: string; applyReason: string | null; location: string | null; remoteModality: string | null }>(`
+    SELECT p.id, p.applyStatus, p.applyReason, o.location, o.remoteModality
+    FROM postulations p JOIN offers o ON o.id = p.offerId
+    WHERE p.userId = $1 AND p.source = 'auto'
+      AND (p.applyStatus IN ('en-cola', 'requiere-autorizacion')
+           OR (p.applyStatus = 'pendiente' AND p.applyReason = 'fuera-de-region'))
+  `, [userId])).rows;
+
+  let withdrawn = 0;
+  for (const row of rows.filter(r => r.applyStatus !== 'pendiente' && regionVerdict(r, prefs) !== 'dentro')) {
+    try {
+      await transitionApplication({ postulationId: row.id, userId, to: 'pendiente', reason: 'fuera-de-region' });
+      withdrawn++;
+    } catch (err) {
+      logger.warn('No se pudo retirar la postulación fuera de región', { userId, postulationId: row.id, err: String(err) });
+    }
+  }
+  await releaseQuota(userId, withdrawn);
+
+  const back = rows.filter(r => r.applyStatus === 'pendiente' && regionVerdict(r, prefs) === 'dentro');
+  const slots = await reserveQuota(userId, back.length);
+  let requeued = 0;
+  for (const row of back.slice(0, slots)) {
+    try {
+      await queueApplication(row.id, userId);
+      requeued++;
+    } catch (err) {
+      logger.warn('No se pudo reencolar la postulación que volvió a calzar', { userId, postulationId: row.id, err: String(err) });
+    }
+  }
+  await releaseQuota(userId, slots - requeued);
+
+  return { withdrawn, requeued };
 }

@@ -111,8 +111,9 @@ export function mapGetOnBoardJob(job: unknown, countryCode: string): ExternalOff
   const min = salary(a.min_salary);
   const max = salary(a.max_salary);
   const countries = Array.isArray(a.countries) ? a.countries.filter((c: unknown) => typeof c === 'string') : [];
+  const cities = Array.isArray(j.cityNames) ? j.cityNames.filter((c: unknown) => typeof c === 'string') : [];
   const modality = text(a.remote_modality) || null;
-  const location = [countries.join(', '), modality ? MODALITY_LABELS[modality] ?? modality : '']
+  const location = [[...cities, ...countries].join(', '), modality ? MODALITY_LABELS[modality] ?? modality : '']
     .filter(Boolean)
     .join(' · ');
 
@@ -173,8 +174,31 @@ export async function fetchGetOnBoardCategoryPage(
     expand: '["company"]',
   });
   const body = await getJson(`${API}/categories/${encodeURIComponent(category)}/jobs?${params}`, fetchImpl);
-  return {
-    jobs: Array.isArray(body?.data) ? body.data : [],
-    totalPages: Number(body?.meta?.total_pages) || 0,
-  };
+  const jobs: any[] = Array.isArray(body?.data) ? body.data : [];
+
+  // La oferta trae la ciudad solo como id: sin el nombre no se sabe en qué región es.
+  await Promise.all(jobs.map(async job => {
+    const ids: string[] = (job?.attributes?.location_cities?.data ?? []).map((c: any) => text(String(c?.id ?? ''))).filter(Boolean);
+    if (ids.length) job.cityNames = (await Promise.all(ids.map(id => cityName(id, fetchImpl)))).filter(Boolean);
+  }));
+
+  return { jobs, totalPages: Number(body?.meta?.total_pages) || 0 };
+}
+
+// Hay pocas ciudades y se repiten en casi todas las ofertas: se piden una vez.
+const cityNames = new Map<string, Promise<string | null>>();
+
+function cityName(id: string, fetchImpl: FetchLike): Promise<string | null> {
+  if (!cityNames.has(id)) {
+    cityNames.set(
+      id,
+      getJson(`${API}/cities/${encodeURIComponent(id)}`, fetchImpl)
+        .then(body => text(body?.data?.attributes?.name) || null)
+        .catch(() => {
+          cityNames.delete(id); // un error de red no deja la ciudad en blanco para siempre
+          return null;
+        })
+    );
+  }
+  return cityNames.get(id)!;
 }

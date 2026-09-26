@@ -12,6 +12,8 @@ import { getCachedMatch, recomputeUserMatches } from '../services/matchCache.js'
 import { isMatchTier, searchable } from '../services/offerMatching.js';
 import { countByTier, rankOffersForProfile } from '../services/profileOffers.js';
 import { runOfferAnalysis } from '../services/dailyAnalysis.js';
+import { loadAnswerPreferences } from '../services/savedAnswers.js';
+import { regionName, regionOf, regionVerdict, type RegionVerdict } from '../services/regions.js';
 
 // Cada análisis puntúa miles de ofertas: se limita el "analizar ahora".
 const analysisLimiter = rateLimit({
@@ -24,6 +26,16 @@ const analysisLimiter = rateLimit({
 });
 
 const router = Router();
+
+type Tier = 'alto' | 'medio' | 'bajo';
+const countTiers = (tiers: Tier[]) =>
+  tiers.reduce((acc, t) => ({ ...acc, [t]: acc[t] + 1 }), { alto: 0, medio: 0, bajo: 0 } as Record<Tier, number>);
+
+/** Región de la oferta, para mostrarla y para saber si calza con dónde acepta trabajar el candidato. */
+function regionFields(offer: { location?: string | null; remoteModality?: string | null }, verdict: RegionVerdict) {
+  const code = regionOf(offer.location);
+  return { region: code ? regionName(code) : null, regionVerdict: verdict };
+}
 
 // Escapa los comodines de LIKE para que un "%" tipeado se busque literal.
 const likePattern = (value: string): string => `%${value.replace(/[\\%_]/g, m => `\\${m}`)}%`;
@@ -83,6 +95,10 @@ router.get(
       }
 
       const tier = isMatchTier(req.query.tier) ? req.query.tier : null;
+      // Por defecto se muestra solo donde el candidato acepta trabajar; ?regions=all muestra todo.
+      const prefs = await loadAnswerPreferences(req.user.id);
+      const regionFilterActive = Boolean(prefs.workRegions?.length) || !prefs.acceptRemote;
+      const showOutside = req.query.regions === 'all';
 
       // Camino rápido: la vista por defecto (sin filtros de empresa/búsqueda/
       // sueldo) se sirve de la caché precalculada en background — un SELECT, no
@@ -91,7 +107,15 @@ router.get(
       if (params.length === 0) {
         const cache = await getCachedMatch(req.user.id);
         if (cache) {
-          const list = tier ? cache.ranked.filter(r => r.tier === tier) : cache.ranked;
+          const verdicts = new Map<string, RegionVerdict>();
+          if (regionFilterActive && cache.ranked.length) {
+            const places = (await db.query<any>('SELECT id, location, remoteModality FROM offers WHERE id = ANY($1)', [cache.ranked.map(r => r.offerId)])).rows;
+            for (const place of places) verdicts.set(place.id, regionVerdict(place, prefs));
+          }
+          const verdictOf = (id: string): RegionVerdict => verdicts.get(id) ?? 'dentro';
+          const outside = cache.ranked.filter(r => verdictOf(r.offerId) === 'fuera').length;
+          const visible = showOutside ? cache.ranked : cache.ranked.filter(r => verdictOf(r.offerId) !== 'fuera');
+          const list = tier ? visible.filter(r => r.tier === tier) : visible;
           const pageRanked = list.slice((pageNum - 1) * limitNum, pageNum * limitNum);
           const ids = pageRanked.map(r => r.offerId);
           const rows = ids.length
@@ -102,10 +126,11 @@ router.get(
             success: true,
             data: pageRanked.flatMap(r => {
               const o = byId.get(r.offerId);
-              return o ? [{ ...o, requirements: safeJsonParse(o.requirements, []), match: { score: r.score, tier: r.tier, reasons: r.reasons } }] : [];
+              return o ? [{ ...o, ...regionFields(o, verdictOf(r.offerId)), requirements: safeJsonParse(o.requirements, []), match: { score: r.score, tier: r.tier, reasons: r.reasons } }] : [];
             }),
             profileTerms: profile.terms.slice(0, 8).map(t => t.display),
-            tierCounts: cache.tierCounts,
+            tierCounts: countTiers(visible.map(r => r.tier as Tier)),
+            regionFilter: { active: regionFilterActive, outside, showingOutside: showOutside },
             pagination: { page: pageNum, limit: limitNum, total: list.length, totalPages: Math.ceil(list.length / limitNum) },
           });
         }
@@ -114,7 +139,10 @@ router.get(
         void recomputeUserMatches(req.user.id);
       }
 
-      const ranked = await rankOffersForProfile(profile, where, params);
+      const allRanked = await rankOffersForProfile(profile, where, params);
+      const verdictOf = (offer: any): RegionVerdict => (regionFilterActive ? regionVerdict(offer, prefs) : 'dentro');
+      const outside = allRanked.filter(item => verdictOf(item.offer) === 'fuera').length;
+      const ranked = showOutside ? allRanked : allRanked.filter(item => verdictOf(item.offer) !== 'fuera');
       const shown = tier ? ranked.filter(item => item.match.tier === tier) : ranked;
 
       const total = shown.length;
@@ -124,12 +152,14 @@ router.get(
         success: true,
         data: pageItems.map(({ offer, match }) => ({
           ...offer,
+          ...regionFields(offer, verdictOf(offer)),
           requirements: safeJsonParse(offer.requirements, []),
           match: { score: match.score, tier: match.tier, reasons: match.reasons },
         })),
         profileTerms: profile.terms.slice(0, 8).map(t => t.display),
         // Los totales por calce son de todas las afines, sin el filtro de calce.
         tierCounts: countByTier(ranked),
+        regionFilter: { active: regionFilterActive, outside, showingOutside: showOutside },
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
       });
     }

@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { parseFields, parseJob, resolveFields } from '../services/fieldResolver.js';
 import { loadAnswerPreferences, updateAnswerPreferences } from '../services/savedAnswers.js';
+import { syncQueueWithRegions } from '../services/autoPostulate.js';
 
 const router = Router();
 
@@ -49,7 +50,10 @@ router.put(
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
       throw new AppError(400, 'Send the answers to update as a JSON object.');
     }
-    res.json({ success: true, data: await updateAnswerPreferences(req.user.id, req.body) });
+    const saved = await updateAnswerPreferences(req.user.id, req.body);
+    // Cambió dónde acepta trabajar: la cola se ajusta al tiro, antes de que salga algo.
+    const queue = 'workRegions' in req.body || 'acceptRemote' in req.body ? await syncQueueWithRegions(req.user.id) : null;
+    res.json({ success: true, data: saved, queue });
   })
 );
 
