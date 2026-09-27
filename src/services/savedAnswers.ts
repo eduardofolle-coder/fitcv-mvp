@@ -9,6 +9,11 @@ import type { SavedAnswers } from './fieldClassifier.js';
 import { isRegionCode, type OfferFilters, type RegionCode } from './regions.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 
+/** revision: la tanda espera en la bandeja y sale sola al vencer el plazo. manual: nada sale sin aprobar. */
+export const SEND_MODES = ['revision', 'automatico', 'manual'] as const;
+export type SendMode = (typeof SEND_MODES)[number];
+export const BATCH_EVERY_HOURS = [4, 8, 12] as const;
+
 export interface AnswerPreferences extends SavedAnswers, OfferFilters {
   autoSendLinkedIn: boolean;
   allowDataAnalysis: boolean;
@@ -18,6 +23,9 @@ export interface AnswerPreferences extends SavedAnswers, OfferFilters {
   /** Regiones donde acepta trabajar; null = todo Chile. */
   workRegions: RegionCode[] | null;
   acceptRemote: boolean;
+  sendMode: SendMode;
+  /** null: una tanda al día, a la hora del análisis diario. */
+  batchEveryHours: number | null;
 }
 
 const EMPTY: AnswerPreferences = {
@@ -43,6 +51,8 @@ const EMPTY: AnswerPreferences = {
   acceptRemote: true,
   excludedWords: null,
   blockedCompanies: null,
+  sendMode: 'revision',
+  batchEveryHours: null,
 };
 
 const decrypt = (value: unknown): string | null => {
@@ -120,6 +130,8 @@ export async function loadAnswerPreferences(userId: string): Promise<AnswerPrefe
     acceptRemote: row.acceptRemote !== false,
     excludedWords: parseTerms(row.excludedWords),
     blockedCompanies: parseTerms(row.blockedCompanies),
+    sendMode: (SEND_MODES as readonly string[]).includes(row.sendMode) ? row.sendMode : 'revision',
+    batchEveryHours: int(row.batchEveryHours),
   };
 }
 
@@ -220,6 +232,19 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next[key] = terms.length ? terms : null;
   }
 
+  if (has('sendMode')) {
+    if (!(SEND_MODES as readonly unknown[]).includes(body.sendMode)) throw new AppError(400, 'sendMode must be revision, automatico or manual.');
+    next.sendMode = body.sendMode as SendMode;
+  }
+
+  if (has('batchEveryHours')) {
+    const value = body.batchEveryHours;
+    if (value !== null && !(BATCH_EVERY_HOURS as readonly unknown[]).includes(value)) {
+      throw new AppError(400, 'batchEveryHours must be 4, 8 or 12, or null for once a day.');
+    }
+    next.batchEveryHours = value as number | null;
+  }
+
   if (has('allowDataAnalysis')) {
     if (typeof body.allowDataAnalysis !== 'boolean') throw new AppError(400, 'allowDataAnalysis must be true or false.');
     next.allowDataAnalysis = body.allowDataAnalysis;
@@ -242,8 +267,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     INSERT INTO apply_preferences (
       userId, autoSendLinkedIn, allowDataAnalysis, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
       driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt,
-      dailyAnalysisHour, workRegions, acceptRemote, excludedWords, blockedCompanies, updatedAt
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP)
+      dailyAnalysisHour, workRegions, acceptRemote, excludedWords, blockedCompanies, sendMode, batchEveryHours, updatedAt
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, CURRENT_TIMESTAMP)
     ON CONFLICT (userId) DO UPDATE SET
       autoSendLinkedIn = EXCLUDED.autoSendLinkedIn,
       allowDataAnalysis = EXCLUDED.allowDataAnalysis,
@@ -267,6 +292,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
       acceptRemote = EXCLUDED.acceptRemote,
       excludedWords = EXCLUDED.excludedWords,
       blockedCompanies = EXCLUDED.blockedCompanies,
+      sendMode = EXCLUDED.sendMode,
+      batchEveryHours = EXCLUDED.batchEveryHours,
       updatedAt = CURRENT_TIMESTAMP
   `, [
     userId,
@@ -292,6 +319,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.acceptRemote,
     next.excludedWords ? JSON.stringify(next.excludedWords) : null,
     next.blockedCompanies ? JSON.stringify(next.blockedCompanies) : null,
+    next.sendMode,
+    next.batchEveryHours,
   ]);
 
   return loadAnswerPreferences(userId);

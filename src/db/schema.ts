@@ -367,6 +367,12 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS acceptRemote BOOLEAN NOT NULL DEFAULT TRUE;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS excludedWords TEXT;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS blockedCompanies TEXT;
+    -- Bandeja "Por enviar": revision (por defecto), automatico o manual; la tanda
+    -- sale a la hora del análisis diario o cada batchEveryHours.
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS sendMode TEXT NOT NULL DEFAULT 'revision';
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS batchEveryHours INTEGER;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS lastBatchAt TIMESTAMPTZ;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS reviewUntil TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS offer_digests (
       id TEXT PRIMARY KEY,

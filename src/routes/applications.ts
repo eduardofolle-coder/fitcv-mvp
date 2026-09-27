@@ -8,6 +8,7 @@ import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { parseFields, parseJob, resolveFields } from '../services/fieldResolver.js';
 import { loadAnswerPreferences, updateAnswerPreferences } from '../services/savedAnswers.js';
 import { syncQueueWithFilters } from '../services/autoPostulate.js';
+import { approveInbox, clearReviewDeadlines, discardInbox, listInbox, REVIEW_HOURS } from '../services/sendInbox.js';
 
 const router = Router();
 
@@ -53,7 +54,43 @@ router.put(
     const saved = await updateAnswerPreferences(req.user.id, req.body);
     // Cambió dónde acepta trabajar: la cola se ajusta al tiro, antes de que salga algo.
     const queue = ['workRegions', 'acceptRemote', 'excludedWords', 'blockedCompanies'].some(key => key in req.body) ? await syncQueueWithFilters(req.user.id) : null;
+    if ('sendMode' in req.body && saved.sendMode === 'manual') await clearReviewDeadlines(req.user.id);
     res.json({ success: true, data: saved, queue });
+  })
+);
+
+// GET /api/applications/inbox - Bandeja "Por enviar"
+router.get(
+  '/inbox',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    const prefs = await loadAnswerPreferences(req.user.id);
+    res.json({
+      success: true,
+      data: await listInbox(req.user.id),
+      sendMode: prefs.sendMode,
+      batchEveryHours: prefs.batchEveryHours,
+      dailyAnalysisHour: prefs.dailyAnalysisHour,
+      reviewHours: REVIEW_HOURS,
+    });
+  })
+);
+
+// POST /api/applications/inbox/approve { ids } - Sale ya, sin esperar la hora de la tanda
+router.post(
+  '/inbox/approve',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    res.json({ success: true, approved: await approveInbox(req.user.id, req.body?.ids) });
+  })
+);
+
+// POST /api/applications/inbox/discard { ids, reason } - No sale; devuelve el cupo
+router.post(
+  '/inbox/discard',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    res.json({ success: true, discarded: await discardInbox(req.user.id, req.body?.ids, req.body?.reason) });
   })
 );
 

@@ -30,7 +30,17 @@ interface Preferences {
   acceptRemote: boolean;
   excludedWords: string[] | null;
   blockedCompanies: string[] | null;
+  sendMode: SendMode;
+  batchEveryHours: number | null;
 }
+
+type SendMode = 'revision' | 'automatico' | 'manual';
+
+const SEND_MODES: Array<[SendMode, string, string]> = [
+  ['revision', 'Con revisión (recomendado)', 'Te mostramos la tanda y descartas lo que no quieras. Si no haces nada, sale sola 3 horas después del aviso.'],
+  ['automatico', 'Automático', 'FITCV envía sin preguntar. Igual respeta tus regiones y exclusiones.'],
+  ['manual', 'Manual', 'Nada sale sin que lo apruebes en la bandeja.'],
+];
 
 type YesNo = '' | 'si' | 'no';
 
@@ -81,6 +91,8 @@ export default function PreferencesPage() {
   const [acceptRemote, setAcceptRemote] = useState(true);
   const [excludedWords, setExcludedWords] = useState('');
   const [blockedCompanies, setBlockedCompanies] = useState('');
+  const [sendMode, setSendMode] = useState<SendMode>('revision');
+  const [batchEvery, setBatchEvery] = useState('');
   // Llega desde la subida del CV, cuando todavía no eligió la hora del análisis.
   const [firstTime, setFirstTime] = useState(false);
 
@@ -117,6 +129,8 @@ export default function PreferencesPage() {
         setAcceptRemote(p.acceptRemote);
         setExcludedWords((p.excludedWords ?? []).join(', '));
         setBlockedCompanies((p.blockedCompanies ?? []).join(', '));
+        setSendMode(p.sendMode);
+        setBatchEvery(p.batchEveryHours === null ? '' : String(p.batchEveryHours));
       } else {
         setError(res.error || 'No se pudieron cargar tus respuestas');
       }
@@ -166,6 +180,8 @@ export default function PreferencesPage() {
       acceptRemote,
       excludedWords: parseList(excludedWords),
       blockedCompanies: parseList(blockedCompanies),
+      sendMode,
+      batchEveryHours: batchEvery === '' ? null : Number(batchEvery),
     });
 
     if (res.success && res.data) {
@@ -272,6 +288,35 @@ export default function PreferencesPage() {
               ))}
             </select>
           </div>
+        </section>
+
+        <section className="aw-card" style={sectionStyle} id="envio">
+          <h2 className="aw-h2">¿Cómo envía FITCV?</h2>
+          <p className="aw-muted" style={{ marginBottom:12 }}>
+            Lo que FITCV elige para ti se junta en tandas que ves en <a href="/por-enviar" style={{ color:'#E1A526' }}>Por enviar</a>.
+          </p>
+          <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:12 }}>
+            {SEND_MODES.map(([value, label, help]) => (
+              <label key={value} style={{ display:'flex', gap:8, alignItems:'flex-start', color:'#F4F1E9', cursor:'pointer' }}>
+                <input type="radio" name="sendMode" value={value} checked={sendMode === value} onChange={() => setSendMode(value)} style={{ marginTop:4 }} />
+                <span><b>{label}</b><br /><span className="aw-dim">{help}</span></span>
+              </label>
+            ))}
+          </div>
+          {sendMode !== 'automatico' && (
+            <div style={{ maxWidth:320 }}>
+              <label htmlFor="batchEvery" className="aw-label">¿Cada cuánto sale una tanda?</label>
+              <select id="batchEvery" value={batchEvery} onChange={e => setBatchEvery(e.target.value)} className="aw-select">
+                <option value="">Una vez al día, a la hora de tu análisis</option>
+                <option value="4">Cada 4 horas</option>
+                <option value="8">Cada 8 horas</option>
+                <option value="12">Cada 12 horas</option>
+              </select>
+              {batchEvery === '' && analysisHour === '' && (
+                <p className="aw-dim" style={{ marginTop:6 }}>Elige arriba la hora de tu análisis diario para que salgan las tandas.</p>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="aw-card" style={sectionStyle}>

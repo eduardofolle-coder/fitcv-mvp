@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api-client';
 import { MATCH_TIERS, MATCH_TIER_LABELS, type MatchTier, type TierCounts } from '@/lib/matchTier';
+import { sourceLabel } from '@/lib/sources';
 import AppShell from '@/app/components/AppShell';
 
 interface Offer {
@@ -43,23 +44,9 @@ interface Postulation {
 
 type Mode = 'profile' | 'all';
 
-const SOURCE_LABELS: Record<string, string> = {
-  getonbrd: 'Get on Board',
-  trabajando: 'trabajando.cl',
-  chiletrabajos: 'Chiletrabajos',
-  bne: 'Bolsa Nacional de Empleo',
-  portalminero: 'Portal Minero',
-  trabajosdiarios: 'Trabajos Diarios',
-  linkedin: 'LinkedIn',
-  computrabajo: 'Computrabajo',
-  laborum: 'Laborum',
-  empresa: 'Sitio de empresa',
-};
 
 // Portales que bloquean la lectura automática: sus ofertas entran con la extensión.
 const EXTENSION_ONLY = ['LinkedIn', 'Laborum', 'Zonajobs', 'Empleos Públicos'];
-
-const sourceLabel = (source: string) => SOURCE_LABELS[source] ?? source;
 
 const money = (n: number, currency?: string | null) =>
   currency === 'USD' ? `US$${n.toLocaleString('es-CL')}` : `$${n.toLocaleString('es-CL')}`;

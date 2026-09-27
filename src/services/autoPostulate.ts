@@ -7,16 +7,27 @@
  * una oferta fuera de sus regiones, que no dice dónde es, con una palabra que
  * excluyó o de una empresa que bloqueó, queda en el listado para que decida él.
  * Respeta runCap, dailyCap y cuota mensual/vitalicia del plan del usuario.
+ *
+ * Salvo en modo automático, lo elegido no va directo a la cola: espera en la
+ * bandeja "Por enviar" (ver sendInbox.ts).
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { logger } from './logger.js';
 import { reserveQuota, releaseQuota, QUALITY_GATE } from './planQuota.js';
 import { queueApplication, transitionApplication } from './applicationQueue.js';
-import { loadAnswerPreferences } from './savedAnswers.js';
+import { loadAnswerPreferences, type SendMode } from './savedAnswers.js';
 import { offerVerdict } from './regions.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import type { CachedRankedOffer } from './matchCache.js';
+
+/** Lo que FITCV eligió solo: a la cola en modo automático, a la bandeja en los otros. */
+export async function placeAutoApplication(postulationId: string, userId: string, sendMode: SendMode) {
+  if (sendMode === 'automatico') return queueApplication(postulationId, userId);
+  // Entra sin hora de salida: se la pone la próxima tanda.
+  await db.query('UPDATE postulations SET reviewUntil = NULL WHERE id = $1', [postulationId]);
+  return transitionApplication({ postulationId, userId, to: 'por-enviar', mode: 'auto' });
+}
 
 export interface AutoPostulateResult {
   autoQueued: number;
@@ -67,7 +78,7 @@ export async function runAutoPostulate(userId: string): Promise<AutoPostulateRes
         VALUES ($1, $2, $3, 'Preparar postulación', 'Media', 'auto', $4, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [id, userId, item.offerId, item.score]);
       // Salary check + queue (puede pasar a 'requiere-autorizacion' si paga bajo rango).
-      await queueApplication(id, userId);
+      await placeAutoApplication(id, userId, prefs.sendMode);
       autoQueued++;
     } catch (err) {
       logger.warn('Auto-postulation skipped', { userId, offerId: item.offerId, err: String(err) });
@@ -90,7 +101,7 @@ export async function syncQueueWithFilters(userId: string): Promise<{ withdrawn:
     SELECT p.id, p.applyStatus, p.applyReason, o.title, o.company, o.location, o.remoteModality
     FROM postulations p JOIN offers o ON o.id = p.offerId
     WHERE p.userId = $1 AND p.source = 'auto'
-      AND (p.applyStatus IN ('en-cola', 'requiere-autorizacion')
+      AND (p.applyStatus IN ('por-enviar', 'en-cola', 'requiere-autorizacion')
            OR (p.applyStatus = 'pendiente' AND p.applyReason IN ('fuera-de-region', 'excluida-por-filtro')))
   `, [userId])).rows;
 
@@ -112,7 +123,7 @@ export async function syncQueueWithFilters(userId: string): Promise<{ withdrawn:
   let requeued = 0;
   for (const row of back.slice(0, slots)) {
     try {
-      await queueApplication(row.id, userId);
+      await placeAutoApplication(row.id, userId, prefs.sendMode);
       requeued++;
     } catch (err) {
       logger.warn('No se pudo reencolar la postulación que volvió a calzar', { userId, postulationId: row.id, err: String(err) });

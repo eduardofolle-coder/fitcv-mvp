@@ -1,10 +1,12 @@
 /**
- * Trabajo de fondo de los canales de envío: cada minuto el canal correo; cada
+ * Trabajo de fondo de los canales de envío: cada minuto el canal correo y las
+ * tandas de la bandeja "Por enviar"; cada
  * 10 minutos la preparación de CVs de la cola y el aviso diario "abre Chrome".
  */
 import { logger } from './logger.js';
 import { processMailQueue } from './mailChannel.js';
 import { nudgeOpenChrome, prepareQueuedCvs } from './prepareQueue.js';
+import { releaseDueBatches, runDueBatches } from './sendInbox.js';
 
 export function startChannelJobs(): () => void {
   let busy = false;
@@ -14,6 +16,8 @@ export function startChannelJobs(): () => void {
     if (busy) return;
     busy = true;
     try {
+      await runDueBatches();
+      await releaseDueBatches();
       await processMailQueue();
       if (ticks++ % 10 === 0) {
         await prepareQueuedCvs();

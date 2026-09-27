@@ -15,6 +15,7 @@ import type { MatchTier } from './offerMatching.js';
 import { ACTIVE_OFFER, countByTier, type RankedOffer, type TierCounts } from './profileOffers.js';
 import { getCachedMatch, recomputeUserMatches } from './matchCache.js';
 import { runAutoPostulate } from './autoPostulate.js';
+import { loadAnswerPreferences } from './savedAnswers.js';
 
 export const ANALYSIS_TIME_ZONE = 'America/Santiago';
 
@@ -168,8 +169,10 @@ export async function runOfferAnalysis(
     await db.query('UPDATE apply_preferences SET lastAnalysisDate = $1 WHERE userId = $2', [clock.date, userId]);
   }
 
-  // Lanza auto-postulaciones basadas en el matching cacheado.
+  // Lanza auto-postulaciones basadas en el matching cacheado. Con bandeja
+  // (revisión o manual) lo hace la tanda, en sendInbox.ts, no el análisis.
   // Errores no deben cortar el análisis: el digest ya está guardado.
+  if ((await loadAnswerPreferences(userId)).sendMode !== 'automatico') return digest;
   runAutoPostulate(userId).then(result => {
     if (result.autoQueued > 0) {
       logger.info('Auto-postulate completed', { userId, ...result });

@@ -11,6 +11,7 @@ const NAV = [
   { href: '/preferences', label: 'Mis respuestas' },
   { href: '/cv', label: 'Mi CV' },
   { href: '/offers', label: 'Ofertas' },
+  { href: '/por-enviar', label: 'Por enviar' },
   { href: '/postulations', label: 'Postulaciones' },
   { href: '/portales', label: 'Mis portales' },
 ];

@@ -3,6 +3,7 @@
 
 export type ApplyStatus =
   | 'pendiente'
+  | 'por-enviar'
   | 'en-cola'
   | 'enviando'
   | 'enviada'
@@ -12,6 +13,7 @@ export type ApplyStatus =
 
 export const APPLY_STATUS_LABELS: Record<ApplyStatus, string> = {
   pendiente: 'Pendiente',
+  'por-enviar': 'Por enviar',
   'en-cola': 'En cola',
   enviando: 'Enviando',
   enviada: 'Enviada',
@@ -23,6 +25,7 @@ export const APPLY_STATUS_LABELS: Record<ApplyStatus, string> = {
 export const APPLY_STATUS_STYLES: Record<ApplyStatus, string> = {
   'requiere-autorizacion': 'bg-orange-100 text-orange-800',
   pendiente: 'bg-gray-100 text-gray-800',
+  'por-enviar': 'bg-amber-100 text-amber-800',
   'en-cola': 'bg-indigo-100 text-indigo-800',
   enviando: 'bg-blue-100 text-blue-800',
   enviada: 'bg-green-100 text-green-800',

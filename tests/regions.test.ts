@@ -69,7 +69,8 @@ describe('la postulación automática respeta las regiones', () => {
     }
     const ranked = Object.values(offers).map(([offerId]) => ({ offerId, score: 80, tier: 'alto', reasons: [] }));
     await db.query(`INSERT INTO user_match_cache (userId, ranked, tierCounts) VALUES ($1, $2, '{}')`, [USER, JSON.stringify(ranked)]);
-    await updateAnswerPreferences(USER, { workRegions: ['RM'] });
+    // Modo automático: aquí se prueba el filtro, no la bandeja "Por enviar".
+    await updateAnswerPreferences(USER, { workRegions: ['RM'], sendMode: 'automatico' });
   });
 
   it('solo encola lo que está en sus regiones o es remoto', async () => {

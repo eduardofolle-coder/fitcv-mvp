@@ -8,6 +8,7 @@
 
 export const APPLY_STATUSES = [
   'pendiente',
+  'por-enviar',
   'en-cola',
   'enviando',
   'enviada',
@@ -20,6 +21,7 @@ export type ApplyStatus = (typeof APPLY_STATUSES)[number];
 
 export const APPLY_STATUS_LABELS: Record<ApplyStatus, string> = {
   pendiente: 'Pendiente',
+  'por-enviar': 'Por enviar',
   'en-cola': 'En cola',
   enviando: 'Enviando',
   enviada: 'Enviada',
@@ -56,9 +58,11 @@ export type ApplyMode = 'auto' | 'manual';
 
 // Una postulación enviada no vuelve atrás: lo que pase después lo sigue `estado`.
 // "requiere-autorizacion": la oferta paga bajo el rango del candidato y no se
-// postula hasta que él lo autorice.
+// postula hasta que él lo autorice. "por-enviar": FITCV la eligió sola y
+// espera en la bandeja a que el candidato la revise (o a que venza el plazo).
 const TRANSITIONS: Record<ApplyStatus, readonly ApplyStatus[]> = {
-  pendiente: ['en-cola', 'requiere-autorizacion', 'enviada'],
+  pendiente: ['por-enviar', 'en-cola', 'requiere-autorizacion', 'enviada'],
+  'por-enviar': ['en-cola', 'requiere-autorizacion', 'pendiente'],
   'en-cola': ['enviando', 'pendiente', 'enviada'],
   enviando: ['enviada', 'requiere-atencion', 'error', 'en-cola'],
   enviada: [],
