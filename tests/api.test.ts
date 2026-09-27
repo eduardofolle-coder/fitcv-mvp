@@ -414,6 +414,56 @@ describe('applications sent by the extension', () => {
     expect(repeat.status).toBe(409);
   });
 
+  it('needs a CV first: resolving fields is what reads it', async () => {
+    const withoutProfile = await asExtension('POST', '/extension/signup/resolve-fields', { fields: [{ id: 'name', label: 'Nombre completo' }] });
+    expect(withoutProfile.status).toBe(404);
+
+    const withoutCv = await asExtension('POST', '/extension/signup/cv');
+    expect(withoutCv.status).toBe(404);
+  });
+
+  it('assists a portal signup with CV data, never a password, terms checkbox or AI drafting', async () => {
+    // Cuenta aparte: no pisa el estado del candidato compartido por las demás pruebas.
+    const mine = token;
+    const registered = await call('POST', '/auth/register', { email: unique(), password: PASSWORD, consent: true }, false);
+    token = registered.data.data.accessToken;
+
+    const cvContent = 'Juan Perez. Ingeniero de software con 6 anos de experiencia en Node.js, TypeScript, AWS y PostgreSQL. Universidad de Chile.';
+    const uploaded = await call('POST', '/cv/upload', { cvContent });
+    // Sin proveedor de IA disponible en el entorno de pruebas, el resto no aplica.
+    if (uploaded.status !== 200) {
+      token = mine;
+      return;
+    }
+
+    const created = await call('POST', '/extension/pairing-codes');
+    const paired = await asExtension('POST', '/extension/pair', { code: created.data.data.code, deviceName: 'Chrome de prueba' }, '');
+    const signupExtToken = paired.data.data.token;
+    token = mine;
+
+    const fields = [
+      { id: 'name', label: 'Nombre completo' },
+      { id: 'email', label: 'Correo' },
+      { id: 'password', label: 'Contraseña', type: 'password' },
+      { id: 'terms', label: 'Acepto los términos y condiciones', type: 'checkbox' },
+      { id: 'motivation', label: '¿Por qué quieres trabajar con nosotros?' },
+      { id: 'cv', label: 'Sube tu CV', type: 'file' },
+    ];
+    const { status, data } = await asExtension('POST', '/extension/signup/resolve-fields', { fields }, signupExtToken);
+    expect(status).toBe(200);
+    const byId = Object.fromEntries(data.data.resolutions.map((r: any) => [r.fieldId, r]));
+
+    expect(byId.name.status).toBe('filled');
+    expect(byId.terms.status).toBe('needs-user'); // el candidato acepta los términos, no FITCV
+    expect(byId.motivation.status).toBe('needs-generation'); // sin draft: nada de IA
+    expect(byId.cv.status).toBe('use-base-cv'); // CV original, no el adaptado a una oferta
+    expect(byId.password.status).not.toBe('filled'); // FITCV nunca propone una contraseña
+
+    const cv = await asExtension('POST', '/extension/signup/cv', undefined, signupExtToken);
+    expect(cv.status).toBe(200);
+    expect(cv.data.data.pdfBase64.length).toBeGreaterThan(100);
+  }, 60_000);
+
   it('parks an application that needs the candidate, only with a known reason', async () => {
     const { id } = await newPostulation();
     await call('POST', `/postulations/${id}/queue`);

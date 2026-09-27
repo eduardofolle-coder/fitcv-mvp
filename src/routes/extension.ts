@@ -42,6 +42,7 @@ import { upsertOffers } from '../services/offerSync.js';
 import { offerIdFor, type ExternalOffer } from '../services/sources/getOnBoard.js';
 import { getPortalSessions, setPortalSession } from '../services/portalSessions.js';
 import { PORTALS, isKnownPortal } from '../services/portals.js';
+import { EncryptionService } from '../services/encryption.js';
 
 const router = Router();
 
@@ -230,6 +231,43 @@ router.post(
 
     // autoSendable es el acumulado de todos los pasos del formulario, no solo de este.
     res.json({ success: true, data: { ...result, autoSendable: record.autoSendable } });
+  })
+);
+
+// --- Asistente de registro en un portal ----------------------------------------
+// El candidato crea su cuenta en su propio navegador; FITCV solo le completa los
+// datos que salen de su CV. La contraseña, el CAPTCHA, los términos y el botón
+// "Registrarme" son siempre del candidato. Nada se redacta con IA.
+
+// POST /api/extension/signup/resolve-fields { fields }
+router.post(
+  '/signup/resolve-fields',
+  requireExtension,
+  asyncHandler(async (req: any, res: any) => {
+    const fields = parseFields(req.body?.fields, { allowEmpty: true });
+    const result = await resolveFields(fields, undefined, req.user.id, { draft: false });
+    const resolutions = result.resolutions.map(r => {
+      // Aceptar los términos de un portal para abrir una cuenta es un acto del candidato.
+      if (r.category === 'terms-consent') return { ...r, status: 'needs-user', reason: 'Acepta tú los términos del portal.' };
+      if (r.status === 'use-adapted-cv') return { ...r, status: 'use-base-cv' };
+      return r;
+    });
+    res.json({ success: true, data: { resolutions } });
+  })
+);
+
+// POST /api/extension/signup/cv - El CV original del candidato en PDF, para su perfil en el portal
+router.post(
+  '/signup/cv',
+  requireExtension,
+  asyncHandler(async (req: any, res: any) => {
+    const profile = await db.queryOne<{ cvOriginalContent: string | null }>(
+      'SELECT cvOriginalContent FROM candidate_profiles WHERE userId = $1 LIMIT 1',
+      [req.user.id]
+    );
+    if (!profile?.cvOriginalContent) throw new AppError(404, 'Upload your CV to FITCV first.');
+    const content = EncryptionService.decrypt(profile.cvOriginalContent);
+    res.json({ success: true, data: { fileName: pdfFileName(content), pdfBase64: renderCvPdf(content).toString('base64') } });
   })
 );
 

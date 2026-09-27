@@ -80,5 +80,17 @@ $('capture').addEventListener('click', async () => {
   await render();
 });
 
+// En la página de registro de un portal: FITCV completa lo que sale del CV.
+$('signup').addEventListener('click', async () => {
+  showError('action-error', null);
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await call({ type: 'fitcv:signup-assist', tabId: tab.id });
+  } catch (error) {
+    showError('action-error', error);
+  }
+  await render();
+});
+
 void render();
 setInterval(() => void render(), 3000);

@@ -273,7 +273,9 @@ async function draftAnswers(
 export async function resolveFields(
   fields: ApplicationField[],
   job: JobContext | undefined,
-  userId: string
+  userId: string,
+  /** draft: false no redacta con IA; lo abierto queda para el candidato (registro en un portal). */
+  options: { draft?: boolean } = {}
 ): Promise<FieldResolution> {
   // Un formulario sin preguntas (postular con un clic) no necesita el perfil.
   if (fields.length === 0) return { resolutions: [], summary: {} };
@@ -290,7 +292,7 @@ export async function resolveFields(
   );
 
   const pending = classified.filter((_, i) => resolutions[i].status === 'needs-generation');
-  if (pending.length > 0) {
+  if (pending.length > 0 && options.draft !== false) {
     const drafted = await draftAnswers(pending, hard, job, userId);
     resolutions.forEach((resolution, i) => {
       const replacement = drafted.get(classified[i].field.id);

@@ -148,6 +148,58 @@ chrome.alarms.get('fitcv-portals').then(alarm => {
   if (!alarm) chrome.alarms.create('fitcv-portals', { delayInMinutes: 1, periodInMinutes: 60 });
 });
 
+// --- Asistente de registro -----------------------------------------------------
+// "Crear cuenta" en Mis portales abre el registro con #fitcv-registro: desde ahí,
+// en cada página de esa pestaña, FITCV completa lo que sale del CV. Contraseña,
+// CAPTCHA, términos y el botón de registrarse son del candidato.
+
+const SIGNUP_MARK = '#fitcv-registro';
+const SIGNUP_TTL_MS = 30 * 60 * 1000;
+// Formularios que se dibujan después de cargar (React): se mira de nuevo un poco después.
+const SIGNUP_SECOND_LOOK_MS = 2500;
+const signupRunning = new Set();
+
+const signupKey = tabId => `signup:${tabId}`;
+
+async function isSignupTab(tabId) {
+  const startedAt = (await chrome.storage.session.get(signupKey(tabId)))[signupKey(tabId)];
+  if (!startedAt) return false;
+  if (Date.now() - startedAt > SIGNUP_TTL_MS) {
+    await chrome.storage.session.remove(signupKey(tabId));
+    return false;
+  }
+  return true;
+}
+
+async function startSignup(tabId) {
+  await chrome.storage.session.set({ [signupKey(tabId)]: Date.now() });
+  await log('Asistente de registro activo en esta pestaña.');
+}
+
+async function runSignup(tabId) {
+  if (signupRunning.has(tabId) || !(await isSignupTab(tabId))) return null;
+  signupRunning.add(tabId);
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content/formModel.js', 'content/signup.js'] });
+    const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: () => globalThis.FitcvSignup.step() });
+    const result = injection && injection.result;
+    if (result && result.filled > 0) await log(`Registro: completé ${result.filled} campo(s) con tu CV.`);
+    return result;
+  } catch (error) {
+    await log(`Registro: no pude completar esta página (${error.message}).`);
+    return null;
+  } finally {
+    signupRunning.delete(tabId);
+  }
+}
+
+async function assistSignup(tabId) {
+  const { token } = await settings();
+  if (!token) throw new Error('Vincula la extensión con tu cuenta de FITCV primero.');
+  await startSignup(tabId);
+  return runSignup(tabId);
+}
+
 // --- Cola --------------------------------------------------------------------
 
 function scheduleNext(delay = DELAY_BETWEEN_MS) {
@@ -310,14 +362,19 @@ async function handleResult(current, result) {
 // --- Eventos -------------------------------------------------------------------
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-  if (info.status === 'complete' && (!session || tabId !== session.tabId)) void checkPortalForTab(tab && tab.url);
+  if (info.url && info.url.includes(SIGNUP_MARK)) void startSignup(tabId);
+  if (info.status === 'complete' && (!session || tabId !== session.tabId)) {
+    void checkPortalForTab(tab && tab.url);
+    void runSignup(tabId);
+    setTimeout(() => void runSignup(tabId), SIGNUP_SECOND_LOOK_MS);
+  }
   if (!session || tabId !== session.tabId) return;
   if (info.status === 'loading') clearTimeout(session.recheck);
   if (info.status === 'complete') void runStep();
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
-  void chrome.storage.session.remove(`attention:${tabId}`);
+  void chrome.storage.session.remove([`attention:${tabId}`, signupKey(tabId)]);
   if (!session || tabId !== session.tabId) return;
   void (session.submitted
     ? report('requiere-atencion', { reason: 'otro', detail: 'La pestaña se cerró después de enviar. Confirma en el portal si llegó.' })
@@ -394,7 +451,7 @@ async function markSentFromTab(tabId) {
   return { ok: true };
 }
 
-const POPUP_COMMANDS = ['fitcv:status', 'fitcv:pair', 'fitcv:unpair', 'fitcv:start', 'fitcv:stop', 'fitcv:capture', 'fitcv:extract-offers'];
+const POPUP_COMMANDS = ['fitcv:status', 'fitcv:pair', 'fitcv:unpair', 'fitcv:start', 'fitcv:stop', 'fitcv:capture', 'fitcv:extract-offers', 'fitcv:signup-assist'];
 
 async function handleMessage(message, sender) {
   const type = message && message.type;
@@ -414,6 +471,22 @@ async function handleMessage(message, sender) {
       if (!session || !sender.tab || sender.tab.id !== session.tabId) throw new Error('No hay una postulación en curso en esta pestaña.');
       return api(`/extension/postulations/${session.postulationId}/adapted-cv`, { method: 'POST' });
     }
+    case 'fitcv:signup-resolve': {
+      if (!sender.tab || !(await isSignupTab(sender.tab.id))) throw new Error('El asistente de registro no está activo en esta pestaña.');
+      return api('/extension/signup/resolve-fields', { method: 'POST', body: { fields: Array.isArray(message.fields) ? message.fields : [] } });
+    }
+    case 'fitcv:signup-cv': {
+      if (!sender.tab || !(await isSignupTab(sender.tab.id))) throw new Error('El asistente de registro no está activo en esta pestaña.');
+      return api('/extension/signup/cv', { method: 'POST' });
+    }
+    case 'fitcv:signup-stop':
+      if (!sender.tab) throw new Error('Falta la pestaña.');
+      await chrome.storage.session.remove(signupKey(sender.tab.id));
+      await log('Asistente de registro terminado.');
+      return { ok: true };
+    case 'fitcv:signup-assist':
+      if (!message.tabId) throw new Error('Falta la pestaña.');
+      return assistSignup(message.tabId);
     case 'fitcv:resume':
       if (!sender.tab) throw new Error('Falta la pestaña.');
       return resumeFromTab(sender.tab.id);

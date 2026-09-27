@@ -60,7 +60,12 @@ export default function PortalesPage() {
           (no se pierden) y te avisamos para que lo conectes.
         </p>
         <p className="aw-muted">
-          ¿No tienes cuenta en ninguno? Igual puedes empezar: las ofertas que piden el CV por correo se envían desde tu correo, sin
+          ¿No tienes cuenta en un portal? Pulsa <b>Crear cuenta con mi CV</b>: la extensión completa el registro y tu perfil con
+          los datos de tu CV. Tú solo creas tu contraseña, aceptas los términos y pulsas registrarte. Si la ayuda no aparece,
+          abre la extensión y pulsa <b>Completar registro con mi CV</b>.
+        </p>
+        <p className="aw-muted" style={{ marginTop: 8 }}>
+          Igual puedes empezar sin cuentas: las ofertas que piden el CV por correo se envían desde tu correo, sin
           cuenta en ningún portal.
         </p>
       </section>
@@ -80,7 +85,7 @@ export default function PortalesPage() {
                 {p.status !== 'conectado' && (
                   <>
                     <a className="aw-btn-gold aw-btn-sm" href={p.connectUrl} target="_blank" rel="noopener noreferrer">Iniciar sesión</a>
-                    <a className="aw-btn-outline aw-btn-sm" href={p.signupUrl} target="_blank" rel="noopener noreferrer">Crear cuenta</a>
+                    <a className="aw-btn-outline aw-btn-sm" href={`${p.signupUrl}#fitcv-registro`} target="_blank" rel="noopener noreferrer">Crear cuenta con mi CV</a>
                     {!p.verifiable && (
                       <button className="aw-btn-outline aw-btn-sm" onClick={() => confirm(p.id)}>Ya inicié sesión</button>
                     )}
