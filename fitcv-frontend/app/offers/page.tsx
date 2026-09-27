@@ -22,7 +22,7 @@ interface Offer {
   match?: { score: number; tier: MatchTier; reasons: string[] };
   /** Región normalizada y si calza con dónde acepta trabajar el candidato. */
   region?: string | null;
-  regionVerdict?: 'dentro' | 'fuera' | 'sin-ubicacion';
+  regionVerdict?: 'dentro' | 'fuera' | 'sin-ubicacion' | 'excluida';
 }
 
 interface OffersResponse {
@@ -33,7 +33,7 @@ interface OffersResponse {
   needsProfile?: boolean;
   profileTerms?: string[];
   tierCounts?: TierCounts;
-  regionFilter?: { active: boolean; outside: number; showingOutside: boolean };
+  regionFilter?: { active: boolean; outside: number; excluded?: number; showingOutside: boolean };
 }
 
 interface Postulation {
@@ -91,7 +91,7 @@ export default function OffersPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyOffer, setBusyOffer] = useState<string | null>(null);
   const [showOutside, setShowOutside] = useState(false);
-  const [regionFilter, setRegionFilter] = useState<{ active: boolean; outside: number } | null>(null);
+  const [regionFilter, setRegionFilter] = useState<{ active: boolean; outside: number; excluded?: number } | null>(null);
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -241,19 +241,22 @@ export default function OffersPage() {
             <>FITCV postula en todo Chile. <a href="/preferences#regiones" style={{ color:'#E1A526' }}>Elegir solo algunas regiones →</a></>
           ) : showOutside ? (
             <>
-              Mostrando también las ofertas fuera de tus regiones (FITCV no postula sola a esas).{' '}
+              Mostrando también las ofertas fuera de tus filtros (FITCV no postula sola a esas).{' '}
               <button type="button" onClick={() => { setShowOutside(false); setPage(1); }} style={{ color:'#E1A526', background:'none', border:'none', cursor:'pointer', padding:0 }}>Ocultarlas</button>
             </>
           ) : (
             <>
-              Mostrando solo ofertas en tus regiones.
-              {regionFilter.outside > 0 && (
+              Mostrando solo ofertas que pasan tus filtros.
+              {regionFilter.outside + (regionFilter.excluded ?? 0) > 0 && (
                 <>
-                  {' '}{regionFilter.outside.toLocaleString('es-CL')} fuera de ellas ·{' '}
+                  {' '}{[
+                    regionFilter.outside ? `${regionFilter.outside.toLocaleString('es-CL')} fuera de tus regiones` : '',
+                    regionFilter.excluded ? `${regionFilter.excluded.toLocaleString('es-CL')} excluidas` : '',
+                  ].filter(Boolean).join(', ')} ·{' '}
                   <button type="button" onClick={() => { setShowOutside(true); setPage(1); }} style={{ color:'#E1A526', background:'none', border:'none', cursor:'pointer', padding:0 }}>Verlas igual</button>
                 </>
               )}
-              {' '}· <a href="/preferences#regiones" style={{ color:'#E1A526' }}>Cambiar regiones</a>
+              {' '}· <a href="/preferences#regiones" style={{ color:'#E1A526' }}>Cambiar filtros</a>
             </>
           )}
         </p>
@@ -342,6 +345,9 @@ export default function OffersPage() {
                     </p>
                     {offer.regionVerdict === 'fuera' && (
                       <p style={{ marginTop:6 }}><span className="aw-pill aw-pill-red">Fuera de tus regiones: FITCV no postula sola</span></p>
+                    )}
+                    {offer.regionVerdict === 'excluida' && (
+                      <p style={{ marginTop:6 }}><span className="aw-pill aw-pill-red">Excluida por tus filtros: FITCV no postula sola</span></p>
                     )}
                     {offer.regionVerdict === 'sin-ubicacion' && (
                       <p style={{ marginTop:6 }}><span className="aw-pill aw-pill-orange">No dice dónde es: decide tú si postular</span></p>

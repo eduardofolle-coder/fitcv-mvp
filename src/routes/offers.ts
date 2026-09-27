@@ -13,7 +13,7 @@ import { isMatchTier, searchable } from '../services/offerMatching.js';
 import { countByTier, rankOffersForProfile } from '../services/profileOffers.js';
 import { runOfferAnalysis } from '../services/dailyAnalysis.js';
 import { loadAnswerPreferences } from '../services/savedAnswers.js';
-import { regionName, regionOf, regionVerdict, type RegionVerdict } from '../services/regions.js';
+import { offerVerdict, regionName, regionOf, type OfferVerdict } from '../services/regions.js';
 
 // Cada análisis puntúa miles de ofertas: se limita el "analizar ahora".
 const analysisLimiter = rateLimit({
@@ -32,10 +32,13 @@ const countTiers = (tiers: Tier[]) =>
   tiers.reduce((acc, t) => ({ ...acc, [t]: acc[t] + 1 }), { alto: 0, medio: 0, bajo: 0 } as Record<Tier, number>);
 
 /** Región de la oferta, para mostrarla y para saber si calza con dónde acepta trabajar el candidato. */
-function regionFields(offer: { location?: string | null; remoteModality?: string | null }, verdict: RegionVerdict) {
+function regionFields(offer: { location?: string | null; remoteModality?: string | null }, verdict: OfferVerdict) {
   const code = regionOf(offer.location);
   return { region: code ? regionName(code) : null, regionVerdict: verdict };
 }
+
+// Lo que por defecto no se muestra: FITCV no postularía sola ahí.
+const HIDDEN = new Set<OfferVerdict>(['fuera', 'excluida']);
 
 // Escapa los comodines de LIKE para que un "%" tipeado se busque literal.
 const likePattern = (value: string): string => `%${value.replace(/[\\%_]/g, m => `\\${m}`)}%`;
@@ -95,9 +98,10 @@ router.get(
       }
 
       const tier = isMatchTier(req.query.tier) ? req.query.tier : null;
-      // Por defecto se muestra solo donde el candidato acepta trabajar; ?regions=all muestra todo.
+      // Por defecto se muestra solo lo que pasa sus filtros (regiones, palabras,
+      // empresas); ?regions=all muestra todo, marcado.
       const prefs = await loadAnswerPreferences(req.user.id);
-      const regionFilterActive = Boolean(prefs.workRegions?.length) || !prefs.acceptRemote;
+      const regionFilterActive = Boolean(prefs.workRegions?.length || prefs.excludedWords?.length || prefs.blockedCompanies?.length) || !prefs.acceptRemote;
       const showOutside = req.query.regions === 'all';
 
       // Camino rápido: la vista por defecto (sin filtros de empresa/búsqueda/
@@ -107,14 +111,15 @@ router.get(
       if (params.length === 0) {
         const cache = await getCachedMatch(req.user.id);
         if (cache) {
-          const verdicts = new Map<string, RegionVerdict>();
+          const verdicts = new Map<string, OfferVerdict>();
           if (regionFilterActive && cache.ranked.length) {
-            const places = (await db.query<any>('SELECT id, location, remoteModality FROM offers WHERE id = ANY($1)', [cache.ranked.map(r => r.offerId)])).rows;
-            for (const place of places) verdicts.set(place.id, regionVerdict(place, prefs));
+            const places = (await db.query<any>('SELECT id, title, company, location, remoteModality FROM offers WHERE id = ANY($1)', [cache.ranked.map(r => r.offerId)])).rows;
+            for (const place of places) verdicts.set(place.id, offerVerdict(place, prefs));
           }
-          const verdictOf = (id: string): RegionVerdict => verdicts.get(id) ?? 'dentro';
+          const verdictOf = (id: string): OfferVerdict => verdicts.get(id) ?? 'dentro';
           const outside = cache.ranked.filter(r => verdictOf(r.offerId) === 'fuera').length;
-          const visible = showOutside ? cache.ranked : cache.ranked.filter(r => verdictOf(r.offerId) !== 'fuera');
+          const excluded = cache.ranked.filter(r => verdictOf(r.offerId) === 'excluida').length;
+          const visible = showOutside ? cache.ranked : cache.ranked.filter(r => !HIDDEN.has(verdictOf(r.offerId)));
           const list = tier ? visible.filter(r => r.tier === tier) : visible;
           const pageRanked = list.slice((pageNum - 1) * limitNum, pageNum * limitNum);
           const ids = pageRanked.map(r => r.offerId);
@@ -130,7 +135,7 @@ router.get(
             }),
             profileTerms: profile.terms.slice(0, 8).map(t => t.display),
             tierCounts: countTiers(visible.map(r => r.tier as Tier)),
-            regionFilter: { active: regionFilterActive, outside, showingOutside: showOutside },
+            regionFilter: { active: regionFilterActive, outside, excluded, showingOutside: showOutside },
             pagination: { page: pageNum, limit: limitNum, total: list.length, totalPages: Math.ceil(list.length / limitNum) },
           });
         }
@@ -140,9 +145,10 @@ router.get(
       }
 
       const allRanked = await rankOffersForProfile(profile, where, params);
-      const verdictOf = (offer: any): RegionVerdict => (regionFilterActive ? regionVerdict(offer, prefs) : 'dentro');
+      const verdictOf = (offer: any): OfferVerdict => (regionFilterActive ? offerVerdict(offer, prefs) : 'dentro');
       const outside = allRanked.filter(item => verdictOf(item.offer) === 'fuera').length;
-      const ranked = showOutside ? allRanked : allRanked.filter(item => verdictOf(item.offer) !== 'fuera');
+      const excluded = allRanked.filter(item => verdictOf(item.offer) === 'excluida').length;
+      const ranked = showOutside ? allRanked : allRanked.filter(item => !HIDDEN.has(verdictOf(item.offer)));
       const shown = tier ? ranked.filter(item => item.match.tier === tier) : ranked;
 
       const total = shown.length;
@@ -159,7 +165,7 @@ router.get(
         profileTerms: profile.terms.slice(0, 8).map(t => t.display),
         // Los totales por calce son de todas las afines, sin el filtro de calce.
         tierCounts: countByTier(ranked),
-        regionFilter: { active: regionFilterActive, outside, showingOutside: showOutside },
+        regionFilter: { active: regionFilterActive, outside, excluded, showingOutside: showOutside },
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
       });
     }

@@ -365,6 +365,8 @@ export async function initializeSchema(): Promise<void> {
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS allowDataAnalysis BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS workRegions TEXT;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS acceptRemote BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS excludedWords TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS blockedCompanies TEXT;
 
     CREATE TABLE IF NOT EXISTS offer_digests (
       id TEXT PRIMARY KEY,

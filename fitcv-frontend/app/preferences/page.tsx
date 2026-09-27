@@ -28,6 +28,8 @@ interface Preferences {
   dailyAnalysisHour: number | null;
   workRegions: string[] | null;
   acceptRemote: boolean;
+  excludedWords: string[] | null;
+  blockedCompanies: string[] | null;
 }
 
 type YesNo = '' | 'si' | 'no';
@@ -42,6 +44,11 @@ const fromYesNo = (value: YesNo): boolean | null => (value === '' ? null : value
 const parseMoney = (value: string): number | null => {
   const digits = value.replace(/[^0-9]/g, '');
   return digits ? Number(digits) : null;
+};
+// "ventas, call center" -> ["ventas", "call center"]. Vacío -> null.
+const parseList = (value: string): string[] | null => {
+  const items = value.split(',').map(t => t.trim()).filter(Boolean);
+  return items.length ? items : null;
 };
 const formatMoney = (value: number | null): string => (value === null ? '' : value.toLocaleString('es-CL'));
 
@@ -72,6 +79,8 @@ export default function PreferencesPage() {
   const [analysisHour, setAnalysisHour] = useState('');
   const [workRegions, setWorkRegions] = useState<string[]>([]);
   const [acceptRemote, setAcceptRemote] = useState(true);
+  const [excludedWords, setExcludedWords] = useState('');
+  const [blockedCompanies, setBlockedCompanies] = useState('');
   // Llega desde la subida del CV, cuando todavía no eligió la hora del análisis.
   const [firstTime, setFirstTime] = useState(false);
 
@@ -106,6 +115,8 @@ export default function PreferencesPage() {
         setAnalysisHour(p.dailyAnalysisHour === null ? '' : String(p.dailyAnalysisHour));
         setWorkRegions(p.workRegions ?? []);
         setAcceptRemote(p.acceptRemote);
+        setExcludedWords((p.excludedWords ?? []).join(', '));
+        setBlockedCompanies((p.blockedCompanies ?? []).join(', '));
       } else {
         setError(res.error || 'No se pudieron cargar tus respuestas');
       }
@@ -153,13 +164,15 @@ export default function PreferencesPage() {
       dailyAnalysisHour: analysisHour === '' ? null : Number(analysisHour),
       workRegions: workRegions.length ? workRegions : null,
       acceptRemote,
+      excludedWords: parseList(excludedWords),
+      blockedCompanies: parseList(blockedCompanies),
     });
 
     if (res.success && res.data) {
       setAcceptedAt(res.data.acceptPortalTermsAt);
       const queue = (res as { queue?: { withdrawn: number; requeued: number } | null }).queue;
       const moved = [
-        queue?.withdrawn ? `${queue.withdrawn} postulación(es) en cola quedaron fuera de tus regiones y no se enviarán` : '',
+        queue?.withdrawn ? `${queue.withdrawn} postulación(es) en cola quedaron fuera de tus filtros y no se enviarán` : '',
         queue?.requeued ? `${queue.requeued} volvieron a la cola` : '',
       ].filter(Boolean).join('; ');
       setMessage(`Guardado. FITCV usará estas respuestas en tus próximas postulaciones.${moved ? ` ${moved}.` : ''}`);
@@ -224,6 +237,24 @@ export default function PreferencesPage() {
           <p className="aw-dim" style={{ marginTop:8 }}>
             {workRegions.length ? `${workRegions.length} región(es) marcada(s).` : 'Sin regiones marcadas: todo Chile.'}
           </p>
+        </section>
+
+        <section className="aw-card" style={sectionStyle} id="exclusiones">
+          <h2 className="aw-h2">Lo que no quieres</h2>
+          <p className="aw-muted" style={{ marginBottom:12 }}>
+            FITCV no postula sola a ofertas cuyo cargo tenga estas palabras, ni a estas empresas (por ejemplo, donde
+            trabajas hoy). Igual las ves en Ofertas, marcadas, por si cambias de opinión.
+          </p>
+          <div style={gridStyle}>
+            <div>
+              <label htmlFor="excludedWords" className="aw-label">Palabras en el cargo, separadas por coma</label>
+              <input id="excludedWords" value={excludedWords} onChange={e => setExcludedWords(e.target.value)} placeholder="ventas, call center, turno noche" className="aw-input" />
+            </div>
+            <div>
+              <label htmlFor="blockedCompanies" className="aw-label">Empresas, separadas por coma</label>
+              <input id="blockedCompanies" value={blockedCompanies} onChange={e => setBlockedCompanies(e.target.value)} placeholder="Mi empleador actual S.A." className="aw-input" />
+            </div>
+          </div>
         </section>
 
         <section className="aw-card" style={sectionStyle}>

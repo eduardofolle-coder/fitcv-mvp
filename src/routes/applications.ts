@@ -7,7 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { parseFields, parseJob, resolveFields } from '../services/fieldResolver.js';
 import { loadAnswerPreferences, updateAnswerPreferences } from '../services/savedAnswers.js';
-import { syncQueueWithRegions } from '../services/autoPostulate.js';
+import { syncQueueWithFilters } from '../services/autoPostulate.js';
 
 const router = Router();
 
@@ -52,7 +52,7 @@ router.put(
     }
     const saved = await updateAnswerPreferences(req.user.id, req.body);
     // Cambió dónde acepta trabajar: la cola se ajusta al tiro, antes de que salga algo.
-    const queue = 'workRegions' in req.body || 'acceptRemote' in req.body ? await syncQueueWithRegions(req.user.id) : null;
+    const queue = ['workRegions', 'acceptRemote', 'excludedWords', 'blockedCompanies'].some(key => key in req.body) ? await syncQueueWithFilters(req.user.id) : null;
     res.json({ success: true, data: saved, queue });
   })
 );

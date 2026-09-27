@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { regionOf, regionVerdict } from '../src/services/regions.js';
+import { offerVerdict, regionOf, regionVerdict } from '../src/services/regions.js';
 import { db } from '../src/db/client.js';
 import { initializeSchema } from '../src/db/schema.js';
-import { runAutoPostulate, syncQueueWithRegions } from '../src/services/autoPostulate.js';
+import { runAutoPostulate, syncQueueWithFilters } from '../src/services/autoPostulate.js';
 import { updateAnswerPreferences } from '../src/services/savedAnswers.js';
 
 describe('regiones: cada portal escribe distinto', () => {
@@ -31,6 +31,16 @@ describe('regiones: cada portal escribe distinto', () => {
     expect(regionVerdict({ location: 'Remote · Remoto', remoteModality: 'remote_local' }, { ...rm, acceptRemote: false })).toBe('fuera');
     // Sin regiones elegidas: todo Chile, como hasta ahora.
     expect(regionVerdict({ location: 'Copiapó, AT' }, { workRegions: null, acceptRemote: true })).toBe('dentro');
+  });
+
+  it('excluye por palabra del cargo o empresa bloqueada, sin tildes ni mayúsculas', () => {
+    const filters = { workRegions: null, acceptRemote: true, excludedWords: ['venta', 'call center'], blockedCompanies: ['Acme S.A.'] };
+    const at = (title: string, company = 'Otra') => offerVerdict({ title, company, location: 'Santiago, RM' }, filters);
+    expect(at('Ejecutivo de Ventas')).toBe('excluida');
+    expect(at('Supervisor CALL CENTER')).toBe('excluida');
+    expect(at('Ingeniero de Preventa')).toBe('dentro'); // solo inicio de palabra
+    expect(at('Jefe de Logística', 'ACME S.A.')).toBe('excluida');
+    expect(at('Jefe de Logística')).toBe('dentro');
   });
 });
 
@@ -72,12 +82,22 @@ describe('la postulación automática respeta las regiones', () => {
 
   it('al dejar de aceptar remoto, lo remoto sale de la cola; al volver a aceptarlo, vuelve', async () => {
     await updateAnswerPreferences(USER, { acceptRemote: false });
-    expect(await syncQueueWithRegions(USER)).toEqual({ withdrawn: 1, requeued: 0 });
+    expect(await syncQueueWithFilters(USER)).toEqual({ withdrawn: 1, requeued: 0 });
     expect(await statusOf(offers.remoto[0])).toBe('pendiente');
     expect(await statusOf(offers.santiago[0])).toBe('en-cola');
 
     await updateAnswerPreferences(USER, { acceptRemote: true });
-    expect(await syncQueueWithRegions(USER)).toEqual({ withdrawn: 0, requeued: 1 });
+    expect(await syncQueueWithFilters(USER)).toEqual({ withdrawn: 0, requeued: 1 });
     expect(await statusOf(offers.remoto[0])).toBe('en-cola');
+  });
+
+  it('bloquear la empresa retira lo encolado de ella; desbloquearla lo devuelve', async () => {
+    await updateAnswerPreferences(USER, { blockedCompanies: ['acme'] });
+    expect(await syncQueueWithFilters(USER)).toEqual({ withdrawn: 2, requeued: 0 });
+    expect(await statusOf(offers.santiago[0])).toBe('pendiente');
+
+    await updateAnswerPreferences(USER, { blockedCompanies: null });
+    expect(await syncQueueWithFilters(USER)).toEqual({ withdrawn: 0, requeued: 2 });
+    expect(await statusOf(offers.santiago[0])).toBe('en-cola');
   });
 });

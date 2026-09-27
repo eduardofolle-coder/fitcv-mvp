@@ -5,6 +5,7 @@
  * "Las Condes, Metropolitana de Santiago", "Copiapó, AT", "Rengo, Lib. Gral.
  * Bdo. O'Higgins". Aquí todo se lleva a uno de los 16 códigos.
  */
+import { searchable } from './offerMatching.js';
 
 export const REGIONS = [
   { code: 'AP', name: 'Arica y Parinacota' },
@@ -99,4 +100,29 @@ export function regionVerdict(
   const region = regionOf(offer.location);
   if (!region) return 'sin-ubicacion';
   return prefs.workRegions.includes(region) ? 'dentro' : 'fuera';
+}
+
+export interface OfferFilters extends RegionPreferences {
+  /** Palabras que el candidato no quiere en el cargo ("ventas", "call center"). */
+  excludedWords: string[] | null;
+  /** Empresas a las que no quiere postular (ej. su empleador actual). */
+  blockedCompanies: string[] | null;
+}
+
+/** "excluida": el cargo tiene una palabra excluida o la empresa está bloqueada. */
+export type OfferVerdict = RegionVerdict | 'excluida';
+
+// Se compara por inicio de palabra: "venta" excluye "Ventas" y "Vendedor de ventas", no "Preventa".
+const hasTerm = (text: string | null | undefined, terms: string[] | null) => {
+  if (!text || !terms?.length) return false;
+  const haystack = ` ${searchable(text)}`;
+  return terms.some(term => haystack.includes(` ${searchable(term)}`));
+};
+
+export function offerVerdict(
+  offer: { title?: string | null; company?: string | null; location?: string | null; remoteModality?: string | null },
+  prefs: OfferFilters
+): OfferVerdict {
+  if (hasTerm(offer.title, prefs.excludedWords) || hasTerm(offer.company, prefs.blockedCompanies)) return 'excluida';
+  return regionVerdict(offer, prefs);
 }

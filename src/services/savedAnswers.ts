@@ -6,10 +6,10 @@ import { db } from '../db/client.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { EncryptionService } from './encryption.js';
 import type { SavedAnswers } from './fieldClassifier.js';
-import { isRegionCode, type RegionCode } from './regions.js';
+import { isRegionCode, type OfferFilters, type RegionCode } from './regions.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 
-export interface AnswerPreferences extends SavedAnswers {
+export interface AnswerPreferences extends SavedAnswers, OfferFilters {
   autoSendLinkedIn: boolean;
   allowDataAnalysis: boolean;
   acceptPortalTermsAt: string | null;
@@ -41,6 +41,8 @@ const EMPTY: AnswerPreferences = {
   dailyAnalysisHour: null,
   workRegions: null,
   acceptRemote: true,
+  excludedWords: null,
+  blockedCompanies: null,
 };
 
 const decrypt = (value: unknown): string | null => {
@@ -56,6 +58,12 @@ const parseRegions = (value: unknown): RegionCode[] | null => {
   const list = safeJsonParse<unknown>(value, []);
   const codes = Array.isArray(list) ? list.filter(isRegionCode) : [];
   return codes.length ? codes : null;
+};
+
+const parseTerms = (value: unknown): string[] | null => {
+  const list = safeJsonParse<unknown>(value, []);
+  const terms = Array.isArray(list) ? list.filter((t): t is string => typeof t === 'string' && t.trim() !== '') : [];
+  return terms.length ? terms : null;
 };
 
 const bool = (value: unknown): boolean | null => (typeof value === 'boolean' ? value : null);
@@ -110,6 +118,8 @@ export async function loadAnswerPreferences(userId: string): Promise<AnswerPrefe
     dailyAnalysisHour: int(row.dailyAnalysisHour),
     workRegions: parseRegions(row.workRegions),
     acceptRemote: row.acceptRemote !== false,
+    excludedWords: parseTerms(row.excludedWords),
+    blockedCompanies: parseTerms(row.blockedCompanies),
   };
 }
 
@@ -200,6 +210,16 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.acceptRemote = body.acceptRemote;
   }
 
+  for (const key of ['excludedWords', 'blockedCompanies'] as const) {
+    if (!has(key)) continue;
+    const value = body[key];
+    if (value !== null && !(Array.isArray(value) && value.length <= 50 && value.every(t => typeof t === 'string'))) {
+      throw new AppError(400, `${key} must be a list of up to 50 words, or null.`);
+    }
+    const terms = [...new Set(((value as string[] | null) ?? []).map(t => t.trim().slice(0, 60)).filter(Boolean))];
+    next[key] = terms.length ? terms : null;
+  }
+
   if (has('allowDataAnalysis')) {
     if (typeof body.allowDataAnalysis !== 'boolean') throw new AppError(400, 'allowDataAnalysis must be true or false.');
     next.allowDataAnalysis = body.allowDataAnalysis;
@@ -222,8 +242,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     INSERT INTO apply_preferences (
       userId, autoSendLinkedIn, allowDataAnalysis, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
       driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt,
-      dailyAnalysisHour, workRegions, acceptRemote, updatedAt
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP)
+      dailyAnalysisHour, workRegions, acceptRemote, excludedWords, blockedCompanies, updatedAt
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP)
     ON CONFLICT (userId) DO UPDATE SET
       autoSendLinkedIn = EXCLUDED.autoSendLinkedIn,
       allowDataAnalysis = EXCLUDED.allowDataAnalysis,
@@ -245,6 +265,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
       dailyAnalysisHour = EXCLUDED.dailyAnalysisHour,
       workRegions = EXCLUDED.workRegions,
       acceptRemote = EXCLUDED.acceptRemote,
+      excludedWords = EXCLUDED.excludedWords,
+      blockedCompanies = EXCLUDED.blockedCompanies,
       updatedAt = CURRENT_TIMESTAMP
   `, [
     userId,
@@ -268,6 +290,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.dailyAnalysisHour,
     next.workRegions ? JSON.stringify(next.workRegions) : null,
     next.acceptRemote,
+    next.excludedWords ? JSON.stringify(next.excludedWords) : null,
+    next.blockedCompanies ? JSON.stringify(next.blockedCompanies) : null,
   ]);
 
   return loadAnswerPreferences(userId);
