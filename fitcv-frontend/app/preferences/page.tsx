@@ -18,6 +18,7 @@ interface Preferences {
   comuna: string | null;
   region: string | null;
   nationality: string | null;
+  secondNationality: string | null;
   driverLicense: string | null;
   willingToTravel: boolean | null;
   shiftWork: boolean | null;
@@ -79,6 +80,7 @@ export default function PreferencesPage() {
   const [comuna, setComuna] = useState('');
   const [region, setRegion] = useState('');
   const [nationality, setNationality] = useState('');
+  const [secondNationality, setSecondNationality] = useState('');
   const [driverLicense, setDriverLicense] = useState('');
   const [willingToTravel, setWillingToTravel] = useState<YesNo>('');
   const [shiftWork, setShiftWork] = useState<YesNo>('');
@@ -117,6 +119,7 @@ export default function PreferencesPage() {
         setComuna(p.comuna ?? '');
         setRegion(p.region ?? '');
         setNationality(p.nationality ?? '');
+        setSecondNationality(p.secondNationality ?? '');
         setDriverLicense(p.driverLicense ?? '');
         setWillingToTravel(toYesNo(p.willingToTravel));
         setShiftWork(toYesNo(p.shiftWork));
@@ -169,6 +172,7 @@ export default function PreferencesPage() {
       comuna: comuna.trim() || null,
       region: region.trim() || null,
       nationality: nationality.trim() || null,
+      secondNationality: secondNationality.trim() || null,
       driverLicense: driverLicense || null,
       willingToTravel: fromYesNo(willingToTravel),
       shiftWork: fromYesNo(shiftWork),
@@ -375,6 +379,13 @@ export default function PreferencesPage() {
               <select id="nationality" value={nationality} onChange={e => setNationality(e.target.value)} className="aw-select">
                 <option value="">Selecciona…</option>
                 {NATIONALITIES.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="secondNationality" className="aw-label">Segunda nacionalidad (opcional)</label>
+              <select id="secondNationality" value={secondNationality} onChange={e => setSecondNationality(e.target.value)} className="aw-select">
+                <option value="">No tengo</option>
+                {NATIONALITIES.filter(n => n !== nationality).map(n => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
             <div style={{ gridColumn:'1 / -1' }}>

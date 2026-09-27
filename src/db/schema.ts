@@ -371,6 +371,7 @@ export async function initializeSchema(): Promise<void> {
     -- sale a la hora del análisis diario o cada batchEveryHours.
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS sendMode TEXT NOT NULL DEFAULT 'revision';
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS batchEveryHours INTEGER;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS secondNationality TEXT;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS lastBatchAt TIMESTAMPTZ;
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS reviewUntil TIMESTAMPTZ;
 

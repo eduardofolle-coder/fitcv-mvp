@@ -69,3 +69,44 @@ describe('aprender de los descartes', () => {
     expect((await listSuggestions(USER)).map(s => s.kind)).toEqual(['empresa']);
   });
 });
+
+describe('aprender de los descartes por renta', () => {
+  const RUN = Date.now();
+  const USER = `u-renta-${RUN}`;
+  let n = 0;
+
+  async function discardForPay(salaryMax: number | null) {
+    n++;
+    const offerId = `o-renta-${n}-${RUN}`;
+    await db.query(
+      `INSERT INTO offers (id, title, company, level, source, description, location, salaryMax, salaryCurrency)
+       VALUES ($1, 'Analista', 'Acme', 'L2', 'test', 'Oferta.', 'Santiago, RM', $2, 'CLP')`,
+      [offerId, salaryMax]
+    );
+    const id = `p-renta-${n}-${RUN}`;
+    await db.query(`INSERT INTO postulations (id, userId, offerId, source, applyStatus) VALUES ($1, $2, $3, 'auto', 'por-enviar')`, [id, USER, offerId]);
+    await discardInbox(USER, [id], 'renta');
+  }
+
+  beforeAll(async () => {
+    await db.init();
+    await initializeSchema();
+    await db.query(`INSERT INTO users (id, email, passwordHash, plan) VALUES ($1, $2, 'x', 'max')`, [USER, `renta-${RUN}@test.dev`]);
+    await updateAnswerPreferences(USER, { salaryMin: 700_000, salaryMax: 900_000 });
+  });
+
+  it('propone subir la renta mínima sobre lo que pagaba la mejor descartada, y aceptarlo la aplica', async () => {
+    await discardForPay(null); // no dice cuánto paga: no cuenta
+    await discardForPay(780_000);
+    expect(await listSuggestions(USER)).toEqual([]);
+    await discardForPay(820_000);
+
+    const [renta] = await listSuggestions(USER);
+    expect(renta).toMatchObject({ kind: 'renta', value: '850000' });
+    expect(renta.text).toMatch(/\$850\.000/);
+
+    await answerSuggestion(USER, renta.id, true);
+    const prefs = await loadAnswerPreferences(USER);
+    expect([prefs.salaryMin, prefs.salaryMax]).toEqual([850_000, 900_000]);
+  });
+});

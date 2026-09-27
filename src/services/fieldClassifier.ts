@@ -73,6 +73,8 @@ export interface SavedAnswers {
   comuna: string | null;
   region: string | null;
   nationality: string | null;
+  /** Doble nacionalidad: se usa si el formulario no ofrece la primera. */
+  secondNationality?: string | null;
   driverLicense: string | null;
   willingToTravel: boolean | null;
   shiftWork: boolean | null;
@@ -543,8 +545,14 @@ function resolvePersonal(field: ApplicationField, base: Base, key: PersonalKey, 
       return text(answers.rut);
     case 'address':
       return text(answers.address);
-    case 'nationality':
-      return text(answers.nationality);
+    case 'nationality': {
+      const declared = [answers.nationality, answers.secondNationality].filter((n): n is string => Boolean(n));
+      if (declared.length === 0) return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
+      // Texto libre: ambas. Con opciones: la primera que el formulario ofrezca.
+      if (!field.options?.length) return { ...base, status: 'filled', value: declared.join(' y '), source: FROM_ANSWERS };
+      const matches = declared.map(n => chooseAnswer(field, base, n));
+      return matches.find(r => r.status === 'filled') ?? matches[0];
+    }
     case 'driverLicense': {
       if (!answers.driverLicense) return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
       // "¿Tienes licencia de conducir?" con Sí/No.

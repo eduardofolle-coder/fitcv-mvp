@@ -363,6 +363,7 @@ describe('applications sent by the extension', () => {
     expect((await call('GET', '/extension/me')).status).toBe(401);
     // El panel del dueño no se abre a un candidato cualquiera.
     expect((await call('GET', '/admin/users')).status).toBe(403);
+    expect((await call('DELETE', '/admin/test-users')).status).toBe(403);
   });
 
   it('hands queued applications to the extension exactly once', async () => {

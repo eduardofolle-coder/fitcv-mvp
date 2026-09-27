@@ -10,19 +10,23 @@
  * - cargo: una palabra en 3 cargos descartados y en ninguno que haya dejado
  *   salir → excluir la palabra. Así "logística", que está en todo lo suyo, no se
  *   propone nunca.
+ * - renta: 2 descartes por renta en ofertas que dicen cuánto pagan → subir la
+ *   renta mínima sobre lo que pagaba la mejor de ellas. No excluye: las que
+ *   paguen menos piden autorización antes de salir.
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { syncQueueWithFilters } from './autoPostulate.js';
+import { formatClp } from './fieldClassifier.js';
 import { createNotification } from './notifications.js';
 import { searchable } from './offerMatching.js';
 import { hasTerm, regionName, regionOf, REGIONS, type RegionCode } from './regions.js';
 import { loadAnswerPreferences, updateAnswerPreferences, type AnswerPreferences } from './savedAnswers.js';
 
-export type SuggestionKind = 'region' | 'empresa' | 'palabra';
+export type SuggestionKind = 'region' | 'empresa' | 'palabra' | 'renta';
 
-const THRESHOLD: Record<SuggestionKind, number> = { region: 3, empresa: 2, palabra: 3 };
+const THRESHOLD: Record<SuggestionKind, number> = { region: 3, empresa: 2, palabra: 3, renta: 2 };
 
 // Palabras que no dicen nada del cargo.
 const STOPWORDS = new Set(['para', 'con', 'del', 'las', 'los', 'una', 'por', 'sus', 'que', 'area', 'zona', 'chile', 'santiago']);
@@ -36,6 +40,9 @@ const countBy = <T>(items: T[]) => {
   return counts;
 };
 
+// La renta sugerida sube de a $50.000, sobre lo que pagaba la mejor oferta descartada.
+const STEP = 50_000;
+
 /** Regiones donde FITCV sigue postulando: todas si no eligió ninguna. */
 const activeRegions = (prefs: AnswerPreferences): RegionCode[] =>
   prefs.workRegions?.length ? prefs.workRegions : REGIONS.map(r => r.code);
@@ -43,8 +50,8 @@ const activeRegions = (prefs: AnswerPreferences): RegionCode[] =>
 /** Lo que los descartes del candidato sugieren y aún no tiene como filtro. */
 export async function detectSuggestions(userId: string): Promise<Array<{ kind: SuggestionKind; value: string; evidence: number }>> {
   const prefs = await loadAnswerPreferences(userId);
-  const discarded = (await db.query<{ detail: string; title: string; company: string | null; location: string | null }>(`
-    SELECT DISTINCT ON (e.postulationId) e.detail, o.title, o.company, o.location
+  const discarded = (await db.query<{ detail: string; title: string; company: string | null; location: string | null; salaryMin: number | null; salaryMax: number | null; salaryCurrency: string | null }>(`
+    SELECT DISTINCT ON (e.postulationId) e.detail, o.title, o.company, o.location, o.salaryMin, o.salaryMax, o.salaryCurrency
     FROM application_events e
     JOIN postulations p ON p.id = e.postulationId
     JOIN offers o ON o.id = p.offerId
@@ -78,6 +85,20 @@ export async function detectSuggestions(userId: string): Promise<Array<{ kind: S
       if (n >= THRESHOLD.palabra && !keptWords.has(word) && !hasTerm(word, prefs.excludedWords)) found.push({ kind: 'palabra', value: word, evidence: n });
     }
   }
+
+  const paid = discarded
+    .filter(d => d.detail === 'renta' && (d.salaryCurrency ?? 'CLP') === 'CLP')
+    .map(d => Number(d.salaryMax ?? d.salaryMin))
+    .filter(n => Number.isFinite(n) && n > 0);
+  if (paid.length >= THRESHOLD.renta) {
+    const proposed = (Math.floor(Math.max(...paid) / STEP) + 1) * STEP;
+    // El monto cambia con cada descarte: una renta rechazada (o aún sin responder) no se vuelve a proponer.
+    const answeredNo = await db.queryOne(
+      "SELECT id FROM filter_suggestions WHERE userId = $1 AND kind = 'renta' AND status IN ('rechazada', 'pendiente')",
+      [userId]
+    );
+    if (!answeredNo && (prefs.salaryMin ?? 0) < proposed) found.push({ kind: 'renta', value: String(proposed), evidence: paid.length });
+  }
   return found;
 }
 
@@ -86,7 +107,9 @@ const describe = (kind: SuggestionKind, value: string, evidence: number) =>
     ? `Descartaste ${evidence} ofertas en ${regionName(value)} porque quedan lejos. ¿Dejamos de postular ahí?`
     : kind === 'empresa'
       ? `Descartaste ${evidence} ofertas de ${value}. ¿Bloqueamos esa empresa?`
-      : `Descartaste ${evidence} cargos con la palabra "${value}". ¿La excluimos?`;
+      : kind === 'palabra'
+        ? `Descartaste ${evidence} cargos con la palabra "${value}". ¿La excluimos?`
+        : `Descartaste ${evidence} ofertas por la renta. ¿Subimos tu renta mínima a ${formatClp(Number(value))}? Las que paguen menos te pedirán autorización antes de enviarse.`;
 
 /** Guarda y avisa las sugerencias nuevas. Lo ya sugerido (aceptado o rechazado) no se repite. */
 export async function refreshSuggestions(userId: string): Promise<number> {
@@ -127,7 +150,9 @@ export async function answerSuggestion(userId: string, id: string, accept: boole
         ? { workRegions: activeRegions(prefs).filter(r => r !== s.value) }
         : s.kind === 'empresa'
           ? { blockedCompanies: [...(prefs.blockedCompanies ?? []), s.value] }
-          : { excludedWords: [...(prefs.excludedWords ?? []), s.value] };
+          : s.kind === 'palabra'
+            ? { excludedWords: [...(prefs.excludedWords ?? []), s.value] }
+            : { salaryMin: Number(s.value), salaryMax: Math.max(prefs.salaryMax ?? 0, Number(s.value)) };
     await updateAnswerPreferences(userId, change);
     queue = await syncQueueWithFilters(userId);
   }

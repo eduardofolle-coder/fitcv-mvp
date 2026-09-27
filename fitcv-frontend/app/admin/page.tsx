@@ -11,7 +11,7 @@ interface Portal { portal: string; attempts: number; counts: Record<Outcome, num
 interface Health { rule: { days: number; maxErrorRate: number; confidence: number }; portals: Portal[] }
 interface Invite { email: string; plan: string; createdAt: string; usedAt: string | null }
 interface SourceRow { source: string; active: string; new24h: string; new7d: string; newest: string | null }
-interface UserRow { id: string; email: string; plan: string; sent: string; queued: string; attention: string; interviews: string; mail: string | null }
+interface UserRow { id: string; email: string; plan: string; isTest: boolean; sent: string; queued: string; attention: string; interviews: string; mail: string | null }
 
 const PLANS = ['free', 'pro', 'max'];
 const OUTCOMES: Array<[Outcome, string]> = [['limpia', 'Limpia'], ['asistida', 'Asistida'], ['bloqueada', 'Bloqueada'], ['atencion', 'Atención'], ['error', 'Error']];
@@ -32,6 +32,7 @@ export default function AdminPage() {
   const [reload, setReload] = useState(0);
   const [pausing, setPausing] = useState<string | null>(null);
   const [pauseReason, setPauseReason] = useState('');
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -191,6 +192,25 @@ export default function AdminPage() {
 
       <section className="aw-card">
         <h2 className="aw-h2">Candidatos</h2>
+        {users.some((u) => u.isTest) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            {!confirmCleanup ? (
+              <button type="button" className="aw-btn-outline aw-btn-sm" onClick={() => setConfirmCleanup(true)}>
+                Borrar {users.filter((u) => u.isTest).length} usuarios de prueba
+              </button>
+            ) : (
+              <>
+                <span className="aw-muted">
+                  Se borran para siempre las cuentas @example.com, @example.org, @example.net y @test.dev, con todos sus datos. ¿Seguro?
+                </span>
+                <button type="button" className="aw-btn-gold aw-btn-sm" onClick={async () => { await apiClient.delete('/admin/test-users'); setConfirmCleanup(false); setReload((r) => r + 1); }}>
+                  Sí, borrar
+                </button>
+                <button type="button" className="aw-btn-outline aw-btn-sm" onClick={() => setConfirmCleanup(false)}>Cancelar</button>
+              </>
+            )}
+          </div>
+        )}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, color: '#F4F1E9', fontVariantNumeric: 'tabular-nums' }}>
             <thead>
@@ -199,7 +219,7 @@ export default function AdminPage() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td style={cell}>{u.email}</td>
+                  <td style={cell}>{u.email}{u.isTest && <span className="aw-pill aw-pill-gray" style={{ marginLeft: 6 }}>prueba</span>}</td>
                   <td style={cell}>
                     <select className="aw-select" value={u.plan} onChange={async (e) => { await apiClient.put(`/admin/users/${u.id}/plan`, { plan: e.target.value }); setReload((r) => r + 1); }}>
                       {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}

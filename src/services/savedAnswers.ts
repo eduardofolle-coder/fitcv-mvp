@@ -39,6 +39,7 @@ const EMPTY: AnswerPreferences = {
   comuna: null,
   region: null,
   nationality: null,
+  secondNationality: null,
   driverLicense: null,
   willingToTravel: null,
   shiftWork: null,
@@ -118,6 +119,7 @@ export async function loadAnswerPreferences(userId: string): Promise<AnswerPrefe
     comuna: row.comuna ?? null,
     region: row.region ?? null,
     nationality: row.nationality ?? null,
+    secondNationality: row.secondNationality ?? null,
     driverLicense: row.driverLicense ?? null,
     willingToTravel: bool(row.willingToTravel),
     shiftWork: bool(row.shiftWork),
@@ -141,6 +143,7 @@ const TEXT_LIMITS: Record<string, number> = {
   comuna: 100,
   region: 100,
   nationality: 60,
+  secondNationality: 60,
   driverLicense: 30,
 };
 
@@ -267,8 +270,8 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     INSERT INTO apply_preferences (
       userId, autoSendLinkedIn, allowDataAnalysis, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
       driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt,
-      dailyAnalysisHour, workRegions, acceptRemote, excludedWords, blockedCompanies, sendMode, batchEveryHours, updatedAt
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, CURRENT_TIMESTAMP)
+      dailyAnalysisHour, workRegions, acceptRemote, excludedWords, blockedCompanies, sendMode, batchEveryHours, secondNationality, updatedAt
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, CURRENT_TIMESTAMP)
     ON CONFLICT (userId) DO UPDATE SET
       autoSendLinkedIn = EXCLUDED.autoSendLinkedIn,
       allowDataAnalysis = EXCLUDED.allowDataAnalysis,
@@ -294,6 +297,7 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
       blockedCompanies = EXCLUDED.blockedCompanies,
       sendMode = EXCLUDED.sendMode,
       batchEveryHours = EXCLUDED.batchEveryHours,
+      secondNationality = EXCLUDED.secondNationality,
       updatedAt = CURRENT_TIMESTAMP
   `, [
     userId,
@@ -321,6 +325,7 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.blockedCompanies ? JSON.stringify(next.blockedCompanies) : null,
     next.sendMode,
     next.batchEveryHours,
+    next.secondNationality ?? null,
   ]);
 
   return loadAnswerPreferences(userId);

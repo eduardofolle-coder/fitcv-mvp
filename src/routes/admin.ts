@@ -10,6 +10,7 @@ import { env } from '../env.js';
 import { getPortalHealth, PAUSE_RULE, setPortalOverride, clearPortalOverride } from '../services/portalHealth.js';
 import { PLAN_CONFIG } from '../services/planQuota.js';
 import { ACTIVE_OFFER } from '../services/profileOffers.js';
+import { disconnectMailAccount } from '../services/mailAccounts.js';
 
 const router = Router();
 
@@ -20,6 +21,9 @@ router.use(requireAuth, (req: any, _res, next) => {
 
 const isPlan = (p: unknown): p is keyof typeof PLAN_CONFIG => typeof p === 'string' && p in PLAN_CONFIG;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Cuentas de prueba: dominios reservados que nunca son de un candidato real.
+const isTestEmail = (column: string) =>
+  `(${['example.com', 'example.org', 'example.net', 'test.dev'].map(d => `${column} ILIKE '%@${d}'`).join(' OR ')})`;
 
 // GET /api/admin/portal-health
 router.get('/portal-health', asyncHandler(async (_req: any, res: any) => {
@@ -58,7 +62,7 @@ router.get('/sources', asyncHandler(async (_req: any, res: any) => {
 // GET /api/admin/users - Candidatos con plan y resultados
 router.get('/users', asyncHandler(async (_req: any, res: any) => {
   const rows = (await db.query(`
-    SELECT u.id, u.email, u.plan, u.createdAt,
+    SELECT u.id, u.email, u.plan, u.createdAt, ${isTestEmail('u.email')} AS isTest,
       COUNT(p.id) FILTER (WHERE p.applyStatus = 'enviada') AS sent,
       COUNT(p.id) FILTER (WHERE p.applyStatus = 'en-cola') AS queued,
       COUNT(p.id) FILTER (WHERE p.applyStatus = 'requiere-atencion') AS attention,
@@ -67,7 +71,20 @@ router.get('/users', asyncHandler(async (_req: any, res: any) => {
     FROM users u LEFT JOIN postulations p ON p.userId = u.id
     GROUP BY u.id ORDER BY u.createdAt DESC LIMIT 200
   `)).rows;
-  res.json({ success: true, data: rows });
+  // Una cuenta del equipo nunca cuenta como de prueba: el borrado masivo la salta.
+  const isAdmin = (email: string) => env.ADMIN_EMAILS.includes(email.toLowerCase());
+  res.json({ success: true, data: rows.map((r: any) => ({ ...r, isTest: r.isTest === true && !isAdmin(r.email) })) });
+}));
+
+// DELETE /api/admin/test-users - Borra las cuentas de prueba y todos sus datos (nunca una de ADMIN_EMAILS)
+router.delete('/test-users', asyncHandler(async (_req: any, res: any) => {
+  const users = (await db.query<{ id: string; email: string }>(`SELECT id, email FROM users WHERE ${isTestEmail('email')}`)).rows
+    .filter(u => !env.ADMIN_EMAILS.includes(u.email.toLowerCase()));
+  for (const u of users) {
+    await disconnectMailAccount(u.id); // revoca el permiso de envío si alguna conectó correo
+    await db.query('DELETE FROM users WHERE id = $1', [u.id]); // lo del usuario cuelga con ON DELETE CASCADE
+  }
+  res.json({ success: true, deleted: users.length });
 }));
 
 // PUT /api/admin/users/:id/plan { plan }

@@ -270,3 +270,21 @@ describe('pickRangeOption', () => {
     expect(pickRangeOption(7, ['1-3', '4-6'])).toBeUndefined();
   });
 });
+
+describe('doble nacionalidad', () => {
+  const answers = { nationality: 'Chilena', secondNationality: 'Española' } as SavedAnswers;
+  const resolveWith = (extra: Partial<ApplicationField>) => {
+    const field: ApplicationField = { id: 'n', label: 'Nacionalidad', ...extra };
+    return resolveDeterministic(field, classifyField(field), hard, { answers });
+  };
+
+  it('en texto libre declara ambas', () => {
+    expect(resolveWith({})).toMatchObject({ status: 'filled', value: 'Chilena y Española' });
+  });
+
+  it('con opciones usa la primera que el formulario ofrezca', () => {
+    expect(resolveWith({ options: ['Chilena', 'Española', 'Otra'] })).toMatchObject({ status: 'filled', value: 'Chilena' });
+    expect(resolveWith({ options: ['Española', 'Argentina'] })).toMatchObject({ status: 'filled', value: 'Española' });
+    expect(resolveWith({ options: ['Peruana', 'Argentina'] })).toMatchObject({ status: 'needs-user' });
+  });
+});
