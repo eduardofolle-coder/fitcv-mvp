@@ -1,7 +1,7 @@
 // Nombre visible de cada portal de origen de las ofertas.
 export const SOURCE_LABELS: Record<string, string> = {
   getonbrd: 'Get on Board',
-  trabajando: 'trabajando.cl',
+  trabajando: 'Trabajando.com',
   chiletrabajos: 'Chiletrabajos',
   bne: 'Bolsa Nacional de Empleo',
   portalminero: 'Portal Minero',
@@ -9,6 +9,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   linkedin: 'LinkedIn',
   computrabajo: 'Computrabajo',
   laborum: 'Laborum',
+  firstjob: 'FirstJob',
   empresa: 'Sitio de empresa',
 };
 

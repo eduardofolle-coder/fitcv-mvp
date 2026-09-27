@@ -223,7 +223,7 @@ export function ExtensionCard() {
           />
           <span>
             Autorizo a FITCV a analizar mis datos de CV, postulaciones y uso de la plataforma para mejorar la precisión
-            con que me postulo. Podés revocar este permiso desde{' '}
+            con que me postulo. Puedes revocar este permiso desde{' '}
             <a href="/preferences" style={{ color:'#E1A526', textDecoration:'underline' }}>Mis preferencias</a>.
           </span>
         </label>

@@ -46,7 +46,7 @@ type Mode = 'profile' | 'all';
 
 
 // Portales que bloquean la lectura automática: sus ofertas entran con la extensión.
-const EXTENSION_ONLY = ['LinkedIn', 'Laborum', 'Zonajobs', 'Empleos Públicos'];
+const EXTENSION_ONLY = ['LinkedIn', 'Laborum', 'Empleos Públicos'];
 
 const money = (n: number, currency?: string | null) =>
   currency === 'USD' ? `US$${n.toLocaleString('es-CL')}` : `$${n.toLocaleString('es-CL')}`;
