@@ -8,6 +8,7 @@ import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { parseFields, parseJob, resolveFields } from '../services/fieldResolver.js';
 import { loadAnswerPreferences, updateAnswerPreferences } from '../services/savedAnswers.js';
 import { syncQueueWithFilters } from '../services/autoPostulate.js';
+import { answerSuggestion, listSuggestions } from '../services/filterSuggestions.js';
 import { approveInbox, clearReviewDeadlines, discardInbox, listInbox, REVIEW_HOURS } from '../services/sendInbox.js';
 
 const router = Router();
@@ -72,6 +73,7 @@ router.get(
       batchEveryHours: prefs.batchEveryHours,
       dailyAnalysisHour: prefs.dailyAnalysisHour,
       reviewHours: REVIEW_HOURS,
+      suggestions: await listSuggestions(req.user.id),
     });
   })
 );
@@ -91,6 +93,16 @@ router.post(
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
     res.json({ success: true, discarded: await discardInbox(req.user.id, req.body?.ids, req.body?.reason) });
+  })
+);
+
+// POST /api/applications/suggestions/:id { accept } - Aplica (o descarta) un filtro sugerido
+router.post(
+  '/suggestions/:id',
+  requireAuth,
+  asyncHandler(async (req: any, res: any) => {
+    if (typeof req.body?.accept !== 'boolean') throw new AppError(400, 'accept must be true or false.');
+    res.json({ success: true, ...(await answerSuggestion(req.user.id, req.params.id, req.body.accept)) });
   })
 );
 

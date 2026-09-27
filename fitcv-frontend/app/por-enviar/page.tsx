@@ -21,6 +21,7 @@ interface InboxResponse {
   batchEveryHours?: number | null;
   dailyAnalysisHour?: number | null;
   reviewHours?: number;
+  suggestions?: Array<{ id: string; kind: string; value: string; text: string }>;
 }
 
 const REASONS: Array<[string, string]> = [
@@ -94,6 +95,28 @@ export default function PorEnviarPage() {
     setBusy(false);
   };
 
+  const answer = async (id: string, accept: boolean) => {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    const res = (await apiClient.post(`/applications/suggestions/${id}`, { accept })) as {
+      success: boolean;
+      error?: string;
+      queue?: { withdrawn: number } | null;
+    };
+    if (res.success) {
+      setMessage(
+        accept
+          ? `Listo, filtro aplicado.${res.queue?.withdrawn ? ` ${res.queue.withdrawn} postulación(es) que ya no calzan salieron de la bandeja.` : ''} Puedes cambiarlo cuando quieras en Mis respuestas.`
+          : 'Entendido, no te lo volvemos a sugerir.'
+      );
+      await load();
+    } else {
+      setError(res.error || 'No se pudo guardar tu respuesta');
+    }
+    setBusy(false);
+  };
+
   const schedule = inbox.batchEveryHours
     ? `cada ${inbox.batchEveryHours} horas`
     : inbox.dailyAnalysisHour !== null && inbox.dailyAnalysisHour !== undefined
@@ -117,6 +140,15 @@ export default function PorEnviarPage() {
           Elige la hora de tu análisis diario (o una frecuencia) en <a href="/preferences#envio" style={{ color: '#E1A526' }}>Mis respuestas</a> para que FITCV arme tus tandas.
         </div>
       )}
+      {(inbox.suggestions ?? []).map(s => (
+        <div key={s.id} className="aw-card aw-card-sm" style={{ marginBottom: 12, borderColor: '#E1A52660' }}>
+          <p style={{ color: '#F4F1E9', marginBottom: 8 }}>{s.text}</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="aw-btn-gold aw-btn-sm" disabled={busy} onClick={() => answer(s.id, true)}>Sí, aplicar</button>
+            <button type="button" className="aw-btn-outline aw-btn-sm" disabled={busy} onClick={() => answer(s.id, false)}>No, gracias</button>
+          </div>
+        </div>
+      ))}
       {message && <div className="aw-info" style={{ marginBottom: 12 }}>{message}</div>}
       {error && <div className="aw-error" style={{ marginBottom: 12 }}>{error}</div>}
 

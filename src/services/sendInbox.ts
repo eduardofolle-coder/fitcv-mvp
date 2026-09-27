@@ -21,6 +21,7 @@ import { localClock } from './dailyAnalysis.js';
 import { sendEmail } from './email.js';
 import { logger } from './logger.js';
 import { createNotification } from './notifications.js';
+import { refreshSuggestions } from './filterSuggestions.js';
 import { releaseQuota } from './planQuota.js';
 
 export const REVIEW_HOURS = 3;
@@ -163,5 +164,7 @@ export async function discardInbox(userId: string, ids: unknown, reason: unknown
     discarded++;
   }
   await releaseQuota(userId, discarded);
+  // Un aviso que falla no debe deshacer el descarte.
+  await refreshSuggestions(userId).catch(err => logger.warn('No se pudieron calcular sugerencias de filtro', { userId, err: String(err) }));
   return discarded;
 }

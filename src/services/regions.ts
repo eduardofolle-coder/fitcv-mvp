@@ -113,7 +113,7 @@ export interface OfferFilters extends RegionPreferences {
 export type OfferVerdict = RegionVerdict | 'excluida';
 
 // Se compara por inicio de palabra: "venta" excluye "Ventas" y "Vendedor de ventas", no "Preventa".
-const hasTerm = (text: string | null | undefined, terms: string[] | null) => {
+export const hasTerm = (text: string | null | undefined, terms: string[] | null) => {
   if (!text || !terms?.length) return false;
   const haystack = ` ${searchable(text)}`;
   return terms.some(term => haystack.includes(` ${searchable(term)}`));

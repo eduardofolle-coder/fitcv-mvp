@@ -519,6 +519,18 @@ export async function initializeSchema(): Promise<void> {
       checkedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (userId, portal)
     );
+
+    -- Filtros que FITCV sugiere a partir de los descartes. Uno rechazado no se vuelve a sugerir.
+    CREATE TABLE IF NOT EXISTS filter_suggestions (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      value TEXT NOT NULL,
+      evidence INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pendiente',
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (userId, kind, value)
+    );
   `);
 
   console.log('✅ Database schema initialized');
