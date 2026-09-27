@@ -58,6 +58,9 @@ export const env = {
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
   TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM || '',
+  // Plantillas aprobadas por aviso, como JSON: {"te_necesitamos":"HX...", ...}.
+  // Ver docs/WHATSAPP-PLANTILLAS.md. Sin plantilla, el aviso va como texto libre.
+  WHATSAPP_TEMPLATES: process.env.WHATSAPP_TEMPLATES || '',
   // WhatsApp del admin para alertas del watchdog (E.164). Vacío = solo Sentry+log.
   ADMIN_WHATSAPP: process.env.ADMIN_WHATSAPP || '',
 

@@ -71,6 +71,8 @@ services:
         sync: false
       - key: TWILIO_WHATSAPP_FROM
         value: whatsapp:+17372508034
+      - key: WHATSAPP_TEMPLATES
+        sync: false
       - key: EMAIL_FROM
         value: FITCV <contacto@fitcv.cl>
       - key: APP_URL
@@ -154,6 +156,8 @@ services:
         sync: false
       - key: TWILIO_WHATSAPP_FROM
         value: whatsapp:+17372508034
+      - key: WHATSAPP_TEMPLATES
+        sync: false
       - key: ADMIN_WHATSAPP
         sync: false
       - key: RESEND_API_KEY

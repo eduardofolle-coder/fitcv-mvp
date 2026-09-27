@@ -11,6 +11,7 @@ interface Portal { portal: string; attempts: number; counts: Record<Outcome, num
 interface Health { rule: { days: number; maxErrorRate: number; confidence: number }; portals: Portal[] }
 interface Invite { email: string; plan: string; createdAt: string; usedAt: string | null }
 interface SourceRow { source: string; active: string; new24h: string; new7d: string; newest: string | null }
+interface WhatsAppSummary { optedIn: number; byStatus: Record<string, number>; templatesConfigured: string[] }
 interface UserRow { id: string; email: string; plan: string; isTest: boolean; sent: string; queued: string; attention: string; interviews: string; mail: string | null }
 
 const PLANS = ['free', 'pro', 'max'];
@@ -33,6 +34,7 @@ export default function AdminPage() {
   const [pausing, setPausing] = useState<string | null>(null);
   const [pauseReason, setPauseReason] = useState('');
   const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [whatsapp, setWhatsapp] = useState<WhatsAppSummary | null>(null);
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -41,17 +43,19 @@ export default function AdminPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const [h, i, u, s] = await Promise.all([
+      const [h, i, u, s, w] = await Promise.all([
         apiClient.get<Health>('/admin/portal-health'),
         apiClient.get<{ closed: boolean; invites: Invite[] }>('/admin/invites'),
         apiClient.get<UserRow[]>('/admin/users'),
         apiClient.get<SourceRow[]>('/admin/sources'),
+        apiClient.get<WhatsAppSummary>('/admin/whatsapp'),
       ]);
       if (!h.success) { setForbidden(true); return; }
       setHealth(h.data ?? null);
       setInvites(i.data ?? null);
       setUsers(u.data ?? []);
       setSources(s.data ?? []);
+      setWhatsapp(w.data ?? null);
     })();
   }, [user, reload]);
 
@@ -189,6 +193,20 @@ export default function AdminPage() {
           </div>
         ))}
       </section>
+
+      {whatsapp && (
+        <section className="aw-card" style={{ marginBottom: 24 }}>
+          <h2 className="aw-h2">WhatsApp (últimos 7 días)</h2>
+          <p className="aw-muted" style={{ marginBottom: 8 }}>
+            {whatsapp.optedIn} candidato(s) pidieron avisos. Enviados: {Object.values(whatsapp.byStatus).reduce((a, b) => a + b, 0)} ·
+            entregados o leídos: {(whatsapp.byStatus.delivered ?? 0) + (whatsapp.byStatus.read ?? 0)} ·
+            fallidos: {(whatsapp.byStatus.failed ?? 0) + (whatsapp.byStatus.undelivered ?? 0)}.
+          </p>
+          <p className="aw-dim">
+            Plantillas configuradas: {['te_necesitamos', 'tanda', 'respuesta', 'autorizacion'].map((k) => `${k} ${whatsapp.templatesConfigured.includes(k) ? '✓' : '✗'}`).join(' · ')}
+          </p>
+        </section>
+      )}
 
       <section className="aw-card">
         <h2 className="aw-h2">Candidatos</h2>

@@ -1,6 +1,6 @@
 /**
- * Avisos al candidato. Se muestran en el tablero y, si el usuario tiene teléfono
- * y Twilio está configurado, también se mandan por WhatsApp.
+ * Avisos al candidato. Se muestran en el tablero y, los importantes, también
+ * por WhatsApp si el candidato dio su permiso y Twilio está configurado.
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
@@ -14,20 +14,59 @@ import { logger } from './logger.js';
 import { isKnownPortal } from './portals.js';
 
 /**
- * Manda el aviso por WhatsApp en segundo plano. No espera ni propaga fallos: el
- * aviso ya quedó guardado, y que WhatsApp falle no debe afectar a quien lo creó.
+ * Solo lo que vale una interrupción va por WhatsApp; el resto queda en el
+ * tablero y el correo. Cada aviso usa su plantilla aprobada (ver
+ * docs/WHATSAPP-PLANTILLAS.md): {{1}} = título del aviso, {{2}} = enlace.
  */
-async function pushWhatsApp(userId: string, title: string, body: string): Promise<void> {
-  if (!whatsappEnabled()) return;
+export const WHATSAPP_TEMPLATE_BY_KIND: Record<string, string> = {
+  'urgent-atencion': 'te_necesitamos',
+  'portal-desconectado': 'te_necesitamos',
+  'tanda-por-enviar': 'tanda',
+  'reply-entrevista': 'respuesta',
+  'reply-otro': 'respuesta',
+  'autorizacion-renta': 'autorizacion',
+};
+
+// Un mismo tipo de aviso, como mucho uno por hora por candidato.
+const WHATSAPP_THROTTLE_MIN = 60;
+
+const templates = (): Record<string, string> => safeJsonParse<Record<string, string>>(env.WHATSAPP_TEMPLATES, {});
+
+/**
+ * Manda el aviso por WhatsApp en segundo plano, solo si el candidato lo pidió.
+ * No espera ni propaga fallos: el aviso ya quedó guardado, y que WhatsApp falle
+ * no debe afectar a quien lo creó.
+ */
+async function pushWhatsApp(input: NotificationInput): Promise<void> {
+  const templateKey = WHATSAPP_TEMPLATE_BY_KIND[input.kind];
+  if (!templateKey || !whatsappEnabled()) return;
   try {
-    const row = await db.queryOne<{ contactInfo: string | null }>(
-      'SELECT contactInfo FROM candidate_profiles WHERE userId = $1 LIMIT 1',
-      [userId]
+    const prefs = await db.queryOne<{ whatsappPhone: string | null; whatsappOptIn: boolean }>(
+      'SELECT whatsappPhone, whatsappOptIn FROM apply_preferences WHERE userId = $1',
+      [input.userId]
     );
-    if (!row?.contactInfo) return;
-    const contact = safeJsonParse<{ phone?: string }>(EncryptionService.decrypt(row.contactInfo), {});
-    if (!contact.phone) return;
-    await sendWhatsApp(contact.phone, `${title}\n${body}`);
+    if (!prefs?.whatsappOptIn || !prefs.whatsappPhone) return;
+
+    const recent = await db.queryOne(
+      `SELECT sid FROM whatsapp_messages WHERE userId = $1 AND kind = $2
+       AND createdAt > CURRENT_TIMESTAMP - make_interval(mins => $3) LIMIT 1`,
+      [input.userId, input.kind, WHATSAPP_THROTTLE_MIN]
+    );
+    if (recent) return;
+
+    const link = `${env.APP_URL}${input.link ?? '/dashboard'}`;
+    const contentSid = templates()[templateKey];
+    const sid = await sendWhatsApp(
+      EncryptionService.decrypt(prefs.whatsappPhone),
+      `${input.title}\n${input.body}\n${link}\n\nResponde BAJA si no quieres más avisos.`,
+      contentSid ? { contentSid, variables: { '1': input.title, '2': link } } : undefined
+    );
+    if (sid) {
+      await db.query(
+        `INSERT INTO whatsapp_messages (sid, userId, kind, status) VALUES ($1, $2, $3, 'queued') ON CONFLICT (sid) DO NOTHING`,
+        [sid, input.userId, input.kind]
+      );
+    }
   } catch (error) {
     logger.error('WhatsApp: no se pudo notificar', { detail: (error as Error).message });
   }
@@ -108,7 +147,7 @@ export async function createNotification(input: NotificationInput): Promise<stri
   ]);
 
   // Fire-and-forget: no bloquea la respuesta al que crea el aviso.
-  void pushWhatsApp(input.userId, input.title, input.body);
+  void pushWhatsApp(input);
 
   return id;
 }

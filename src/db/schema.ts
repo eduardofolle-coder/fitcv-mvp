@@ -521,6 +521,26 @@ export async function initializeSchema(): Promise<void> {
       PRIMARY KEY (userId, portal)
     );
 
+    -- WhatsApp solo con permiso explícito del candidato. El número va cifrado; el
+    -- hash (del número E.164) permite reconocerlo cuando escribe "BAJA".
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS whatsappPhone TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS whatsappPhoneHash TEXT;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS whatsappOptIn BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS whatsappOptInAt TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS idx_apply_preferences_whatsapp ON apply_preferences(whatsappPhoneHash);
+
+    -- Cada WhatsApp enviado y si llegó (lo actualiza el aviso de estado de Twilio).
+    CREATE TABLE IF NOT EXISTS whatsapp_messages (
+      sid TEXT PRIMARY KEY,
+      userId TEXT REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      errorCode TEXT,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_user ON whatsapp_messages(userId, kind, createdAt);
+
     -- Filtros que FITCV sugiere a partir de los descartes. Uno rechazado no se vuelve a sugerir.
     CREATE TABLE IF NOT EXISTS filter_suggestions (
       id TEXT PRIMARY KEY,

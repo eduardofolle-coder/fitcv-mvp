@@ -6,6 +6,7 @@
  * nada revienta. Un fallo de envío se registra pero nunca se propaga: un aviso
  * que no llegó por WhatsApp no debe tumbar la operación que lo generó.
  */
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import axios from 'axios';
 import { env } from '../env.js';
 import { logger } from './logger.js';
@@ -16,7 +17,7 @@ import { logger } from './logger.js';
  * ponytail: heurística Chile-only; si más adelante hay otros países, el país
  * debería venir del perfil y no adivinarse.
  */
-function toWhatsApp(raw: string): string | null {
+export function toWhatsApp(raw: string): string | null {
   const trimmed = raw.trim();
   if (trimmed.startsWith('whatsapp:')) return trimmed;
 
@@ -30,6 +31,23 @@ function toWhatsApp(raw: string): string | null {
   else e164 = `+56${digits}`;
 
   return `whatsapp:${e164}`;
+}
+
+/** Huella del número (E.164 sin prefijo): permite encontrar al candidato sin guardar el número en claro. */
+export const phoneHash = (whatsappAddress: string): string =>
+  createHash('sha256').update(whatsappAddress.replace(/^whatsapp:/, '')).digest('hex');
+
+/**
+ * Verifica que un webhook venga de Twilio: HMAC-SHA1 de la URL más los
+ * parámetros ordenados, con el Auth Token (X-Twilio-Signature).
+ */
+export function isValidTwilioSignature(url: string, params: Record<string, string>, signature: string | undefined): boolean {
+  if (!signature || !env.TWILIO_AUTH_TOKEN) return false;
+  const payload = url + Object.keys(params).sort().map(k => k + params[k]).join('');
+  const expected = createHmac('sha1', env.TWILIO_AUTH_TOKEN).update(payload).digest('base64');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export function whatsappEnabled(): boolean {
@@ -48,19 +66,19 @@ export interface WhatsAppTemplate {
  * lo que exige WhatsApp para mensajes iniciados por el negocio, y lo único que
  * acepta una cuenta trial. Sin `template` manda texto libre, que solo funciona
  * dentro de la ventana de 24h tras un mensaje del usuario (y no en trial).
- * Devuelve true si Twilio aceptó el mensaje. Nunca lanza.
+ * Devuelve el SID si Twilio aceptó el mensaje, o null. Nunca lanza.
  */
 export async function sendWhatsApp(
   to: string,
   body: string,
   template?: WhatsAppTemplate
-): Promise<boolean> {
-  if (!whatsappEnabled()) return false;
+): Promise<string | null> {
+  if (!whatsappEnabled()) return null;
 
   const dest = toWhatsApp(to);
   if (!dest) {
     logger.warn('WhatsApp: número inválido, se omite el envío');
-    return false;
+    return null;
   }
 
   try {
@@ -73,6 +91,8 @@ export async function sendWhatsApp(
       // Twilio corta en 1600; el cuerpo de un aviso es corto, pero por si acaso.
       form.set('Body', body.slice(0, 1500));
     }
+    // Twilio avisa si llegó o falló; solo tiene sentido con una URL pública.
+    if (!env.API_URL.includes('localhost')) form.set('StatusCallback', `${env.API_URL}/api/whatsapp/status`);
 
     const res = await axios.post(url, form.toString(), {
       auth: { username: env.TWILIO_ACCOUNT_SID, password: env.TWILIO_AUTH_TOKEN },
@@ -81,11 +101,11 @@ export async function sendWhatsApp(
     });
 
     logger.info('WhatsApp enviado', { sid: res.data?.sid, status: res.data?.status });
-    return true;
+    return res.data?.sid ?? null;
   } catch (error) {
     // El error 63007/63016 del sandbox = el destinatario no envió el "join".
     const detail = (error as any)?.response?.data?.message || (error as Error).message;
     logger.error('WhatsApp: fallo de envío', { detail });
-    return false;
+    return null;
   }
 }

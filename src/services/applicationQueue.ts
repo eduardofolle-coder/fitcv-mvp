@@ -23,7 +23,7 @@ import {
 } from './applyStatus.js';
 import { queuePolicy } from './portalHealth.js';
 import { extractApplyEmail } from './applyEmail.js';
-import { notifyUrgentAttention } from './notifications.js';
+import { createNotification, notifyUrgentAttention } from './notifications.js';
 import { logger } from './logger.js';
 
 export interface TransitionRequest {
@@ -289,7 +289,7 @@ export async function getApplyPreferences(userId: string): Promise<{ autoSendLin
  */
 export async function queueApplication(postulationId: string, userId: string): Promise<{ from: ApplyStatus; to: ApplyStatus }> {
   const row = await db.queryOne<any>(`
-    SELECT p.salaryAuthorized, o.salaryMin, o.salaryMax, o.salaryCurrency, o.description
+    SELECT p.salaryAuthorized, o.title, o.company, o.salaryMin, o.salaryMax, o.salaryCurrency, o.description
     FROM postulations p
     JOIN offers o ON o.id = p.offerId
     WHERE p.id = $1 AND p.userId = $2
@@ -310,13 +310,17 @@ export async function queueApplication(postulationId: string, userId: string): P
   );
 
   if (below && row.salaryAuthorized !== true) {
-    return transitionApplication({
-      postulationId,
+    const detail = `La oferta paga hasta ${formatClp(below.offer)}; tu rango parte en ${formatClp(below.minimum)}.`;
+    const result = await transitionApplication({ postulationId, userId, to: 'requiere-autorizacion', reason: 'renta-bajo-rango', detail });
+    // Lo que promete la landing: no se postula algo bajo tu rango sin avisarte.
+    await createNotification({
       userId,
-      to: 'requiere-autorizacion',
-      reason: 'renta-bajo-rango',
-      detail: `La oferta paga hasta ${formatClp(below.offer)}; tu rango parte en ${formatClp(below.minimum)}.`,
-    });
+      kind: 'autorizacion-renta',
+      title: `${row.title} en ${row.company} paga menos que tu rango`,
+      body: `${detail} Autorízala si igual te interesa, o descártala.`,
+      link: `/postulations/${postulationId}`,
+    }).catch(err => logger.error('No se pudo avisar la oferta bajo rango', { userId, err: String(err) }));
+    return result;
   }
 
   return transitionApplication({ postulationId, userId, to: 'en-cola' });

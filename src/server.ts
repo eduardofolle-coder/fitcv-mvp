@@ -25,6 +25,7 @@ import notificationsRoutes from './routes/notifications.js';
 import plansRoutes from './routes/plans.js';
 import mailRoutes from './routes/mail.js';
 import adminRoutes from './routes/admin.js';
+import whatsappRoutes from './routes/whatsapp.js';
 import { startChannelJobs } from './services/channelJobs.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeSeedData, SEED_OFFERS } from './db/seedData.js';
@@ -124,6 +125,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/plans', plansRoutes);
 app.use('/api/mail', mailRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/whatsapp', whatsappRoutes); // webhooks de Twilio
 
 // ✅ 404 handler
 app.use((req, res) => {

@@ -33,6 +33,9 @@ interface Preferences {
   blockedCompanies: string[] | null;
   sendMode: SendMode;
   batchEveryHours: number | null;
+  whatsappPhone: string | null;
+  whatsappOptIn: boolean;
+  whatsappOptInAt: string | null;
 }
 
 type SendMode = 'revision' | 'automatico' | 'manual';
@@ -95,6 +98,8 @@ export default function PreferencesPage() {
   const [blockedCompanies, setBlockedCompanies] = useState('');
   const [sendMode, setSendMode] = useState<SendMode>('revision');
   const [batchEvery, setBatchEvery] = useState('');
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   // Llega desde la subida del CV, cuando todavía no eligió la hora del análisis.
   const [firstTime, setFirstTime] = useState(false);
 
@@ -134,6 +139,9 @@ export default function PreferencesPage() {
         setBlockedCompanies((p.blockedCompanies ?? []).join(', '));
         setSendMode(p.sendMode);
         setBatchEvery(p.batchEveryHours === null ? '' : String(p.batchEveryHours));
+        // Sin número propio, se sugiere el del CV; solo se usa si marca la casilla.
+        setWhatsappPhone(p.whatsappPhone ?? (res as { cvPhone?: string | null }).cvPhone ?? '');
+        setWhatsappOptIn(p.whatsappOptIn);
       } else {
         setError(res.error || 'No se pudieron cargar tus respuestas');
       }
@@ -186,6 +194,8 @@ export default function PreferencesPage() {
       blockedCompanies: parseList(blockedCompanies),
       sendMode,
       batchEveryHours: batchEvery === '' ? null : Number(batchEvery),
+      whatsappPhone: whatsappPhone.trim() || null,
+      whatsappOptIn,
     });
 
     if (res.success && res.data) {
@@ -321,6 +331,22 @@ export default function PreferencesPage() {
               )}
             </div>
           )}
+        </section>
+
+        <section className="aw-card" style={sectionStyle} id="whatsapp">
+          <h2 className="aw-h2">Avisos por WhatsApp</h2>
+          <p className="aw-muted" style={{ marginBottom:12 }}>
+            Solo lo importante: cuando una postulación te necesita, cuando tu tanda está lista, cuando un reclutador te
+            responde y cuando una oferta paga menos que tu rango. Para darte de baja, responde BAJA al mensaje.
+          </p>
+          <div style={{ maxWidth:320, marginBottom:12 }}>
+            <label htmlFor="whatsappPhone" className="aw-label">Tu número de WhatsApp</label>
+            <input id="whatsappPhone" inputMode="tel" value={whatsappPhone} onChange={e => setWhatsappPhone(e.target.value)} placeholder="+56 9 1234 5678" className="aw-input" />
+          </div>
+          <label style={{ display:'flex', gap:8, alignItems:'flex-start', color:'#F4F1E9', cursor:'pointer' }}>
+            <input type="checkbox" checked={whatsappOptIn} onChange={e => setWhatsappOptIn(e.target.checked)} style={{ marginTop:4 }} />
+            Quiero recibir estos avisos de FITCV por WhatsApp en este número.
+          </label>
         </section>
 
         <section className="aw-card" style={sectionStyle}>

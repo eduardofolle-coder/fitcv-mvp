@@ -8,6 +8,7 @@ import { EncryptionService } from './encryption.js';
 import type { SavedAnswers } from './fieldClassifier.js';
 import { isRegionCode, type OfferFilters, type RegionCode } from './regions.js';
 import { safeJsonParse } from '../utils/safeJson.js';
+import { phoneHash, toWhatsApp } from './whatsapp.js';
 
 /** revision: la tanda espera en la bandeja y sale sola al vencer el plazo. manual: nada sale sin aprobar. */
 export const SEND_MODES = ['revision', 'automatico', 'manual'] as const;
@@ -26,6 +27,10 @@ export interface AnswerPreferences extends SavedAnswers, OfferFilters {
   sendMode: SendMode;
   /** null: una tanda al día, a la hora del análisis diario. */
   batchEveryHours: number | null;
+  /** WhatsApp solo con permiso explícito; el número se guarda cifrado. */
+  whatsappPhone: string | null;
+  whatsappOptIn: boolean;
+  whatsappOptInAt: string | null;
 }
 
 const EMPTY: AnswerPreferences = {
@@ -54,6 +59,9 @@ const EMPTY: AnswerPreferences = {
   blockedCompanies: null,
   sendMode: 'revision',
   batchEveryHours: null,
+  whatsappPhone: null,
+  whatsappOptIn: false,
+  whatsappOptInAt: null,
 };
 
 const decrypt = (value: unknown): string | null => {
@@ -134,6 +142,9 @@ export async function loadAnswerPreferences(userId: string): Promise<AnswerPrefe
     blockedCompanies: parseTerms(row.blockedCompanies),
     sendMode: (SEND_MODES as readonly string[]).includes(row.sendMode) ? row.sendMode : 'revision',
     batchEveryHours: int(row.batchEveryHours),
+    whatsappPhone: decrypt(row.whatsappPhone),
+    whatsappOptIn: row.whatsappOptIn === true,
+    whatsappOptInAt: row.whatsappOptInAt ? new Date(row.whatsappOptInAt).toISOString() : null,
   };
 }
 
@@ -248,6 +259,26 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.batchEveryHours = value as number | null;
   }
 
+  if (has('whatsappPhone')) {
+    const value = body.whatsappPhone;
+    if (value === null || value === '') {
+      next.whatsappPhone = null;
+    } else {
+      const address = typeof value === 'string' ? toWhatsApp(value) : null;
+      if (!address || !/^whatsapp:\+\d{8,15}$/.test(address)) throw new AppError(400, 'whatsappPhone must be a phone number, like +56 9 1234 5678.');
+      next.whatsappPhone = address.replace(/^whatsapp:/, '');
+    }
+  }
+
+  if (has('whatsappOptIn')) {
+    if (typeof body.whatsappOptIn !== 'boolean') throw new AppError(400, 'whatsappOptIn must be true or false.');
+    // La fecha registra cuándo dio el permiso (Ley 21.719 y reglas de WhatsApp).
+    if (body.whatsappOptIn && !current.whatsappOptIn) next.whatsappOptInAt = new Date().toISOString();
+    if (!body.whatsappOptIn) next.whatsappOptInAt = null;
+    next.whatsappOptIn = body.whatsappOptIn;
+  }
+  if (next.whatsappOptIn && !next.whatsappPhone) throw new AppError(400, 'Add your WhatsApp number to receive notices there.');
+
   if (has('allowDataAnalysis')) {
     if (typeof body.allowDataAnalysis !== 'boolean') throw new AppError(400, 'allowDataAnalysis must be true or false.');
     next.allowDataAnalysis = body.allowDataAnalysis;
@@ -270,8 +301,10 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     INSERT INTO apply_preferences (
       userId, autoSendLinkedIn, allowDataAnalysis, salaryMin, salaryMax, availability, rut, address, comuna, region, nationality,
       driverLicense, willingToTravel, shiftWork, relocation, workPermit, acceptPortalTerms, acceptPortalTermsAt,
-      dailyAnalysisHour, workRegions, acceptRemote, excludedWords, blockedCompanies, sendMode, batchEveryHours, secondNationality, updatedAt
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, CURRENT_TIMESTAMP)
+      dailyAnalysisHour, workRegions, acceptRemote, excludedWords, blockedCompanies, sendMode, batchEveryHours, secondNationality,
+      whatsappPhone, whatsappPhoneHash, whatsappOptIn, whatsappOptInAt, updatedAt
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
+      $27, $28, $29, $30, CURRENT_TIMESTAMP)
     ON CONFLICT (userId) DO UPDATE SET
       autoSendLinkedIn = EXCLUDED.autoSendLinkedIn,
       allowDataAnalysis = EXCLUDED.allowDataAnalysis,
@@ -298,6 +331,10 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
       sendMode = EXCLUDED.sendMode,
       batchEveryHours = EXCLUDED.batchEveryHours,
       secondNationality = EXCLUDED.secondNationality,
+      whatsappPhone = EXCLUDED.whatsappPhone,
+      whatsappPhoneHash = EXCLUDED.whatsappPhoneHash,
+      whatsappOptIn = EXCLUDED.whatsappOptIn,
+      whatsappOptInAt = EXCLUDED.whatsappOptInAt,
       updatedAt = CURRENT_TIMESTAMP
   `, [
     userId,
@@ -326,6 +363,10 @@ export async function updateAnswerPreferences(userId: string, body: Record<strin
     next.sendMode,
     next.batchEveryHours,
     next.secondNationality ?? null,
+    next.whatsappPhone ? EncryptionService.encrypt(next.whatsappPhone) : null,
+    next.whatsappPhone ? phoneHash(next.whatsappPhone) : null,
+    next.whatsappOptIn,
+    next.whatsappOptInAt,
   ]);
 
   return loadAnswerPreferences(userId);

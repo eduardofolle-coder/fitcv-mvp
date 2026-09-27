@@ -11,6 +11,7 @@ import { getPortalHealth, PAUSE_RULE, setPortalOverride, clearPortalOverride } f
 import { PLAN_CONFIG } from '../services/planQuota.js';
 import { ACTIVE_OFFER } from '../services/profileOffers.js';
 import { disconnectMailAccount } from '../services/mailAccounts.js';
+import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = Router();
 
@@ -57,6 +58,24 @@ router.get('/sources', asyncHandler(async (_req: any, res: any) => {
     FROM offers GROUP BY source ORDER BY active DESC
   `)).rows;
   res.json({ success: true, data: rows });
+}));
+
+// GET /api/admin/whatsapp - Avisos por WhatsApp de los últimos 7 días, por estado
+// (queued/sent/delivered/read/failed/undelivered), y cuántos candidatos los pidieron.
+router.get('/whatsapp', asyncHandler(async (_req: any, res: any) => {
+  const byStatus = (await db.query<{ status: string; count: string }>(`
+    SELECT status, COUNT(*) AS count FROM whatsapp_messages
+    WHERE createdAt > CURRENT_TIMESTAMP - INTERVAL '7 days' GROUP BY status
+  `)).rows;
+  const optIn = await db.queryOne<{ count: string }>('SELECT COUNT(*) AS count FROM apply_preferences WHERE whatsappOptIn = TRUE');
+  res.json({
+    success: true,
+    data: {
+      optedIn: Number(optIn?.count ?? 0),
+      byStatus: Object.fromEntries(byStatus.map(r => [r.status, Number(r.count)])),
+      templatesConfigured: Object.keys(safeJsonParse<Record<string, string>>(env.WHATSAPP_TEMPLATES, {})),
+    },
+  });
 }));
 
 // GET /api/admin/users - Candidatos con plan y resultados
