@@ -28,8 +28,12 @@ export async function rankOffersForProfile(
   where: string[] = [ACTIVE_OFFER],
   params: unknown[] = [],
   // `all` conserva también las que no se recomiendan: el diagnóstico necesita
-  // saber qué se descartó y por qué, no solo lo que quedó.
-  options: { all?: boolean } = {}
+  // saber qué se descartó y por qué, no solo lo que quedó. `timeoutMs`: solo
+  // para el recálculo en background, que puntúa TODO el catálogo y corre sin
+  // filtros de un usuario; el camino en vivo (una petición cualquiera con
+  // filtros, sin caché) se queda con el límite por defecto del pool, para que
+  // repetirla no pueda agotar las conexiones.
+  options: { all?: boolean; timeoutMs?: number } = {}
 ): Promise<RankedOffer[]> {
   const values = [...params];
   const termFilter = likePatterns(profile).map(pattern => {
@@ -43,7 +47,7 @@ export async function rankOffersForProfile(
     SELECT * FROM offers WHERE ${clauses.join(' AND ')}
     ORDER BY publishedAt DESC NULLS LAST, createdAt DESC
     LIMIT ${MAX_MATCH_CANDIDATES}
-  `, values)).rows;
+  `, values, options.timeoutMs)).rows;
 
   const time = (offer: any) => (offer.publishedAt ? new Date(offer.publishedAt).getTime() : 0);
   return candidates

@@ -14,7 +14,7 @@ export interface QueryResult<T = any> {
 }
 
 interface Driver {
-  query(sql: string, params: any[]): Promise<QueryResult>;
+  query(sql: string, params: any[], timeoutMs?: number): Promise<QueryResult>;
   /** Sentencias múltiples en una sola llamada (el DDL del esquema). */
   exec(sql: string): Promise<void>;
   close(): Promise<void>;
@@ -61,11 +61,13 @@ async function createDriver(): Promise<Driver> {
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
       // Una query que se cuelga no debe retener su conexión para siempre y
-      // agotar el pool. 120s: da aire a la query pesada del recompute (SELECT de
-      // ~3000 ofertas sobre 37k, sin índice de texto, en la BD chica) pero
-      // aborta una que quedó realmente colgada. 30s la mataba bajo carga y la
-      // caché no se calentaba.
-      statement_timeout: 120_000,
+      // agotar el pool. Este es el límite por defecto para cualquier consulta;
+      // la única que necesita más (el recálculo de matching en background) pide
+      // su propio margen con el timeoutMs de query() en vez de subir este techo
+      // para todas — así una ruta que un usuario cualquiera puede repetir a
+      // gusto (ej. /offers con filtros) no puede quedarse con una conexión del
+      // pool hasta por 2 minutos.
+      statement_timeout: 20_000,
     });
 
     // Una conexión que muere en el pool no puede tumbar el proceso.
@@ -75,9 +77,28 @@ async function createDriver(): Promise<Driver> {
     console.log('✅ Connected to PostgreSQL');
 
     return {
-      async query(sql, params) {
-        const res = await pool.query(prepareSql(sql), params);
-        return { rows: res.rows, rowCount: res.rowCount ?? res.rows.length };
+      async query(sql, params, timeoutMs) {
+        // Sin timeoutMs: usa el límite del pool, el mismo para cualquier query.
+        // Con timeoutMs: una sola consulta (el recálculo de matching en
+        // background) pide más margen sin subírselo a las demás — si el pool
+        // entero tuviera ese margen, bastarían unas pocas consultas lentas en
+        // paralelo (por ejemplo /offers con filtros, sin caché) para agotar las
+        // 10 conexiones y dejar sin base de datos a todos, login incluido.
+        if (timeoutMs === undefined) {
+          const res = await pool.query(prepareSql(sql), params);
+          return { rows: res.rows, rowCount: res.rowCount ?? res.rows.length };
+        }
+        const client = await pool.connect();
+        try {
+          await client.query(`SET statement_timeout = ${Math.trunc(timeoutMs)}`);
+          const res = await client.query(prepareSql(sql), params);
+          return { rows: res.rows, rowCount: res.rowCount ?? res.rows.length };
+        } finally {
+          // La conexión vuelve al pool: si no se resetea, el siguiente que la
+          // tome hereda este margen más largo en vez del límite normal.
+          await client.query('SET statement_timeout = DEFAULT').catch(() => undefined);
+          client.release();
+        }
       },
       async exec(sql) {
         await pool.query(prepareSql(sql));
@@ -131,14 +152,19 @@ export const db = {
     await initPromise;
   },
 
-  async query<T = any>(sql: string, params: any[] = []): Promise<QueryResult<T>> {
+  /**
+   * timeoutMs es para la excepción, no la regla: una consulta puntual y
+   * confiable (nunca con filtros que decida quien llama a la ruta) que
+   * necesita más margen que el límite por defecto del pool.
+   */
+  async query<T = any>(sql: string, params: any[] = [], timeoutMs?: number): Promise<QueryResult<T>> {
     if (!driver) throw new Error('Database not initialized');
-    return driver.query(sql, params);
+    return driver.query(sql, params, timeoutMs);
   },
 
   /** Primera fila o null: el patrón más común en las rutas. */
-  async queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
-    const res = await this.query<T>(sql, params);
+  async queryOne<T = any>(sql: string, params: any[] = [], timeoutMs?: number): Promise<T | null> {
+    const res = await this.query<T>(sql, params, timeoutMs);
     return res.rows[0] ?? null;
   },
 

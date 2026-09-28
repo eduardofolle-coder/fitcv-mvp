@@ -35,7 +35,10 @@ export async function recomputeUserMatches(userId: string): Promise<void> {
       return;
     }
 
-    const scored = await rankOffersForProfile(profile, undefined, undefined, { all: true });
+    // Único caller con margen extra: puntúa todo el catálogo, sin filtros de
+    // un usuario, y corre en background (sync horario o tras cambiar el CV),
+    // nunca directo desde una petición HTTP con parámetros de quien la llama.
+    const scored = await rankOffersForProfile(profile, undefined, undefined, { all: true, timeoutMs: 120_000 });
     const recommended = scored.filter(item => item.match.recommended);
     const ranked: CachedRankedOffer[] = recommended.map(({ offer, match }) => ({
       offerId: offer.id,
