@@ -2,7 +2,9 @@
  * Webhooks de Twilio para WhatsApp. Solo se aceptan con firma válida de Twilio.
  *
  * - /incoming: el candidato escribe. "BAJA" (o STOP, SALIR, CANCELAR) apaga los
- *   avisos; "ALTA" los vuelve a encender si ya había dado su número.
+ *   avisos; "ALTA" los vuelve a encender si ya había dado su número. Para
+ *   candidatos ya identificados, lo demás pasa por el asistente: responde con
+ *   datos reales de su cuenta lo que reconoce, y escala al dueño lo que no.
  * - /status: Twilio avisa si el mensaje se entregó, se leyó o falló.
  */
 import { Router } from 'express';
@@ -10,6 +12,7 @@ import { db } from '../db/client.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { logger } from '../services/logger.js';
 import { isValidTwilioSignature, phoneHash } from '../services/whatsapp.js';
+import { answerClientQuery } from '../services/whatsappAssistant.js';
 
 const router = Router();
 
@@ -51,7 +54,19 @@ router.post('/incoming', asyncHandler(async (req: any, res: any) => {
       ? 'Listo, volverás a recibir los avisos importantes de FITCV por WhatsApp. Responde BAJA para dejar de recibirlos.'
       : 'No encontramos este número en FITCV. Actívalo en Mis respuestas de fitcv.cl.');
   }
-  // ponytail: sin bandeja de chat; lo demás recibe una respuesta fija.
+  // El candidato escribe algo más: si el número es suyo, el asistente responde
+  // con datos reales de su cuenta (no hace falta que haya aceptado avisos: eso
+  // solo rige lo que FITCV inicia, no una respuesta a lo que él escribió).
+  const owner = await db.queryOne<{ userId: string }>(
+    'SELECT userId FROM apply_preferences WHERE whatsappPhoneHash = $1',
+    [hash]
+  );
+  if (owner) {
+    const reply = await answerClientQuery(owner.userId, String(req.body?.From ?? ''), text);
+    return twiml(res, reply);
+  }
+
+  // ponytail: sin bandeja de chat para números no identificados.
   twiml(res, 'Este número solo envía avisos de FITCV. Para ayuda escríbenos a contacto@fitcv.cl. Responde BAJA para no recibir más avisos.');
 }));
 

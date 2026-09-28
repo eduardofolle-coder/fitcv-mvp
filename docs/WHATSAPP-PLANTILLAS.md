@@ -71,3 +71,25 @@ El panel /admin → "WhatsApp" muestra qué plantillas están configuradas.
   `https://api.fitcv.cl/api/whatsapp/status`. Requiere que `API_URL` en Render sea `https://api.fitcv.cl`.
 
 Los dos webhooks verifican la firma de Twilio con `TWILIO_AUTH_TOKEN`. Una llamada sin firma válida recibe 403.
+
+## 5. Asistente de respuestas (mensajes que llegan, no BAJA/ALTA)
+
+Cuando un candidato ya identificado (guardó su número en Mis respuestas) escribe algo que no es BAJA/ALTA,
+`src/services/whatsappAssistant.ts` responde. Nunca usa IA para esto — solo datos reales de su cuenta,
+para no arriesgar la regla de "sin mentiras" de FITCV:
+
+- **"¿Cómo van mis postulaciones?"** → cuenta real de enviadas / en camino / que necesitan su atención.
+- **"¿Cuánto cupo me queda?"** → su plan y cupo real (`getPlanState`).
+- **"¿Tengo portales conectados?"** → cuáles portales están sin sesión (`getPortalSessions`).
+- **Cualquier otra cosa** (quejas, preguntas abiertas) → nunca se contesta a ciegas: se le avisa al
+  candidato que se la pasa al equipo, y el mensaje se reenvía al dueño por WhatsApp (`ADMIN_WHATSAPP`)
+  y por correo (el primero de `ADMIN_EMAILS`). Si ninguno de los dos está configurado, igual queda en
+  los logs del servidor.
+- Un número que no está guardado en ninguna cuenta recibe el mensaje genérico de siempre.
+
+Responder no depende del permiso "quiero recibir avisos" (`whatsappOptIn`): ese permiso rige solo lo que
+FITCV envía por su cuenta. Contestar a un mensaje del candidato siempre está permitido por WhatsApp, dentro
+de las 24 horas desde que escribió.
+
+**Cuando la beta crezca**, para que el dueño reciba estas escaladas, configurar `ADMIN_WHATSAPP`
+(su propio número, formato `+56...`) y confirmar que `ADMIN_EMAILS` tenga al menos un correo.

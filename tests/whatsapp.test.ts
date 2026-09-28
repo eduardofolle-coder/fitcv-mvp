@@ -14,6 +14,7 @@ let mod: {
   loadAnswerPreferences: typeof import('../src/services/savedAnswers.js')['loadAnswerPreferences'];
   updateAnswerPreferences: typeof import('../src/services/savedAnswers.js')['updateAnswerPreferences'];
   queueApplication: typeof import('../src/services/applicationQueue.js')['queueApplication'];
+  classifyClientQuery: typeof import('../src/services/whatsappAssistant.js')['classifyClientQuery'];
 };
 
 /** Lo que haría Twilio: firma la URL + parámetros ordenados con el Auth Token. */
@@ -34,13 +35,20 @@ beforeAll(async () => {
   const { initializeSchema } = await import('../src/db/schema.js');
   const saved = await import('../src/services/savedAnswers.js');
   const queue = await import('../src/services/applicationQueue.js');
+  const assistant = await import('../src/services/whatsappAssistant.js');
   const { default: whatsappRoutes } = await import('../src/routes/whatsapp.js');
   const express = (await import('express')).default;
 
   await db.init();
   await initializeSchema();
   await db.query(`INSERT INTO users (id, email, passwordHash, plan) VALUES ($1, $2, 'x', 'max')`, [USER, `wa-${RUN}@test.dev`]);
-  mod = { db, loadAnswerPreferences: saved.loadAnswerPreferences, updateAnswerPreferences: saved.updateAnswerPreferences, queueApplication: queue.queueApplication };
+  mod = {
+    db,
+    loadAnswerPreferences: saved.loadAnswerPreferences,
+    updateAnswerPreferences: saved.updateAnswerPreferences,
+    queueApplication: queue.queueApplication,
+    classifyClientQuery: assistant.classifyClientQuery,
+  };
 
   const app = express();
   app.use(express.urlencoded({ extended: true }));
@@ -50,7 +58,7 @@ beforeAll(async () => {
   });
   const address = server.address();
   base = `http://localhost:${typeof address === 'object' && address ? address.port : 0}`;
-});
+}, 30_000);
 
 afterAll(() => {
   server?.close();
@@ -109,5 +117,47 @@ describe('oferta bajo el rango', () => {
       [USER]
     );
     expect(notice).toMatchObject({ title: 'Analista en Acme paga menos que tu rango', link: `/postulations/${postulationId}` });
+  });
+});
+
+describe('clasifica la pregunta del candidato', () => {
+  it('distingue estado, cupo y portales, y todo lo demás cae en "otro"', () => {
+    expect(mod.classifyClientQuery('¿Cómo van mis postulaciones?')).toBe('estado');
+    expect(mod.classifyClientQuery('cuanto cupo me queda')).toBe('cupo');
+    expect(mod.classifyClientQuery('¿en qué portales estoy conectado?')).toBe('portales');
+    expect(mod.classifyClientQuery('tengo un problema con mi cuenta, ayuda')).toBe('otro');
+  });
+});
+
+describe('el asistente responde con datos reales, nunca inventados', () => {
+  it('"estado" cuenta las postulaciones reales de la cuenta (la que quedó esperando autorización, del test anterior)', async () => {
+    const res = await twilioPost('/api/whatsapp/incoming', { From: 'whatsapp:+56912345678', Body: 'como van mis postulaciones' });
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/1 esperando tu autorización/);
+    expect(res.text).toContain('/postulations');
+  });
+
+  it('"cupo" responde con el plan y el cupo real de la cuenta (max)', async () => {
+    const res = await twilioPost('/api/whatsapp/incoming', { From: 'whatsapp:+56912345678', Body: 'cuanto cupo me queda' });
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/Plan Max: te quedan \d+ postulaciones automáticas/);
+  });
+
+  it('"portales" responde sin inventar nombres (ninguno conectado todavía)', async () => {
+    const res = await twilioPost('/api/whatsapp/incoming', { From: 'whatsapp:+56912345678', Body: 'tengo algun portal conectado?' });
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/portales están bien|Sin sesión en/);
+  });
+
+  it('lo que no reconoce nunca lo contesta a ciegas: avisa que lo pasa a una persona', async () => {
+    const res = await twilioPost('/api/whatsapp/incoming', { From: 'whatsapp:+56912345678', Body: 'llevo dos semanas sin respuesta de nadie, esto es pésimo' });
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/se la paso a alguien del equipo/);
+  });
+
+  it('un número no identificado no recibe datos de ninguna cuenta', async () => {
+    const res = await twilioPost('/api/whatsapp/incoming', { From: 'whatsapp:+56900000000', Body: 'como van mis postulaciones' });
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/Este número solo envía avisos de FITCV/);
   });
 });
