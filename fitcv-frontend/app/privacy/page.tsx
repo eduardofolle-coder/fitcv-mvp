@@ -6,12 +6,12 @@ export const metadata: Metadata = { title: 'Política de privacidad — FITCV' }
 export default function PrivacyPage() {
   return (
     <main className="max-w-3xl mx-auto px-4 py-12 text-gray-700">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Política de privacidad</h1>
+      <h1 className="text-2xl font-bold text-white mb-2">Política de privacidad</h1>
       <p className="text-sm text-gray-500 mb-8">Última actualización: septiembre 2026</p>
 
       <section className="space-y-6 text-sm leading-relaxed">
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">1. Quién trata tus datos</h2>
+          <h2 className="font-semibold text-white mb-1">1. Quién trata tus datos</h2>
           <p>
             FITCV (en adelante "nosotros") es el responsable del tratamiento de tus datos personales, en
             conformidad con la Ley N.° 19.628 sobre protección de la vida privada y la Ley N.° 21.719, que la
@@ -22,7 +22,7 @@ export default function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">2. Qué datos recopilamos</h2>
+          <h2 className="font-semibold text-white mb-1">2. Qué datos recopilamos</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>Nombre, correo electrónico y contraseña (cifrada con bcrypt).</li>
             <li>Contenido de tu CV en texto plano, cifrado en reposo con AES-256-GCM.</li>
@@ -38,7 +38,7 @@ export default function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">3. Para qué usamos tus datos</h2>
+          <h2 className="font-semibold text-white mb-1">3. Para qué usamos tus datos</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>Adaptar tu CV a cada oferta laboral usando inteligencia artificial.</li>
             <li>Completar formularios de postulación en portales de empleo en tu nombre.</li>
@@ -61,7 +61,7 @@ export default function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">3 bis. Datos de tu cuenta de Google o Microsoft</h2>
+          <h2 className="font-semibold text-white mb-1">3 bis. Datos de tu cuenta de Google o Microsoft</h2>
           <p>
             Si conectas tu Gmail, FITCV solicita únicamente el permiso <code>gmail.send</code> y lo usa solo para enviar,
             desde tu cuenta, las postulaciones que tú autorizaste: un correo al reclutador de cada oferta, con tu CV adaptado
@@ -84,13 +84,13 @@ export default function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">4. Retención de datos</h2>
+          <h2 className="font-semibold text-white mb-1">4. Retención de datos</h2>
           <p>Conservamos tus datos mientras tengas una cuenta activa. Al eliminar tu cuenta los borramos de inmediato de la base principal y revocamos el permiso de envío de tu correo; las copias de respaldo se eliminan en un plazo máximo de 30 días.</p>
           <p className="mt-2">Si ocurre una vulneración de seguridad que afecte tus datos, te avisaremos a ti y a la Agencia sin dilaciones indebidas.</p>
         </div>
 
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">5. Tus derechos</h2>
+          <h2 className="font-semibold text-white mb-1">5. Tus derechos</h2>
           <p>Conforme a las leyes 19.628 y 21.719 tienes derecho a:</p>
           <ul className="list-disc pl-5 space-y-1 mt-1">
             <li><strong>Acceder</strong> a tus datos personales.</li>
@@ -109,7 +109,7 @@ export default function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">6. Cookies</h2>
+          <h2 className="font-semibold text-white mb-1">6. Cookies</h2>
           <p>
             Usamos únicamente cookies técnicas estrictamente necesarias para mantener tu sesión. No usamos cookies
             de publicidad ni rastreo de terceros.
@@ -117,7 +117,7 @@ export default function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-gray-900 mb-1">7. Contacto</h2>
+          <h2 className="font-semibold text-white mb-1">7. Contacto</h2>
           <p>
             Si tienes preguntas sobre esta política escríbenos a{' '}
             <a href="mailto:privacidad@fitcv.cl" className="text-blue-600 underline">privacidad@fitcv.cl</a>.
