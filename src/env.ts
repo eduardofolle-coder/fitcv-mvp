@@ -123,6 +123,14 @@ if (env.NODE_ENV === 'production') {
     console.warn('⚠️  ALLOWED_ORIGINS still contains localhost in production.');
   }
 
+  // Si la pasarela de pago está activa (MP_ACCESS_TOKEN real, no el placeholder de
+  // pruebas), el webhook tiene que poder verificar su firma. Sin MP_WEBHOOK_SECRET,
+  // verifyWebhookSignature falla cerrado y ningún pago se acreditaría nunca — mejor
+  // no arrancar así que arrancar con la pasarela rota.
+  if (env.MP_ACCESS_TOKEN && !env.MP_ACCESS_TOKEN.startsWith('TEST-aqui') && !env.MP_WEBHOOK_SECRET) {
+    throw new Error('Refusing to start: MP_ACCESS_TOKEN is set but MP_WEBHOOK_SECRET is missing, so payment webhooks would always fail.');
+  }
+
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
     console.warn('⚠️  RESEND_API_KEY / EMAIL_FROM are not set: password reset emails will not be sent.');
   }

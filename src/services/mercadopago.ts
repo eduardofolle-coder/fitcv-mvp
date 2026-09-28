@@ -67,7 +67,10 @@ export function verifyWebhookSignature(opts: {
   xRequestId: string;
   queryDataId: string; // data.id del query param
 }): boolean {
-  if (!env.MP_WEBHOOK_SECRET) return true; // en dev sin secret siempre pasa
+  // Sin secreto no se puede verificar nada: falla cerrado (igual que INBOUND_SECRET
+  // en mail.ts). Aceptar sin firma dejaba que cualquiera se acreditara cupo gratis
+  // posteando directo al webhook con un external_reference inventado.
+  if (!env.MP_WEBHOOK_SECRET) return false;
 
   const { ts, v1 } = Object.fromEntries(
     opts.xSignature.split(',').map(part => part.split('=') as [string, string]),
@@ -80,5 +83,8 @@ export function verifyWebhookSignature(opts: {
     .update(manifest)
     .digest('hex');
 
+  // timingSafeEqual exige buffers del mismo largo; v1 viene de una cabecera que
+  // controla quien llama, así que un largo distinto no puede tratarse como error.
+  if (expected.length !== v1.length) return false;
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
 }
