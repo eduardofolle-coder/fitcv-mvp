@@ -280,18 +280,27 @@ export async function initializeSchema(): Promise<void> {
 
   // La búsqueda de /offers es LIKE '%texto%': sin índice trigram recorre toda la
   // tabla (11 s medidos en producción). La expresión debe ser idéntica a la de
-  // routes/offers.ts. Solo en Postgres real (PGlite no trae pg_trgm) y sin
-  // tumbar el arranque si el rol no puede crear la extensión.
-  if (/^postgres(ql)?:\/\//.test(env.DATABASE_URL)) {
-    try {
-      await db.exec(`
-        CREATE EXTENSION IF NOT EXISTS pg_trgm;
-        CREATE INDEX IF NOT EXISTS idx_offers_search_trgm
-          ON offers USING gin (COALESCE(searchText, LOWER(title)) gin_trgm_ops);
-      `);
-    } catch (err) {
-      console.error('⚠️ Índice trigram de búsqueda no creado:', err);
-    }
+  // routes/offers.ts. Construirlo sobre ~57k descripciones pide CPU y memoria
+  // que la BD de 0,1 CPU / 256 MB no tiene (el intento en el arranque venció el
+  // límite de 20 s), así que es opt-in: SEARCH_TRGM_INDEX=true, una vez subida la
+  // BD. Corre en segundo plano con margen largo, sin retener el arranque. Solo
+  // en Postgres real (PGlite no trae pg_trgm).
+  if (process.env.SEARCH_TRGM_INDEX === 'true' && /^postgres(ql)?:\/\//.test(env.DATABASE_URL)) {
+    const TEN_MINUTES = 10 * 60_000;
+    void (async () => {
+      try {
+        await db.query('CREATE EXTENSION IF NOT EXISTS pg_trgm', [], TEN_MINUTES);
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_offers_search_trgm
+             ON offers USING gin (COALESCE(searchText, LOWER(title)) gin_trgm_ops)`,
+          [],
+          TEN_MINUTES
+        );
+        console.log('✅ Índice trigram de búsqueda listo');
+      } catch (err) {
+        console.error('⚠️ Índice trigram de búsqueda no creado:', err);
+      }
+    })();
   }
 
   // Envío de postulaciones por la extensión. applyStatus sigue el envío;

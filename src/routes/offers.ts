@@ -43,6 +43,22 @@ const HIDDEN = new Set<OfferVerdict>(['fuera', 'excluida']);
 // Escapa los comodines de LIKE para que un "%" tipeado se busque literal.
 const likePattern = (value: string): string => `%${value.replace(/[\\%_]/g, m => `\\${m}`)}%`;
 
+// COUNT(*) sobre ~57k ofertas tarda segundos en la BD chica; el total cambia
+// solo cuando corre la sincronización (cada hora), así que 60 s de caché sobran.
+const COUNT_TTL_MS = 60_000;
+const countCache = new Map<string, { total: number; at: number }>();
+
+async function cachedCount(whereSql: string, params: unknown[]): Promise<number> {
+  const key = JSON.stringify([whereSql, params]);
+  const hit = countCache.get(key);
+  if (hit && Date.now() - hit.at < COUNT_TTL_MS) return hit.total;
+  const row = await db.queryOne<{ count: string }>(`SELECT COUNT(*) AS count FROM offers ${whereSql}`, params);
+  const total = Number(row?.count ?? 0);
+  if (countCache.size >= 200) countCache.delete(countCache.keys().next().value as string);
+  countCache.set(key, { total, at: Date.now() });
+  return total;
+}
+
 const textParam = (value: unknown): string | null =>
   typeof value === 'string' && value.trim() ? value.trim().slice(0, 200) : null;
 
@@ -172,8 +188,7 @@ router.get(
 
     const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
-    const countRow = await db.queryOne<{ count: string }>(`SELECT COUNT(*) AS count FROM offers ${whereSql}`, params);
-    const total = Number(countRow?.count ?? 0);
+    const total = await cachedCount(whereSql, params);
 
     const offers = (await db.query(`
       SELECT * FROM offers ${whereSql}
