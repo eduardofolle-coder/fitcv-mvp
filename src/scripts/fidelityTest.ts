@@ -43,13 +43,13 @@ const KIMI: ProviderConfig = {
 const CANDIDATES: ProviderConfig[] = [
   {
     id: 'gemini',
-    name: 'Gemini 2.5 Flash-Lite',
+    name: 'Gemini 3.5 Flash-Lite',
     apiUrl: process.env.GEMINI_API_URL ?? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     apiKeyEnv: 'GEMINI_API_KEY',
-    model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash-lite',
+    model: process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite',
     shape: 'openai',
-    inputPer1M: 0.1,
-    outputPer1M: 0.4,
+    inputPer1M: 0.3,
+    outputPer1M: 2.5,
   },
   {
     id: 'deepseek',
