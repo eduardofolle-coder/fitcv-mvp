@@ -442,7 +442,16 @@ export default function Landing() {
           </div>
         </section>
 
-        <footer>© 2026 fitcv · Tu CV, adaptado a cada oferta · Hecho en Chile</footer>
+        <footer>
+          © 2026 fitcv · Tu CV, adaptado a cada oferta · Hecho en Chile
+          <div style={{ marginTop: 8 }}>
+            <a href="/privacy" style={{ color: 'inherit', textDecoration: 'underline' }}>Política de privacidad</a>
+            {' · '}
+            <a href="/terms" style={{ color: 'inherit', textDecoration: 'underline' }}>Condiciones del servicio</a>
+            {' · '}
+            <a href="mailto:contacto@fitcv.cl" style={{ color: 'inherit', textDecoration: 'underline' }}>contacto@fitcv.cl</a>
+          </div>
+        </footer>
       </div>
     </div>
   );
