@@ -43,6 +43,14 @@ const HIDDEN = new Set<OfferVerdict>(['fuera', 'excluida']);
 // Escapa los comodines de LIKE para que un "%" tipeado se busque literal.
 const likePattern = (value: string): string => `%${value.replace(/[\\%_]/g, m => `\\${m}`)}%`;
 
+// El listado no manda `description` ni `searchText` (67 de 82 KB por cada 20
+// ofertas, y ninguna pantalla los usa en la lista): la descripción se pide con
+// GET /offers/:id. `searchText` es solo la columna interna de búsqueda.
+const OFFER_LIST_COLUMNS =
+  'id, title, company, level, salaryMin, salaryMax, salaryCurrency, location, requirements, source, url, ' +
+  'createdAt, externalId, applyUrl, country, remoteModality, publishedAt, lastSeenAt, validThrough';
+const slimOffer = ({ description: _d, searchText: _t, searchTitle: _s, ...rest }: any) => rest;
+
 // COUNT(*) sobre ~57k ofertas tarda segundos en la BD chica; el total cambia
 // solo cuando corre la sincronización (cada hora), así que 60 s de caché sobran.
 const COUNT_TTL_MS = 60_000;
@@ -140,7 +148,7 @@ router.get(
           const pageRanked = list.slice((pageNum - 1) * limitNum, pageNum * limitNum);
           const ids = pageRanked.map(r => r.offerId);
           const rows = ids.length
-            ? (await db.query('SELECT * FROM offers WHERE id = ANY($1)', [ids])).rows
+            ? (await db.query(`SELECT ${OFFER_LIST_COLUMNS} FROM offers WHERE id = ANY($1)`, [ids])).rows
             : [];
           const byId = new Map(rows.map((o: any) => [o.id, o]));
           return res.json({
@@ -173,7 +181,7 @@ router.get(
       return res.json({
         success: true,
         data: pageItems.map(({ offer, match }) => ({
-          ...offer,
+          ...slimOffer(offer),
           ...regionFields(offer, verdictOf(offer)),
           requirements: safeJsonParse(offer.requirements, []),
           match: { score: match.score, tier: match.tier, reasons: match.reasons },
@@ -191,7 +199,7 @@ router.get(
     const total = await cachedCount(whereSql, params);
 
     const offers = (await db.query(`
-      SELECT * FROM offers ${whereSql}
+      SELECT ${OFFER_LIST_COLUMNS} FROM offers ${whereSql}
       ORDER BY publishedAt DESC NULLS LAST, createdAt DESC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `, [...params, limitNum, (pageNum - 1) * limitNum])).rows;

@@ -239,6 +239,13 @@ describe('offers', () => {
     expect(Array.isArray(data.data)).toBe(true);
     expect(data.data.length).toBeGreaterThan(0);
     offerId = data.data[0].id;
+    // El listado es liviano: la descripción y la columna de búsqueda no viajan.
+    expect(data.data[0]).not.toHaveProperty('description');
+    expect(data.data[0]).not.toHaveProperty('searchText');
+    expect(data.data[0]).toHaveProperty('title');
+    // ...y la descripción sigue disponible al abrir la oferta.
+    const detail = await call('GET', `/offers/${offerId}`);
+    expect(detail.data.data).toHaveProperty('description');
   });
 
   it('serves /ranked as its own route instead of matching /:id', async () => {
