@@ -102,7 +102,7 @@ services:
       - key: GEMINI_API_URL
         value: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
       - key: GEMINI_MODEL
-        value: gemini-2.0-flash-lite
+        value: gemini-2.5-flash-lite
 
   # Worker: corre el trabajo de fondo (crawling de portales, análisis diario,
   # watchdog y el recompute del matching) en un proceso APARTE del que atiende a
@@ -130,11 +130,21 @@ services:
         generateValue: true
       - key: JWT_PUBLIC_KEY
         generateValue: true
+      # DEBE ser el MISMO valor que en fitcv-api: el worker descifra los datos que
+      # la API cifró (loadHardData). Con generateValue tenía otra clave y fallaba
+      # con "Decryption failed". Cópiala del panel de fitcv-api.
       - key: DATA_ENCRYPTION_KEY
-        generateValue: true
+        sync: false
       # REQUERIDO: sin la key de Moonshot el worker no arranca (validación de env).
       - key: CLAUDE_API_KEY
         sync: false
+      # Proveedor primario de IA (Kimi queda de respaldo). El worker prepara los CVs.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_API_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-lite
       - key: CLAUDE_API_URL
         value: https://api.moonshot.ai/anthropic/v1/messages
       - key: CLAUDE_MODEL

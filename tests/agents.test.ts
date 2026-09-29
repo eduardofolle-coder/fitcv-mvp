@@ -85,6 +85,10 @@ function startServer(): Promise<void> {
       DATABASE_URL: `pglite://${path.relative(process.cwd(), DB_DIR).split(path.sep).join('/')}/pg`,
       CLAUDE_API_KEY: 'test-key-that-the-stub-accepts',
       CLAUDE_API_URL: `http://localhost:${STUB_PORT}/v1/messages`,
+      // Sin esto, dotenv carga del .env local las claves reales de Gemini/DeepSeek
+      // y las pruebas dejan de ser herméticas (los fallos simulados se "curan").
+      GEMINI_API_KEY: '',
+      DEEPSEEK_API_KEY: '',
     },
     stdio: 'ignore',
   });

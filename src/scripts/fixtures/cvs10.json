@@ -1,0 +1,132 @@
+[
+  {
+    "rubro": "tech",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Empresa XYZ", "title": "Desarrollador Full Stack", "startDate": "2021-01", "details": ["Desarrollo de APIs REST en Node.js y TypeScript para plataforma de pagos con 50k usuarios activos", "Mantenimiento de bases de datos PostgreSQL (50k+ registros diarios)", "Lideré migración de monolito a microservicios reduciendo latencia un 30%"] },
+        { "id": "exp-1", "company": "Startup ABC", "title": "Desarrollador Junior", "startDate": "2019-03", "endDate": "2020-12", "details": ["Desarrollo de dashboard interno con React y Redux", "Integración con APIs de terceros (Stripe, SendGrid)"] }
+      ],
+      "skills": { "programming": ["Node.js", "TypeScript", "React"], "tools": ["Docker", "Git", "PostgreSQL"] },
+      "education": [{ "institution": "Universidad de Chile", "degree": "Ingeniería Civil Informática", "graduationDate": "2019-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }, { "language": "Inglés", "proficiency": "B2" }]
+    },
+    "job": { "title": "Backend Engineer Senior", "company": "FinTech Santiago", "description": "Buscamos Backend Engineer con 4+ años en Node.js/TypeScript para liderar desarrollo de APIs de pagos en microservicios. Requerido: Node.js, TypeScript, PostgreSQL, Docker. Se valora experiencia en fintech y liderazgo técnico." }
+  },
+  {
+    "rubro": "tech",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Consultora Delta", "title": "Analista de Datos", "startDate": "2022-04", "details": ["Construí dashboards en Power BI para el área comercial con 12 indicadores mensuales", "Automaticé reportes con Python y pandas, ahorrando 6 horas semanales al equipo", "Limpieza y consolidación de datos desde SQL Server"] },
+        { "id": "exp-1", "company": "Retail Andes", "title": "Practicante de Analítica", "startDate": "2021-06", "endDate": "2022-03", "details": ["Apoyo en análisis de ventas por tienda", "Consultas SQL para el equipo de abastecimiento"] }
+      ],
+      "skills": { "programming": ["Python", "SQL"], "tools": ["Power BI", "Excel avanzado", "SQL Server"] },
+      "education": [{ "institution": "Universidad de Santiago", "degree": "Ingeniería Comercial", "graduationDate": "2021-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }, { "language": "Inglés", "proficiency": "B1" }]
+    },
+    "job": { "title": "Analista BI", "company": "Banco Costa", "description": "Analista BI con experiencia en Power BI y SQL para construir tableros de gestión y automatizar reportería. Se valora Python. Trabajo híbrido en Santiago." }
+  },
+  {
+    "rubro": "retail",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Supermercados Sur", "title": "Jefa de Tienda", "startDate": "2019-08", "details": ["Administré una tienda con 35 colaboradores y ventas mensuales sobre 180 millones de pesos", "Reduje la merma de perecibles en 18% con control de rotación diaria", "Capacité a 12 nuevos cajeros en atención y manejo de caja"] },
+        { "id": "exp-1", "company": "Tienda Centro", "title": "Supervisora de Piso", "startDate": "2016-03", "endDate": "2019-07", "details": ["Supervisión de reposición y exhibición", "Coordinación de turnos de 15 personas"] }
+      ],
+      "skills": { "other": ["Gestión de equipos", "Control de inventario", "Atención al cliente"] },
+      "education": [{ "institution": "INACAP", "degree": "Técnico en Administración de Empresas", "graduationDate": "2015-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }]
+    },
+    "job": { "title": "Gerente de Tienda", "company": "Cadena Norte", "description": "Gerente de tienda para local de alto flujo. Requiere 5 años liderando equipos, control de mermas y cumplimiento de metas de venta. Manejo de indicadores KPI." }
+  },
+  {
+    "rubro": "retail",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Farmacia Vida", "title": "Ejecutivo de Ventas", "startDate": "2023-02", "details": ["Atención de 80 clientes diarios en horario punta", "Cumplí 105% de la meta trimestral de ventas cruzadas", "Gestión de reposición con el bodeguero"] },
+        { "id": "exp-1", "company": "Tienda Deportes Plus", "title": "Vendedor", "startDate": "2021-05", "endDate": "2023-01", "details": ["Venta asistida de calzado y ropa deportiva", "Apoyo en inventarios trimestrales"] }
+      ],
+      "skills": { "other": ["Ventas", "Atención al cliente", "Manejo de caja"] },
+      "education": [{ "institution": "Liceo Técnico Comercial", "degree": "Enseñanza media técnico profesional", "graduationDate": "2020-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }]
+    },
+    "job": { "title": "Ejecutivo de Ventas Retail", "company": "Multitienda Pacífico", "description": "Buscamos ejecutivo de ventas para tienda. Se requiere experiencia en atención al cliente y cumplimiento de metas. Disponibilidad para turnos rotativos." }
+  },
+  {
+    "rubro": "mineria",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Minera Altiplano", "title": "Operador de Camión Extracción", "startDate": "2018-09", "details": ["Operación de camión de 230 toneladas en turno 7x7", "Cero incidentes con lesión durante 4 años consecutivos", "Cumplimiento de protocolos de seguridad y checklists diarios"] },
+        { "id": "exp-1", "company": "Contratista Norte", "title": "Ayudante de Mantención", "startDate": "2015-04", "endDate": "2018-08", "details": ["Apoyo en mantención preventiva de equipos", "Registro de fallas en bitácora"] }
+      ],
+      "skills": { "other": ["Operación de equipos pesados", "Seguridad minera", "Trabajo en altura geográfica"] },
+      "education": [{ "institution": "Centro de Formación Técnica Atacama", "degree": "Técnico en Mantenimiento Industrial", "graduationDate": "2014-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }]
+    },
+    "job": { "title": "Operador de Camión Minero", "company": "Minera Cordillera", "description": "Operador de camión de extracción para faena en la región de Antofagasta, turno 7x7. Requiere licencia clase D, experiencia en camiones de alto tonelaje y trayectoria segura." }
+  },
+  {
+    "rubro": "mineria",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Compañía Minera Las Piedras", "title": "Geólogo de Mina", "startDate": "2020-03", "details": ["Mapeo geológico y control de leyes en rajo abierto", "Actualización semanal del modelo de bloques con el equipo de planificación", "Muestreo de pozos de tronadura y reporte de desviaciones"] },
+        { "id": "exp-1", "company": "Consultora GeoSur", "title": "Geólogo Junior", "startDate": "2018-01", "endDate": "2020-02", "details": ["Logueo de testigos de sondaje", "Elaboración de informes de exploración"] }
+      ],
+      "skills": { "tools": ["Leapfrog", "Vulcan", "ArcGIS"], "other": ["Control de leyes", "Modelamiento geológico"] },
+      "education": [{ "institution": "Universidad de Atacama", "degree": "Geología", "graduationDate": "2017-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }, { "language": "Inglés", "proficiency": "B2" }]
+    },
+    "job": { "title": "Geólogo de Mina Senior", "company": "Minera Andes Sur", "description": "Geólogo con 5+ años en minería a rajo abierto para control de leyes y modelo de corto plazo. Manejo de Vulcan o Leapfrog. Turno 7x7." }
+  },
+  {
+    "rubro": "logistica",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Operadora Logística Pacífico", "title": "Supervisor de Bodega", "startDate": "2020-06", "details": ["Supervisé un centro de distribución con 40 operarios y 6.000 posiciones", "Implementé conteo cíclico que subió la exactitud de inventario de 92% a 98%", "Coordiné despachos diarios a 25 sucursales"] },
+        { "id": "exp-1", "company": "Transportes Rápido", "title": "Coordinador de Despacho", "startDate": "2017-02", "endDate": "2020-05", "details": ["Programación de rutas y asignación de flota", "Seguimiento de entregas y reclamos"] }
+      ],
+      "skills": { "tools": ["WMS", "SAP", "Excel"], "other": ["Gestión de inventarios", "Liderazgo de equipos"] },
+      "education": [{ "institution": "DUOC UC", "degree": "Ingeniería en Logística", "graduationDate": "2016-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }, { "language": "Inglés", "proficiency": "A2" }]
+    },
+    "job": { "title": "Jefe de Centro de Distribución", "company": "Distribuidora Central", "description": "Jefe de CD para operación de alto volumen. Requiere experiencia con WMS, gestión de inventarios y liderazgo de equipos de bodega. Se valora SAP." }
+  },
+  {
+    "rubro": "logistica",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Agencia de Aduanas Sur", "title": "Analista de Comercio Exterior", "startDate": "2021-09", "details": ["Gestión documental de 60 embarques mensuales de importación", "Clasificación arancelaria y cálculo de derechos e IVA", "Coordinación con navieras y agentes de carga"] },
+        { "id": "exp-1", "company": "Importadora Vega", "title": "Asistente de Operaciones", "startDate": "2019-03", "endDate": "2021-08", "details": ["Seguimiento de contenedores en puerto", "Ingreso de facturas al sistema"] }
+      ],
+      "skills": { "other": ["Comercio exterior", "Clasificación arancelaria", "Documentación aduanera"], "tools": ["Excel", "SAP"] },
+      "education": [{ "institution": "Universidad Andrés Bello", "degree": "Ingeniería en Comercio Exterior", "graduationDate": "2018-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }, { "language": "Inglés", "proficiency": "B2" }]
+    },
+    "job": { "title": "Analista Comex", "company": "Naviera Global", "description": "Analista de comercio exterior para gestión de embarques de importación y exportación, documentación aduanera y coordinación con navieras. Inglés intermedio." }
+  },
+  {
+    "rubro": "administrativo",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Estudio Contable Rojas", "title": "Contadora", "startDate": "2018-05", "details": ["Contabilidad completa de 22 pymes con cierre mensual y declaración de IVA", "Preparé la renta anual de 40 clientes sin observaciones del SII", "Conciliaciones bancarias y control de cuentas por pagar"] },
+        { "id": "exp-1", "company": "Comercial Lira", "title": "Asistente Contable", "startDate": "2015-09", "endDate": "2018-04", "details": ["Registro de compras y ventas", "Apoyo en remuneraciones y finiquitos"] }
+      ],
+      "skills": { "tools": ["Softland", "Excel avanzado", "Portal SII"], "other": ["Contabilidad", "Tributación pyme"] },
+      "education": [{ "institution": "Universidad de Valparaíso", "degree": "Contador Auditor", "graduationDate": "2015-07" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }]
+    },
+    "job": { "title": "Contador General", "company": "Grupo Comercial Austral", "description": "Contador general para empresa mediana: cierre mensual, IVA, renta, conciliaciones y coordinación con auditoría. Manejo de Softland o similar." }
+  },
+  {
+    "rubro": "salud",
+    "hardData": {
+      "experience": [
+        { "id": "exp-0", "company": "Clínica Santa Marta", "title": "Enfermera Universitaria UCI", "startDate": "2019-01", "details": ["Cuidado de pacientes críticos en UCI de 12 camas en turnos de 12 horas", "Manejo de ventilación mecánica y monitorización invasiva", "Tutoría de 8 internos de enfermería"] },
+        { "id": "exp-1", "company": "CESFAM Centro", "title": "Enfermera Clínica", "startDate": "2016-03", "endDate": "2018-12", "details": ["Control de pacientes crónicos y vacunación", "Educación en salud a usuarios"] }
+      ],
+      "skills": { "other": ["Cuidados críticos", "Ventilación mecánica", "Educación al paciente"] },
+      "education": [{ "institution": "Pontificia Universidad Católica de Chile", "degree": "Enfermería", "graduationDate": "2015-12" }],
+      "languages": [{ "language": "Español", "proficiency": "Nativo" }, { "language": "Inglés", "proficiency": "B1" }]
+    },
+    "job": { "title": "Enfermera/o UCI", "company": "Hospital Regional", "description": "Enfermera/o para unidad de cuidados intensivos adultos. Requiere experiencia mínima de 2 años en UCI, manejo de ventilación mecánica y turnos rotativos." }
+  }
+]

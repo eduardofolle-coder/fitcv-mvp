@@ -111,7 +111,25 @@ export class AgentInvokerService {
   private static async postWithRetry(body: AiRequestBody, model: string): Promise<NormalizedAiResponse> {
     let lastError: unknown;
 
-    // Proveedor primario: Kimi/Moonshot (Anthropic-compatible, Bearer token)
+    // Proveedor primario: Gemini Flash-Lite (OpenAI shape, ~10x más barato que Kimi).
+    // Un reintento ante 429/5xx/timeout y luego cae a Kimi, no se queda esperando.
+    if (env.GEMINI_API_KEY) {
+      for (let attempt = 0; attempt <= 1; attempt++) {
+        try {
+          return await this.postOpenAiShape(env.GEMINI_API_URL, env.GEMINI_API_KEY, env.GEMINI_MODEL, body);
+        } catch (error) {
+          lastError = error;
+          const status = (error as any)?.response?.status;
+          const retryable = status === 429 || (typeof status === 'number' && status >= 500) || (error as any)?.code === 'ECONNABORTED';
+          logger.warn('AI call failed', { attempt: attempt + 1, provider: 'gemini', reason: status ?? (error as any)?.code ?? 'error' });
+          if (!retryable || attempt === 1) break;
+          await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 800));
+        }
+      }
+      logger.warn('Gemini falló, usando Kimi como respaldo');
+    }
+
+    // Respaldo: Kimi/Moonshot (Anthropic-compatible, Bearer token)
     if (env.CLAUDE_API_KEY) {
       for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
         try {
@@ -155,24 +173,29 @@ export class AgentInvokerService {
     if (env.DEEPSEEK_API_KEY) {
       logger.warn('Kimi agotó reintentos, usando DeepSeek como fallback');
       try {
-        const res = await axios.post(
-          env.DEEPSEEK_API_URL,
-          { ...body, model: env.DEEPSEEK_MODEL },
-          { headers: { Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` }, timeout: env.CLAUDE_TIMEOUT_MS },
-        );
-        return {
-          text: res.data.choices?.[0]?.message?.content ?? '',
-          inputTokens: res.data.usage?.prompt_tokens ?? 0,
-          outputTokens: res.data.usage?.completion_tokens ?? 0,
-          stopReason: res.data.choices?.[0]?.finish_reason,
-        };
+        return await this.postOpenAiShape(env.DEEPSEEK_API_URL, env.DEEPSEEK_API_KEY, env.DEEPSEEK_MODEL, body);
       } catch (fallbackError) {
         lastError = fallbackError;
       }
     }
 
-    logger.error('Kimi y DeepSeek fallaron; sin proveedor de IA disponible');
+    logger.error('Gemini, Kimi y DeepSeek fallaron; sin proveedor de IA disponible');
     throw lastError ?? new Error('No AI provider configured');
+  }
+
+  /** Gemini y DeepSeek hablan el formato OpenAI (chat/completions, Bearer). */
+  private static async postOpenAiShape(url: string, apiKey: string, model: string, body: AiRequestBody): Promise<NormalizedAiResponse> {
+    const res = await axios.post(
+      url,
+      { ...body, model },
+      { headers: { Authorization: `Bearer ${apiKey}` }, timeout: env.CLAUDE_TIMEOUT_MS },
+    );
+    return {
+      text: res.data.choices?.[0]?.message?.content ?? '',
+      inputTokens: res.data.usage?.prompt_tokens ?? 0,
+      outputTokens: res.data.usage?.completion_tokens ?? 0,
+      stopReason: res.data.choices?.[0]?.finish_reason,
+    };
   }
 
   /**
@@ -193,8 +216,8 @@ export class AgentInvokerService {
 
     try {
       // Validate API key
-      if (!env.CLAUDE_API_KEY && !env.DEEPSEEK_API_KEY) {
-        throw new Error('No AI provider configured: set CLAUDE_API_KEY (Kimi) or DEEPSEEK_API_KEY');
+      if (!env.GEMINI_API_KEY && !env.CLAUDE_API_KEY && !env.DEEPSEEK_API_KEY) {
+        throw new Error('No AI provider configured: set GEMINI_API_KEY, CLAUDE_API_KEY (Kimi) or DEEPSEEK_API_KEY');
       }
 
       // Get agent config

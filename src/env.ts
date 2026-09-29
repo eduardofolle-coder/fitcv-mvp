@@ -23,7 +23,7 @@ export const env = {
   // Proveedor primario (Gemini, OpenAI-shape)
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   GEMINI_API_URL: process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
 
   // Proveedor fallback (DeepSeek, OpenAI-shape)
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',

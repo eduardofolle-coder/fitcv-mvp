@@ -39,6 +39,9 @@ function startServer(): Promise<void> {
       NODE_ENV: 'development',
       PORT: String(PORT),
       DATABASE_URL: DATABASE_URL,
+      // Con la key real del .env el servidor envía el correo en vez de devolver el
+      // enlace de recuperación en desarrollo, y la prueba no lo encuentra.
+      RESEND_API_KEY: '',
     },
     stdio: 'ignore',
   });
