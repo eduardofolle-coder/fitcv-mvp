@@ -1,9 +1,35 @@
 import { db } from './client.js';
 import { env } from '../env.js';
 
+// `ALTER TABLE .. ADD COLUMN IF NOT EXISTS` pide bloqueo exclusivo de la tabla
+// aunque la columna ya exista. Con la BD ocupada nunca lo consigue dentro de
+// statement_timeout, y mientras espera frena todas las consultas de esa tabla:
+// el worker entraba en bucle de reinicios ("Worker no pudo arrancar"). Por eso
+// se quitan las sentencias cuyo efecto ya está aplicado antes de ejecutar.
+async function loadApplied(): Promise<{ columns: Set<string>; indexes: Set<string> }> {
+  const cols = await db.query<{ t: string; c: string }>(
+    'SELECT lower(table_name) AS t, lower(column_name) AS c FROM information_schema.columns WHERE table_schema = current_schema()'
+  );
+  const idx = await db.query<{ i: string }>('SELECT lower(indexname) AS i FROM pg_indexes WHERE schemaname = current_schema()');
+  return { columns: new Set(cols.rows.map(r => `${r.t}.${r.c}`)), indexes: new Set(idx.rows.map(r => r.i)) };
+}
+
+let applied: Awaited<ReturnType<typeof loadApplied>> | undefined;
+
+async function applySchema(sql: string): Promise<void> {
+  applied ??= await loadApplied();
+  const { columns, indexes } = applied;
+  const pending = sql
+    .replace(/^[ \t]*ALTER TABLE (\w+) ADD COLUMN IF NOT EXISTS (\w+)[^;]*;[ \t]*$/gm, (stmt, t, c) =>
+      columns.has(`${t}.${c}`.toLowerCase()) ? '' : stmt)
+    .replace(/^[ \t]*CREATE (?:UNIQUE )?INDEX IF NOT EXISTS (\w+)[^;]*;[ \t]*$/gm, (stmt, i) =>
+      indexes.has(String(i).toLowerCase()) ? '' : stmt);
+  if (pending.replace(/--.*$/gm, '').trim()) await db.exec(pending);
+}
+
 export async function initializeSchema(): Promise<void> {
   // Users table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -16,7 +42,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Refresh tokens table (for logout/revocation)
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
@@ -31,7 +57,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Candidate profiles table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS candidate_profiles (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL UNIQUE,
@@ -49,7 +75,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Suggested roles table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS suggested_roles (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
@@ -65,7 +91,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Job offers table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS offers (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -86,7 +112,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Postulations table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS postulations (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
@@ -110,7 +136,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Adapted CVs table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS adapted_cvs (
       id TEXT PRIMARY KEY,
       postulationId TEXT NOT NULL,
@@ -129,7 +155,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Audit logs table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY,
       eventType TEXT NOT NULL,
@@ -147,7 +173,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Support tickets table
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS support_tickets (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
@@ -162,7 +188,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Agent invocations table (for tracking agent calls and costs)
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS agent_invocations (
       id TEXT PRIMARY KEY,
       agentName TEXT NOT NULL,
@@ -184,7 +210,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Postulation matches table (results from cv-matcher agent)
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS postulation_matches (
       id TEXT PRIMARY KEY,
       postulationId TEXT NOT NULL,
@@ -203,7 +229,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Successful adaptations table (for memory & learning)
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS successful_adaptations (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
@@ -220,7 +246,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Application outcomes table (tracking results)
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS application_outcomes (
       id TEXT PRIMARY KEY,
       adaptationId TEXT NOT NULL,
@@ -236,7 +262,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Postulation outcomes table (for continuous learning)
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS postulation_outcomes (
       id TEXT PRIMARY KEY,
       postulationId TEXT NOT NULL,
@@ -253,7 +279,7 @@ export async function initializeSchema(): Promise<void> {
 
   // Datos duros estructurados. El historial laboral se extraía del CV y se
   // descartaba, así que el adaptador no tenía de dónde copiar empresas y fechas.
-  await db.exec(`
+  await applySchema(`
     ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS experience TEXT;
     ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS languages TEXT;
     ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS certifications TEXT;
@@ -263,7 +289,7 @@ export async function initializeSchema(): Promise<void> {
 
   // Ofertas reales: cada fuente trae su propio id, y la misma oferta vuelve en
   // cada sincronización, así que se identifica por fuente + id externo.
-  await db.exec(`
+  await applySchema(`
     ALTER TABLE offers ADD COLUMN IF NOT EXISTS externalId TEXT;
     ALTER TABLE offers ADD COLUMN IF NOT EXISTS applyUrl TEXT;
     ALTER TABLE offers ADD COLUMN IF NOT EXISTS country TEXT;
@@ -305,7 +331,7 @@ export async function initializeSchema(): Promise<void> {
 
   // Envío de postulaciones por la extensión. applyStatus sigue el envío;
   // estado sigue el proceso con el reclutador.
-  await db.exec(`
+  await applySchema(`
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyStatus TEXT NOT NULL DEFAULT 'pendiente';
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyReason TEXT;
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyDetail TEXT;
@@ -364,7 +390,7 @@ export async function initializeSchema(): Promise<void> {
   // aceptación de términos de los portales es un consentimiento explícito, con
   // la fecha en que se dio. salaryAuthorized marca una postulación bajo el rango
   // de renta que el candidato autorizó igual.
-  await db.exec(`
+  await applySchema(`
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS salaryMin INTEGER;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS salaryMax INTEGER;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS availability TEXT;
@@ -385,7 +411,7 @@ export async function initializeSchema(): Promise<void> {
 
   // Análisis diario de ofertas: la hora la elige el candidato (hora de Chile);
   // cada corrida deja un resumen por calce y un aviso.
-  await db.exec(`
+  await applySchema(`
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS dailyAnalysisHour INTEGER;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS lastAnalysisDate TEXT;
     ALTER TABLE apply_preferences ADD COLUMN IF NOT EXISTS allowDataAnalysis BOOLEAN NOT NULL DEFAULT FALSE;
@@ -425,7 +451,7 @@ export async function initializeSchema(): Promise<void> {
   `);
 
   // Recuperar contraseña: enlaces de un solo uso, guardados como hash.
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS password_resets (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -439,7 +465,7 @@ export async function initializeSchema(): Promise<void> {
   // Caché del matching por usuario. Puntuar 3.000+ ofertas por request tomaba
   // ~50s y tumbaba el servidor; ahora el ranking y el diagnóstico se calculan en
   // background y se guardan aquí, y las páginas solo hacen un SELECT por userId.
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS user_match_cache (
       userId TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       ranked TEXT NOT NULL,      -- [{offerId, score, tier, reasons}] recomendadas, ordenadas
@@ -457,7 +483,7 @@ export async function initializeSchema(): Promise<void> {
   // fuera del arranque.
 
   // Planes y cuotas de auto-postulación
-  await db.exec(`
+  await applySchema(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
 
     CREATE TABLE IF NOT EXISTS plan_usage (
@@ -486,7 +512,7 @@ export async function initializeSchema(): Promise<void> {
   // dominio de respaldo en un horario repartido. Los tokens van cifrados.
   // Respuestas (E4): cada candidato tiene un alias en el dominio de entrada.
   // Beta cerrada (E6): solo se registran correos invitados, con su plan.
-  await db.exec(`
+  await applySchema(`
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'portal';
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS applyEmail TEXT;
     ALTER TABLE postulations ADD COLUMN IF NOT EXISTS mailScheduledAt TIMESTAMPTZ;
@@ -530,7 +556,7 @@ export async function initializeSchema(): Promise<void> {
   // intentos, el dueño no tiene que esperar el umbral automático (20 intentos)
   // para sacarlo de la cola. paused=false fuerza lo contrario: mantenerlo
   // activo aunque las estadísticas digan pausarlo.
-  await db.exec(`
+  await applySchema(`
     CREATE TABLE IF NOT EXISTS portal_overrides (
       portal TEXT PRIMARY KEY,
       paused BOOLEAN NOT NULL DEFAULT FALSE,
