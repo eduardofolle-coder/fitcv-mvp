@@ -7,7 +7,10 @@ databases:
     databaseName: fitcv
     user: fitcv
     # El plan gratis de Postgres se borra a los 30 días: no sirve para producción.
-    plan: basic-256mb
+    # basic-1gb (0,5 CPU / 1 GB): con 256 MB y ~57 mil ofertas la BD vencía el
+    # statement_timeout. Debe coincidir con el plan real para que un Sync del
+    # Blueprint no la vuelva a bajar.
+    plan: basic-1gb
     region: virginia
 
 services:
@@ -81,6 +84,10 @@ services:
         value: https://fitcv-web.onrender.com,https://fitcv.cl,https://www.fitcv.cl
       - key: OFFER_SYNC_MINUTES
         value: "60"
+      # Índice trigram de la búsqueda de ofertas (routes/offers.ts). Solo en la API:
+      # se construye en segundo plano al arrancar y no debe correr también en el worker.
+      - key: SEARCH_TRGM_INDEX
+        value: "true"
       # El trabajo de fondo (sync, recompute, watchdog) lo corre fitcv-worker,
       # no la web: así el crawling no le mete latencia a los usuarios.
       - key: RUN_SCHEDULERS
