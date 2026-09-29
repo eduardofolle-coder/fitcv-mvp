@@ -1,4 +1,5 @@
 import { db } from './client.js';
+import { env } from '../env.js';
 
 export async function initializeSchema(): Promise<void> {
   // Users table
@@ -276,6 +277,22 @@ export async function initializeSchema(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_offers_source_externalId ON offers(source, externalId) WHERE externalId IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_offers_publishedAt ON offers(publishedAt);
   `);
+
+  // La búsqueda de /offers es LIKE '%texto%': sin índice trigram recorre toda la
+  // tabla (11 s medidos en producción). La expresión debe ser idéntica a la de
+  // routes/offers.ts. Solo en Postgres real (PGlite no trae pg_trgm) y sin
+  // tumbar el arranque si el rol no puede crear la extensión.
+  if (/^postgres(ql)?:\/\//.test(env.DATABASE_URL)) {
+    try {
+      await db.exec(`
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        CREATE INDEX IF NOT EXISTS idx_offers_search_trgm
+          ON offers USING gin (COALESCE(searchText, LOWER(title)) gin_trgm_ops);
+      `);
+    } catch (err) {
+      console.error('⚠️ Índice trigram de búsqueda no creado:', err);
+    }
+  }
 
   // Envío de postulaciones por la extensión. applyStatus sigue el envío;
   // estado sigue el proceso con el reclutador.
