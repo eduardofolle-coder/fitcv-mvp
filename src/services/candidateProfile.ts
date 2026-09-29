@@ -3,6 +3,7 @@
  */
 import { db } from '../db/client.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { logger } from './logger.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import { buildHardData, type HardData } from './cvComposer.js';
 import { EncryptionService } from './encryption.js';
@@ -58,8 +59,15 @@ export async function loadHardData(userId: string): Promise<HardData> {
   if (profile.contactInfo) {
     try {
       contact = safeJsonParse(EncryptionService.decrypt(profile.contactInfo), {});
-    } catch {
-      contact = {};
+    } catch (err) {
+      // Fallar cerrado: seguir con el contacto vacío enviaba postulaciones sin
+      // teléfono ni correo del candidato (y gastaba IA en CVs incompletos). Suele
+      // ser una DATA_ENCRYPTION_KEY distinta entre servicios.
+      logger.error('No se pudo descifrar el contacto del candidato; se detiene la postulación', {
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      throw new AppError(500, 'We could not read your saved contact details. Please contact support.');
     }
   }
 
