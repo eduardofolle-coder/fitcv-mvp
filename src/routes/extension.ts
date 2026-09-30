@@ -30,7 +30,7 @@ import {
   claimQueuedApplications,
   createPostulationForOffer,
   getApplyPreferences,
-  queueApplication,
+  queueManually,
   recordResolution,
   resumeApplication,
   transitionApplication,
@@ -438,7 +438,7 @@ router.post(
 
       // Pasa por el control de renta: bajo el rango queda esperando autorización.
       applyStatus = canTransition(from, 'en-cola')
-        ? (await queueApplication(postulationId, req.user.id)).to
+        ? (await queueManually(postulationId, req.user.id)).to
         : from;
     }
 

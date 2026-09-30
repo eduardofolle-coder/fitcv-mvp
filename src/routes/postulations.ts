@@ -13,7 +13,7 @@ import {
   authorizeApplication,
   declineApplication,
   getApplicationEvents,
-  queueApplication,
+  queueManually,
   transitionApplication,
 } from '../services/applicationQueue.js';
 
@@ -257,7 +257,7 @@ router.post(
   '/:id/queue',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
-    const result = await queueApplication(req.params.id, req.user.id);
+    const result = await queueManually(req.params.id, req.user.id);
     res.json({ success: true, data: { applyStatus: result.to } });
   })
 );

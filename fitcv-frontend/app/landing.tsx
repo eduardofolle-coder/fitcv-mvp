@@ -394,7 +394,7 @@ export default function Landing() {
             <div className="price">
               <div className="plan">Gratis</div>
               <div className="amt"><span className="v">$0</span><span className="per">para probar</span></div>
-              <div className="quota">5 postulaciones · por única vez</div>
+              <div className="quota">8 postulaciones · por única vez</div>
               <ul>
                 <li><span className="ck">✓</span> Diagnóstico completo de tu CV</li>
                 <li><span className="ck">✓</span> Ofertas que calzan con tu perfil</li>

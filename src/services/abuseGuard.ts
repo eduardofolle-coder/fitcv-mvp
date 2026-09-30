@@ -1,5 +1,5 @@
 /**
- * Anti-abuso del plan Free (5 postulaciones de por vida). Sin bloquear por IP
+ * Anti-abuso del plan Free (8 postulaciones de por vida). Sin bloquear por IP
  * (falsos positivos por CGNAT, oficinas y VPN): la cuota es por persona.
  *
  * Una cuenta Free solo postula si (1) verificó su correo, (2) su CV muestra

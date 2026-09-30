@@ -2,7 +2,7 @@ import { db } from '../db/client.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export const PLAN_CONFIG = {
-  free: { quota: 5,   isLifetime: true,  runCap: 5,  dailyCap: 5  },
+  free: { quota: 8,   isLifetime: true,  runCap: 8,  dailyCap: 8  },
   pro:  { quota: 150, isLifetime: false, runCap: 10, dailyCap: 20 },
   max:  { quota: 300, isLifetime: false, runCap: 20, dailyCap: 40 },
 } as const;
@@ -123,6 +123,24 @@ export async function reserveQuota(userId: string, requested: number): Promise<n
   `, [grant, userId, today, usage.quotaUsed, currentDaily, effectiveQuota]);
 
   return updated ? grant : 0;
+}
+
+/** Postulación a mano: gasta cupo una sola vez por postulación (las automáticas ya lo reservaron). */
+export async function chargeManualQuota(postulationId: string, userId: string): Promise<void> {
+  const row = await db.queryOne<{ quotaCharged: boolean | null }>(
+    'SELECT quotaCharged FROM postulations WHERE id = $1 AND userId = $2',
+    [postulationId, userId]
+  );
+  if (!row) throw new AppError(404, 'Postulation not found');
+  if (row.quotaCharged) return;
+
+  if ((await reserveQuota(userId, 1)) < 1) {
+    const state = await getPlanState(userId);
+    throw new AppError(403, state.quotaRemaining <= 0
+      ? 'Quota exhausted: you used all your applications for this plan.'
+      : 'Daily limit reached: you can apply to more offers tomorrow.');
+  }
+  await db.query('UPDATE postulations SET quotaCharged = TRUE WHERE id = $1', [postulationId]);
 }
 
 /** Devuelve cupo reservado que no se llegó a usar (la postulación se retiró antes de enviarse). */

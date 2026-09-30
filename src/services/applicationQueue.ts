@@ -26,6 +26,7 @@ import { extractApplyEmail } from './applyEmail.js';
 import { createNotification, notifyUrgentAttention } from './notifications.js';
 import { logger } from './logger.js';
 import { assertCanApply } from './abuseGuard.js';
+import { chargeManualQuota } from './planQuota.js';
 
 export interface TransitionRequest {
   postulationId: string;
@@ -326,6 +327,13 @@ export async function queueApplication(postulationId: string, userId: string): P
   }
 
   return transitionApplication({ postulationId, userId, to: 'en-cola' });
+}
+
+/** Lo que el candidato encola a mano: mismas reglas que lo automático (control Free y cuota). */
+export async function queueManually(postulationId: string, userId: string) {
+  await assertCanApply(userId);
+  await chargeManualQuota(postulationId, userId);
+  return queueApplication(postulationId, userId);
 }
 
 /** El candidato acepta postular aunque la oferta pague bajo su rango. */

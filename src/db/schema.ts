@@ -470,9 +470,11 @@ export async function initializeSchema(): Promise<void> {
   // Anti-abuso del plan Free (services/abuseGuard.ts): correo verificado, buzón
   // normalizado y huellas del CV y del teléfono para dar una cuota por persona.
   const hadVerification = await columnApplied('users.emailverifiedat');
+  const hadQuotaCharged = await columnApplied('postulations.quotacharged');
   await applySchema(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS emailVerifiedAt TIMESTAMPTZ;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS emailNormalized TEXT;
+    ALTER TABLE postulations ADD COLUMN IF NOT EXISTS quotaCharged BOOLEAN DEFAULT FALSE;
     ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS cvFingerprint TEXT;
     ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS phoneHash TEXT;
     CREATE INDEX IF NOT EXISTS idx_users_email_normalized ON users(emailNormalized);
@@ -499,6 +501,9 @@ export async function initializeSchema(): Promise<void> {
         END
     `);
   }
+
+  // Las automáticas ya reservaron su cupo al crearse; solo las manuales lo gastan al encolar.
+  if (!hadQuotaCharged) await db.query(`UPDATE postulations SET quotaCharged = TRUE WHERE source = 'auto'`);
 
   // Caché del matching por usuario. Puntuar 3.000+ ofertas por request tomaba
   // ~50s y tumbaba el servidor; ahora el ranking y el diagnóstico se calculan en

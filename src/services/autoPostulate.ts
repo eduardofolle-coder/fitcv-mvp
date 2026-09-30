@@ -77,8 +77,8 @@ export async function runAutoPostulate(userId: string): Promise<AutoPostulateRes
       const id = uuidv4();
       await db.query(`
         INSERT INTO postulations
-          (id, userId, offerId, estado, prioridad, source, matchScore, postulationWeight, createdAt, updatedAt)
-        VALUES ($1, $2, $3, 'Preparar postulación', 'Media', 'auto', $4, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          (id, userId, offerId, estado, prioridad, source, matchScore, postulationWeight, quotaCharged, createdAt, updatedAt)
+        VALUES ($1, $2, $3, 'Preparar postulación', 'Media', 'auto', $4, 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [id, userId, item.offerId, item.score]);
       // Salary check + queue (puede pasar a 'requiere-autorizacion' si paga bajo rango).
       await placeAutoApplication(id, userId, prefs.sendMode);
