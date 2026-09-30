@@ -62,8 +62,10 @@ async function announceBatch(userId: string, count: number, manual: boolean, sen
 /** Arma y anuncia las tandas que tocan. Devuelve cuántos candidatos tuvieron tanda. */
 export async function runDueBatches(now = new Date()): Promise<number> {
   const users = (await db.query<BatchSchedule & { userId: string; sendMode: string }>(`
-    SELECT userId, sendMode, batchEveryHours, dailyAnalysisHour, lastBatchAt
-    FROM apply_preferences WHERE sendMode IN ('revision', 'manual')
+    SELECT a.userId, a.sendMode, a.batchEveryHours, a.dailyAnalysisHour, a.lastBatchAt
+    FROM apply_preferences a JOIN users u ON u.id = a.userId
+    WHERE a.sendMode IN ('revision', 'manual')
+    ORDER BY CASE u.plan WHEN 'max' THEN 0 WHEN 'pro' THEN 1 ELSE 2 END
   `)).rows.filter(u => isBatchDue(u, now));
 
   for (const u of users) {
@@ -93,8 +95,10 @@ export async function releaseDueBatches(now = new Date()): Promise<number> {
   const due = (await db.query<{ id: string; userId: string }>(`
     SELECT p.id, p.userId FROM postulations p
     JOIN apply_preferences a ON a.userId = p.userId
+    JOIN users u ON u.id = p.userId
     WHERE p.applyStatus = 'por-enviar'
       AND ((a.sendMode = 'revision' AND p.reviewUntil <= $1) OR a.sendMode = 'automatico')
+    ORDER BY CASE u.plan WHEN 'max' THEN 0 WHEN 'pro' THEN 1 ELSE 2 END, p.reviewUntil ASC NULLS LAST
   `, [now.toISOString()])).rows;
 
   let released = 0;

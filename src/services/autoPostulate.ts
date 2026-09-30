@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { logger } from './logger.js';
 import { freeApplyBlock } from './abuseGuard.js';
-import { reserveQuota, releaseQuota, QUALITY_GATE } from './planQuota.js';
+import { reserveQuota, releaseQuota, planAllowsPortal, QUALITY_GATE } from './planQuota.js';
 import { queueApplication, transitionApplication } from './applicationQueue.js';
 import { loadAnswerPreferences, type SendMode } from './savedAnswers.js';
 import { offerVerdict } from './regions.js';
@@ -56,16 +56,17 @@ export async function runAutoPostulate(userId: string): Promise<AutoPostulateRes
 
   const candidates = ranked.filter(r => r.score >= QUALITY_GATE.auto && !existingOffers.has(r.offerId));
   const prefs = await loadAnswerPreferences(userId);
+  const plan = (await db.queryOne<{ plan: string | null }>('SELECT plan FROM users WHERE id = $1', [userId]))?.plan;
   const places = candidates.length
-    ? (await db.query<{ id: string; title: string; company: string | null; location: string | null; remoteModality: string | null }>(
-        'SELECT id, title, company, location, remoteModality FROM offers WHERE id = ANY($1)',
+    ? (await db.query<{ id: string; title: string; company: string | null; location: string | null; remoteModality: string | null; source: string }>(
+        'SELECT id, title, company, location, remoteModality, source FROM offers WHERE id = ANY($1)',
         [candidates.map(c => c.offerId)]
       )).rows
     : [];
   const placeById = new Map(places.map(p => [p.id, p]));
   const autoOffers = candidates.filter(r => {
     const place = placeById.get(r.offerId);
-    return place !== undefined && offerVerdict(place, prefs) === 'dentro';
+    return place !== undefined && planAllowsPortal(plan, place.source) && offerVerdict(place, prefs) === 'dentro';
   });
 
   const slots = await reserveQuota(userId, autoOffers.length);

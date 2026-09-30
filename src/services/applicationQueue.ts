@@ -26,7 +26,7 @@ import { extractApplyEmail } from './applyEmail.js';
 import { createNotification, notifyUrgentAttention } from './notifications.js';
 import { logger } from './logger.js';
 import { assertCanApply } from './abuseGuard.js';
-import { chargeManualQuota } from './planQuota.js';
+import { chargeManualQuota, planAllowsPortal } from './planQuota.js';
 
 export interface TransitionRequest {
   postulationId: string;
@@ -291,6 +291,7 @@ export async function getApplyPreferences(userId: string): Promise<{ autoSendLin
  */
 export async function queueApplication(postulationId: string, userId: string): Promise<{ from: ApplyStatus; to: ApplyStatus }> {
   await assertCanApply(userId);
+  await assertPortalAllowed(postulationId, userId);
   const row = await db.queryOne<any>(`
     SELECT p.salaryAuthorized, o.title, o.company, o.salaryMin, o.salaryMax, o.salaryCurrency, o.description
     FROM postulations p
@@ -329,9 +330,22 @@ export async function queueApplication(postulationId: string, userId: string): P
   return transitionApplication({ postulationId, userId, to: 'en-cola' });
 }
 
-/** Lo que el candidato encola a mano: mismas reglas que lo automático (control Free y cuota). */
+/** El portal de la oferta debe estar incluido en el plan del candidato. */
+async function assertPortalAllowed(postulationId: string, userId: string): Promise<void> {
+  const row = await db.queryOne<{ source: string; plan: string | null }>(`
+    SELECT o.source, u.plan FROM postulations p
+    JOIN offers o ON o.id = p.offerId JOIN users u ON u.id = p.userId
+    WHERE p.id = $1 AND p.userId = $2
+  `, [postulationId, userId]);
+  if (row && !planAllowsPortal(row.plan, row.source)) {
+    throw new AppError(403, `Applying on ${row.source} is included in the Max plan. Upgrade to apply there.`);
+  }
+}
+
+/** Lo que el candidato encola a mano: mismas reglas que lo automático (control Free, plan y cuota). */
 export async function queueManually(postulationId: string, userId: string) {
   await assertCanApply(userId);
+  await assertPortalAllowed(postulationId, userId);
   await chargeManualQuota(postulationId, userId);
   return queueApplication(postulationId, userId);
 }

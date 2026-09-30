@@ -14,6 +14,13 @@ export const OVERAGE_CONFIG = {
   max: { slots: 50,  priceCLP: 10990 },
 } as const;
 
+/** Portales que solo incluye un plan (la landing vende LinkedIn en Max). */
+export const PORTAL_MIN_PLAN: Record<string, Plan> = { linkedin: 'max' };
+
+export function planAllowsPortal(plan: string | null | undefined, source: string): boolean {
+  return !PORTAL_MIN_PLAN[source] || plan === PORTAL_MIN_PLAN[source];
+}
+
 /** Threshold de matching: todo lo que supere esto entra a la cola automática. */
 export const QUALITY_GATE = { auto: 40 } as const;
 

@@ -8,6 +8,8 @@ import { EncryptionService } from '../services/encryption.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 import { getAdaptedCv, tailorCv } from '../services/cvTailoring.js';
+import { assertCanApply } from '../services/abuseGuard.js';
+import { chargeManualQuota } from '../services/planQuota.js';
 import { asciiFileName, pdfFileName, renderCvPdf } from '../services/cvPdf.js';
 import {
   authorizeApplication,
@@ -321,6 +323,9 @@ router.post(
   '/:id/generate-cv',
   requireAuth,
   asyncHandler(async (req: any, res: any) => {
+    // Adaptar el CV con IA gasta el crédito de la postulación (una sola vez; enviarla después no cobra otra).
+    await assertCanApply(req.user.id);
+    await chargeManualQuota(req.params.id, req.user.id);
     res.json({ success: true, data: await tailorCv(req.params.id, req.user.id) });
   })
 );

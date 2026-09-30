@@ -426,7 +426,6 @@ export default function Landing() {
                 <li><span className="ck">✓</span> Todo lo del plan Pro</li>
                 <li><span className="ck">✓</span> Más postulaciones cada día</li>
                 <li><span className="ck">✓</span> Incluye LinkedIn <em style={{ fontStyle: 'normal', color: 'var(--muted)' }}>(vía extensión)</em></li>
-                <li><span className="ck">✓</span> Soporte prioritario</li>
               </ul>
               <button className="btn btn-dark" onClick={register}>Ir a Max</button>
             </div>

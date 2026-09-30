@@ -10,6 +10,7 @@
  * puntual (aviso + "requiere-atención"), nunca pausa el portal para los demás.
  */
 import { db } from '../db/client.js';
+import { PORTAL_MIN_PLAN, planAllowsPortal } from './planQuota.js';
 
 export type Outcome = 'limpia' | 'asistida' | 'bloqueada' | 'atencion' | 'error';
 
@@ -200,6 +201,8 @@ export async function queuePolicy(userId: string): Promise<{ skip: string[]; wei
     'SELECT portal FROM portal_sessions WHERE userId = $1 AND connected = FALSE',
     [userId]
   )).rows.map(r => r.portal);
-  const skip = [...health.filter(h => h.paused).map(h => h.portal), ...(await captchaPausedPortals(userId)), ...(await capReachedPortals(userId)), ...disconnected];
+  const plan = (await db.queryOne<{ plan: string | null }>('SELECT plan FROM users WHERE id = $1', [userId]))?.plan;
+  const outsidePlan = Object.keys(PORTAL_MIN_PLAN).filter(portal => !planAllowsPortal(plan, portal));
+  const skip = [...health.filter(h => h.paused).map(h => h.portal), ...(await captchaPausedPortals(userId)), ...(await capReachedPortals(userId)), ...outsidePlan, ...disconnected];
   return { skip, weights };
 }

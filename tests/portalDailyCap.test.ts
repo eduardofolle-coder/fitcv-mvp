@@ -26,7 +26,7 @@ beforeAll(async () => {
   cap = health.PORTAL_DAILY_CAP.linkedin;
   await db.init();
   await initializeSchema();
-  await db.query(`INSERT INTO users (id, email, passwordHash, plan) VALUES ($1, $2, 'x', 'pro')`, [USER, `cap-${RUN}@test.dev`]);
+  await db.query(`INSERT INTO users (id, email, passwordHash, plan) VALUES ($1, $2, 'x', 'max')`, [USER, `cap-${RUN}@test.dev`]);
 });
 
 describe('tope diario de LinkedIn', () => {
