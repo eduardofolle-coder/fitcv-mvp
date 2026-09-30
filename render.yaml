@@ -164,6 +164,10 @@ services:
         value: "60"
       - key: WATCHDOG_MINUTES
         value: "10"
+      # El worker no atiende usuarios, pero env.ts avisa si el valor por defecto
+      # (con localhost) llega a producción. Mismo valor que en fitcv-api.
+      - key: ALLOWED_ORIGINS
+        value: https://fitcv-web.onrender.com,https://fitcv.cl,https://www.fitcv.cl
       # Opcionales: alertas del watchdog y correos/digests de fondo.
       - key: SENTRY_DSN
         sync: false
