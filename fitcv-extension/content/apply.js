@@ -31,7 +31,22 @@
 
   const BANNER_ID = 'fitcv-banner';
 
-  function banner(message, { manualSend = false, resume = false } = {}) {
+  function pause() {
+    send({ type: 'fitcv:pause' }).then(
+      () => banner('En pausa. Termina tú la postulación y pulsa "Ya la envié" cuando salga.', { manualSend: true }),
+      error => banner(`No pude pausar (${error.message}).`)
+    );
+  }
+
+  // Alt+P frena desde el teclado (Espacio y Esc ya hacen otras cosas en el portal).
+  if (!globalThis.__fitcvPauseKey) {
+    globalThis.__fitcvPauseKey = true;
+    addEventListener('keydown', event => {
+      if (event.altKey && event.code === 'KeyP') pause();
+    });
+  }
+
+  function banner(message, { manualSend = false, resume = false, pausable = false } = {}) {
     const doc = document;
     let box = doc.getElementById(BANNER_ID);
     if (!box) {
@@ -60,6 +75,15 @@
       box.appendChild(button);
     }
 
+    if (pausable) {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Pausar (Alt+P)';
+      button.style.cssText = buttonCss;
+      button.addEventListener('click', pause);
+      box.appendChild(button);
+    }
+
     if (manualSend) {
       const button = doc.createElement('button');
       button.type = 'button';
@@ -82,6 +106,8 @@
     const form = globalThis.FitcvForm;
     if (!form) return attention('formulario-no-reconocido', 'No se cargó el lector de formularios.');
     const doc = document;
+
+    banner('estoy postulando por ti. Puedes frenarlo cuando quieras.', { pausable: true });
 
     // Después de enviar solo queda confirmar el resultado.
     if (session.submitted) {

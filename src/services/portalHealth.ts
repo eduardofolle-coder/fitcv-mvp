@@ -175,6 +175,22 @@ export async function captchaPausedPortals(userId: string): Promise<string[]> {
   return rows.map(r => r.portal);
 }
 
+/**
+ * Tope de postulaciones por candidato en 24 h en portales que restringen cuentas
+ * por volumen. Al llegar al tope, lo que sigue en cola espera a que baje.
+ */
+export const PORTAL_DAILY_CAP: Record<string, number> = { linkedin: 12 };
+
+async function capReachedPortals(userId: string): Promise<string[]> {
+  const rows = (await db.query<{ portal: string; n: number }>(`
+    SELECT o.source AS portal, COUNT(*) AS n
+    FROM postulations p JOIN offers o ON o.id = p.offerId
+    WHERE p.userId = $1 AND o.source = ANY($2) AND p.applyClaimedAt > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+    GROUP BY o.source
+  `, [userId, Object.keys(PORTAL_DAILY_CAP)])).rows;
+  return rows.filter(r => Number(r.n) >= (PORTAL_DAILY_CAP[r.portal] ?? Infinity)).map(r => r.portal);
+}
+
 /** Lo que la cola necesita: qué portales saltarse y cuánto pesa cada uno. */
 export async function queuePolicy(userId: string): Promise<{ skip: string[]; weights: Record<string, number> }> {
   const health = await getPortalHealth();
@@ -184,6 +200,6 @@ export async function queuePolicy(userId: string): Promise<{ skip: string[]; wei
     'SELECT portal FROM portal_sessions WHERE userId = $1 AND connected = FALSE',
     [userId]
   )).rows.map(r => r.portal);
-  const skip = [...health.filter(h => h.paused).map(h => h.portal), ...(await captchaPausedPortals(userId)), ...disconnected];
+  const skip = [...health.filter(h => h.paused).map(h => h.portal), ...(await captchaPausedPortals(userId)), ...(await capReachedPortals(userId)), ...disconnected];
   return { skip, weights };
 }

@@ -14,6 +14,13 @@ const MAX_WAITS = 5;
 const APPLICATION_TIMEOUT_MS = 3 * 60 * 1000;
 // Pausa entre postulaciones: una por vez y sin apurar a los portales.
 const DELAY_BETWEEN_MS = 30 * 1000;
+// LinkedIn restringe cuentas por ritmo constante: ahí la pausa es al azar (45-120 s).
+const RANDOM_DELAY_PORTALS = { linkedin: [45 * 1000, 120 * 1000] };
+
+const delayFor = source => {
+  const range = RANDOM_DELAY_PORTALS[source];
+  return range ? range[0] + Math.random() * (range[1] - range[0]) : DELAY_BETWEEN_MS;
+};
 
 const SOURCE_HOSTS = {
   linkedin: 'linkedin.com',
@@ -202,8 +209,11 @@ async function assistSignup(tabId) {
 
 // --- Cola --------------------------------------------------------------------
 
+// El sondeo de cada minuto también llama a processNext: sin "no antes de", saltaría la pausa.
 function scheduleNext(delay = DELAY_BETWEEN_MS) {
-  chrome.alarms.create('fitcv-next', { when: Date.now() + delay });
+  const at = Date.now() + delay;
+  void chrome.storage.local.set({ nextAt: at });
+  chrome.alarms.create('fitcv-next', { when: at });
 }
 
 async function start() {
@@ -225,6 +235,8 @@ async function stop() {
 async function processNext() {
   const { running, token } = await settings();
   if (!running || !token || session) return;
+  const { nextAt } = await chrome.storage.local.get({ nextAt: 0 });
+  if (Date.now() < nextAt) return;
 
   let items;
   try {
@@ -282,7 +294,7 @@ async function report(outcome, payload = {}) {
     await log(`No se pudo registrar el resultado de ${current.offer.title}: ${error.message}`);
   }
 
-  scheduleNext();
+  scheduleNext(delayFor(current.offer.source));
 }
 
 async function runStep() {
@@ -439,6 +451,18 @@ async function resumeFromTab(tabId) {
   return { ok: true };
 }
 
+// El candidato frena desde la página: se detiene la cola y la postulación en curso
+// queda abierta para que la termine él.
+async function pauseFromTab(tabId) {
+  if (!session || session.tabId !== tabId) throw new Error('No hay una postulación en curso en esta pestaña.');
+  await chrome.storage.local.set({ running: false });
+  await chrome.alarms.clear('fitcv-poll');
+  await chrome.alarms.clear('fitcv-next');
+  await log('Pausaste el envío automático desde la página.');
+  await report('requiere-atencion', { reason: 'otro', detail: 'Pausaste el envío automático: termina la postulación tú.' });
+  return { ok: true };
+}
+
 async function markSentFromTab(tabId) {
   const key = `attention:${tabId}`;
   const stored = await chrome.storage.session.get(key);
@@ -490,6 +514,9 @@ async function handleMessage(message, sender) {
     case 'fitcv:resume':
       if (!sender.tab) throw new Error('Falta la pestaña.');
       return resumeFromTab(sender.tab.id);
+    case 'fitcv:pause':
+      if (!sender.tab) throw new Error('Falta la pestaña.');
+      return pauseFromTab(sender.tab.id);
     case 'fitcv:manual-sent':
       if (!sender.tab) throw new Error('Falta la pestaña.');
       return markSentFromTab(sender.tab.id);
