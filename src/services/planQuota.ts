@@ -3,8 +3,8 @@ import { AppError } from '../middleware/errorHandler.js';
 
 export const PLAN_CONFIG = {
   free: { quota: 8,   isLifetime: true,  runCap: 8,  dailyCap: 8  },
-  pro:  { quota: 150, isLifetime: false, runCap: 10, dailyCap: 20 },
-  max:  { quota: 300, isLifetime: false, runCap: 20, dailyCap: 40 },
+  pro:  { quota: 300, isLifetime: false, runCap: 10, dailyCap: 20 },
+  max:  { quota: 500, isLifetime: false, runCap: 20, dailyCap: 40 },
 } as const;
 
 export type Plan = keyof typeof PLAN_CONFIG;

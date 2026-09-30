@@ -411,7 +411,7 @@ export default function Landing() {
               <div className="quota">300 postulaciones al mes</div>
               <ul>
                 <li><span className="ck">✓</span> Diagnóstico y CV adaptado sin límite</li>
-                <li><span className="ck">✓</span> Auto-postulación en los portales <em style={{ fontStyle: 'normal', color: 'var(--muted)' }}>(LinkedIn solo en Ilimitado)</em></li>
+                <li><span className="ck">✓</span> Auto-postulación en los portales <em style={{ fontStyle: 'normal', color: 'var(--muted)' }}>(LinkedIn solo en Max)</em></li>
                 <li><span className="ck">✓</span> Prioridad en la cola de envío</li>
                 <li><span className="ck">✓</span> Sin límite de cargos senior</li>
               </ul>
@@ -419,17 +419,26 @@ export default function Landing() {
             </div>
 
             <div className="price">
-              <div className="plan">Ilimitado</div>
+              <div className="plan">Max</div>
               <div className="amt"><span className="v">$15.990</span><span className="per">CLP / mes</span></div>
-              <div className="quota">Postulaciones ilimitadas</div>
+              <div className="quota">500 postulaciones al mes</div>
               <ul>
                 <li><span className="ck">✓</span> Todo lo del plan Pro</li>
-                <li><span className="ck">✓</span> Postulaciones sin límite</li>
+                <li><span className="ck">✓</span> Más postulaciones cada día</li>
                 <li><span className="ck">✓</span> Incluye LinkedIn <em style={{ fontStyle: 'normal', color: 'var(--muted)' }}>(vía extensión)</em></li>
                 <li><span className="ck">✓</span> Soporte prioritario</li>
               </ul>
-              <button className="btn btn-dark" onClick={register}>Ir a Ilimitado</button>
+              <button className="btn btn-dark" onClick={register}>Ir a Max</button>
             </div>
+          </div>
+          <div className="card" style={{ padding:'22px 26px', marginTop:28, textAlign:'left' }}>
+            <div className="plan" style={{ marginBottom:6 }}>Cómo cobramos: 1 postulación = 1 crédito</div>
+            <p style={{ margin:'0 0 8px', color:'var(--ink-soft)' }}>
+              Cada postulación consume <b>1 crédito</b>, sin importar tu cargo, tus años de experiencia, tus títulos o el portal al que postulamos. Un gerente con 20 años de experiencia y quien busca su primer trabajo pagan exactamente lo mismo.
+            </p>
+            <p style={{ margin:0, color:'var(--muted)' }}>
+              Ves cuántos créditos te quedan en tu panel. Si retiras una postulación antes de que salga, el crédito vuelve a tu plan.
+            </p>
           </div>
           <p className="price-note">Sin tarjeta para empezar · Cancela cuando quieras · Precios en pesos chilenos</p>
         </section>

@@ -54,8 +54,8 @@ const applyBlockMessage = (error?: string | null): string | null => {
   if (error.startsWith('Verify your email')) return 'Confirma tu correo para postular: te enviamos un enlace. ¿No llegó? Pide otro en fitcv.cl/verify-email.';
   if (error.startsWith('Upload your CV')) return 'Sube tu CV para poder postular.';
   if (error.includes('no work experience')) return 'Tu CV no muestra experiencia ni estudios. Sube un CV completo para postular.';
-  if (error.includes('one quota per person')) return 'Ya existe otra cuenta con este mismo CV o teléfono. El plan Free da una cuota por persona: usa tu cuenta original o pasa a Pro.';
-  if (error.startsWith('Quota exhausted')) return 'Usaste todas las postulaciones de tu plan. Pasa a Pro para seguir postulando.';
+  if (error.includes('one quota per person')) return 'Ya existe otra cuenta con este mismo CV o teléfono. El plan Free da créditos por persona: usa tu cuenta original o pasa a Pro.';
+  if (error.startsWith('Quota exhausted')) return 'Usaste todos los créditos de tu plan. Pasa a Pro para seguir postulando.';
   if (error.startsWith('Daily limit')) return 'Llegaste al límite de hoy. Mañana puedes postular a más ofertas.';
   return null;
 };

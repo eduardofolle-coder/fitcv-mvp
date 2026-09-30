@@ -122,7 +122,7 @@ export function PlanCard() {
 
       {state.plan === 'free' && state.quotaRemaining === 0 && (
         <p className="aw-warning" style={{ marginTop:8 }}>
-          Has usado tus 8 postulaciones gratuitas. Pasa a Pro para postular automáticamente a 150 ofertas al mes.
+          Has usado tus 8 postulaciones gratuitas. Pasa a Pro para postular automáticamente a 300 ofertas al mes.
         </p>
       )}
     </section>

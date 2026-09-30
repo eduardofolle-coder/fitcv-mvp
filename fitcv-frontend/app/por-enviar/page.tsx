@@ -86,7 +86,7 @@ export default function PorEnviarPage() {
       setMessage(
         action === 'approve'
           ? `${res.approved} aprobada(s): salen ahora.`
-          : `${res.discarded} descartada(s): no se enviarán y el cupo vuelve a tu plan.`
+          : `${res.discarded} descartada(s): no se enviarán y el crédito vuelve a tu plan.`
       );
       await load();
     } else {
