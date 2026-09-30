@@ -8,6 +8,7 @@ import { EncryptionService } from '../services/encryption.js';
 import { ProfileAnalyzerService, type ProfileAnalysisResult } from '../services/profileAnalyzer.js';
 import { AgentInvokerService } from '../services/agentInvoker.js';
 import { normalizeExperience, normalizeLanguages, normalizeCertifications } from '../services/cvComposer.js';
+import { cvFingerprint, phoneFingerprint } from '../services/abuseGuard.js';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
@@ -103,8 +104,8 @@ router.post(
     await db.query(`
       INSERT INTO candidate_profiles (
         id, userId, fullName, yearsExperience, education, skills, summary, cvOriginalContent,
-        experience, languages, certifications, contactInfo, createdAt, updatedAt
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        experience, languages, certifications, contactInfo, cvFingerprint, phoneHash, createdAt, updatedAt
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(userId) DO UPDATE SET
         fullName = excluded.fullName,
         yearsExperience = excluded.yearsExperience,
@@ -116,6 +117,8 @@ router.post(
         languages = excluded.languages,
         certifications = excluded.certifications,
         contactInfo = excluded.contactInfo,
+        cvFingerprint = excluded.cvFingerprint,
+        phoneHash = excluded.phoneHash,
         updatedAt = CURRENT_TIMESTAMP
     `, [
       profileId,
@@ -129,7 +132,9 @@ router.post(
       JSON.stringify(experience),
       JSON.stringify(languages),
       JSON.stringify(certifications),
-      contactInfo
+      contactInfo,
+      cvFingerprint(cvContent),
+      phoneFingerprint(profile.phone)
     ]);
 
     // El perfil cambió: recalcular su matching en background (no bloquea la

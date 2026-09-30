@@ -16,6 +16,11 @@ async function loadApplied(): Promise<{ columns: Set<string>; indexes: Set<strin
 
 let applied: Awaited<ReturnType<typeof loadApplied>> | undefined;
 
+async function columnApplied(key: string): Promise<boolean> {
+  applied ??= await loadApplied();
+  return applied.columns.has(key);
+}
+
 async function applySchema(sql: string): Promise<void> {
   applied ??= await loadApplied();
   const { columns, indexes } = applied;
@@ -461,6 +466,39 @@ export async function initializeSchema(): Promise<void> {
       createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Anti-abuso del plan Free (services/abuseGuard.ts): correo verificado, buzón
+  // normalizado y huellas del CV y del teléfono para dar una cuota por persona.
+  const hadVerification = await columnApplied('users.emailverifiedat');
+  await applySchema(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS emailVerifiedAt TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS emailNormalized TEXT;
+    ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS cvFingerprint TEXT;
+    ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS phoneHash TEXT;
+    CREATE INDEX IF NOT EXISTS idx_users_email_normalized ON users(emailNormalized);
+    CREATE INDEX IF NOT EXISTS idx_candidate_profiles_fingerprint ON candidate_profiles(cvFingerprint);
+    CREATE INDEX IF NOT EXISTS idx_candidate_profiles_phone ON candidate_profiles(phoneHash);
+    CREATE TABLE IF NOT EXISTS email_verifications (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tokenHash TEXT NOT NULL UNIQUE,
+      expiresAt TIMESTAMPTZ NOT NULL,
+      usedAt TIMESTAMPTZ,
+      createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  // Una sola vez, al crear la columna: las cuentas que ya existían se invitaron a
+  // mano, así que se dan por verificadas. Las nuevas parten sin verificar.
+  if (!hadVerification) {
+    await db.query(`
+      UPDATE users SET emailVerifiedAt = createdAt,
+        emailNormalized = CASE
+          WHEN LOWER(email) ~ '@(gmail|googlemail)[.]com$'
+            THEN REPLACE(SPLIT_PART(SPLIT_PART(LOWER(email), '@', 1), '+', 1), '.', '') || '@gmail.com'
+          ELSE SPLIT_PART(SPLIT_PART(LOWER(email), '@', 1), '+', 1) || '@' || SPLIT_PART(LOWER(email), '@', 2)
+        END
+    `);
+  }
 
   // Caché del matching por usuario. Puntuar 3.000+ ofertas por request tomaba
   // ~50s y tumbaba el servidor; ahora el ranking y el diagnóstico se calculan en

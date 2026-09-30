@@ -3,6 +3,7 @@ import bcryptjs from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '../env.js';
 import { db } from '../db/client.js';
+import { normalizeEmail } from './abuseGuard.js';
 import type { User, AuthTokens, JWTPayload } from '../types/index.js';
 
 export class AuthService {
@@ -53,9 +54,9 @@ export class AuthService {
     const now = new Date();
 
     await db.query(`
-      INSERT INTO users (id, email, passwordHash, createdAt, updatedAt)
-      VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `, [id, email.toLowerCase(), passwordHash]);
+      INSERT INTO users (id, email, emailNormalized, passwordHash, createdAt, updatedAt)
+      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [id, email.toLowerCase(), normalizeEmail(email), passwordHash]);
 
     return {
       id,

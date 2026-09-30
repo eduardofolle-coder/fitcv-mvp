@@ -48,6 +48,16 @@ type Mode = 'profile' | 'all';
 // Portales que bloquean la lectura automática: sus ofertas entran con la extensión.
 const EXTENSION_ONLY = ['LinkedIn', 'Laborum', 'Empleos Públicos'];
 
+// Motivos por los que una cuenta Free aún no puede postular (control anti-abuso del servidor).
+const applyBlockMessage = (error?: string | null): string | null => {
+  if (!error) return null;
+  if (error.startsWith('Verify your email')) return 'Confirma tu correo para postular: te enviamos un enlace. ¿No llegó? Pide otro en fitcv.cl/verify-email.';
+  if (error.startsWith('Upload your CV')) return 'Sube tu CV para poder postular.';
+  if (error.includes('no work experience')) return 'Tu CV no muestra experiencia ni estudios. Sube un CV completo para postular.';
+  if (error.includes('one quota per person')) return 'Ya existe otra cuenta con este mismo CV o teléfono. El plan Free da una cuota por persona: usa tu cuenta original o pasa a Pro.';
+  return null;
+};
+
 const money = (n: number, currency?: string | null) =>
   currency === 'USD' ? `US$${n.toLocaleString('es-CL')}` : `$${n.toLocaleString('es-CL')}`;
 
@@ -176,7 +186,7 @@ export default function OffersPage() {
     }
 
     const queued = await apiClient.post(`/postulations/${postulationId}/queue`);
-    if (!queued.success) setError(queued.error || 'La postulación se creó, pero no quedó en cola');
+    if (!queued.success) setError(applyBlockMessage(queued.error) || queued.error || 'La postulación se creó, pero no quedó en cola');
 
     setApplied(prev => ({ ...prev, [offer.id]: postulationId }));
     setBusyOffer(null);

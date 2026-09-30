@@ -15,6 +15,8 @@ import { BETA_CLOSED_MESSAGE, invitedPlan, onboardUser } from '../services/betaA
 import { loadHardData } from '../services/candidateProfile.js';
 import { disconnectMailAccount } from '../services/mailAccounts.js';
 import { loadAnswerPreferences } from '../services/savedAnswers.js';
+import { normalizeEmail } from '../services/abuseGuard.js';
+import { sendVerificationEmail, verifyEmail } from '../services/emailVerification.js';
 
 const router = Router();
 
@@ -61,9 +63,14 @@ router.post(
     const plan = await invitedPlan(email);
     if (plan === null) throw new AppError(403, BETA_CLOSED_MESSAGE);
 
+    // Los alias (a.b+x@gmail.com) apuntan al mismo buzón: una persona, una cuenta.
+    const sameMailbox = await db.queryOne('SELECT 1 AS found FROM users WHERE emailNormalized = $1', [normalizeEmail(email)]);
+    if (sameMailbox) throw new AppError(400, 'Email already in use');
+
     // ✅ Crear usuario
     const user = await AuthService.createUser(email, password);
     await onboardUser(user.id, user.email, plan);
+    const devVerifyUrl = await sendVerificationEmail(user.id, user.email);
     const { accessToken, refreshToken, expiresIn } = AuthService.generateTokens(user.id);
 
     // ✅ Guardar refresh token
@@ -96,9 +103,42 @@ router.post(
         accessToken,
         expiresIn,
         userId: user.id,
-        email: user.email
+        email: user.email,
+        ...(devVerifyUrl ? { devVerifyUrl } : {})
       }
     });
+  })
+);
+
+// POST /api/auth/verify-email — canjea el enlace del correo
+router.post(
+  '/verify-email',
+  registerLimiter,
+  validateRequest(Joi.object({ token: Joi.string().min(20).max(200).required() })),
+  asyncHandler(async (req: any, res: any) => {
+    if (!(await verifyEmail(req.body.token))) {
+      throw new AppError(400, 'This verification link is invalid or expired. Request a new one.');
+    }
+    res.json({ success: true, message: 'Email verified. You can apply now.' });
+  })
+);
+
+// POST /api/auth/resend-verification — un nuevo enlace para quien ya inició sesión
+router.post(
+  '/resend-verification',
+  registerLimiter,
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: any) => {
+    if (!req.user) throw new AppError(401, 'Unauthorized');
+    const row = await db.queryOne<{ email: string; emailVerifiedAt: string | null }>(
+      'SELECT email, emailVerifiedAt FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    if (row && !row.emailVerifiedAt) {
+      const devVerifyUrl = await sendVerificationEmail(req.user.id, row.email);
+      return res.json({ success: true, ...(devVerifyUrl ? { devVerifyUrl } : {}) });
+    }
+    res.json({ success: true });
   })
 );
 

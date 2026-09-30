@@ -14,6 +14,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client.js';
 import { logger } from './logger.js';
+import { freeApplyBlock } from './abuseGuard.js';
 import { reserveQuota, releaseQuota, QUALITY_GATE } from './planQuota.js';
 import { queueApplication, transitionApplication } from './applicationQueue.js';
 import { loadAnswerPreferences, type SendMode } from './savedAnswers.js';
@@ -35,6 +36,8 @@ export interface AutoPostulateResult {
 }
 
 export async function runAutoPostulate(userId: string): Promise<AutoPostulateResult> {
+  if (await freeApplyBlock(userId)) return { autoQueued: 0, skippedQuota: false };
+
   const cache = await db.queryOne<{ ranked: string }>(
     'SELECT ranked FROM user_match_cache WHERE userId = $1',
     [userId]

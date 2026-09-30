@@ -6,6 +6,8 @@ import { env } from '../env.js';
 import { logger } from './logger.js';
 import { randomUUID } from 'crypto';
 import { invitedPlan, onboardUser } from './betaAccess.js';
+import { normalizeEmail } from './abuseGuard.js';
+import { markEmailVerified } from './emailVerification.js';
 
 export function initGoogleAuth() {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return;
@@ -30,12 +32,15 @@ export function initGoogleAuth() {
         if (!user) {
           const plan = await invitedPlan(email);
           if (plan === null) return done(null, false);
+          const sameMailbox = await db.queryOne('SELECT 1 AS found FROM users WHERE emailNormalized = $1', [normalizeEmail(email)]);
+          if (sameMailbox) return done(null, false);
           const id = randomUUID();
           await db.query(
-            'INSERT INTO users (id, email, passwordHash, googleId) VALUES ($1, $2, $3, $4)',
-            [id, email, '', profile.id],
+            'INSERT INTO users (id, email, emailNormalized, passwordHash, googleId) VALUES ($1, $2, $3, $4, $5)',
+            [id, email, normalizeEmail(email), '', profile.id],
           );
           await onboardUser(id, email, plan);
+          await markEmailVerified(id); // Google ya confirmó que el buzón es de quien entra
           user = { id, email };
           logger.info('Google OAuth: nuevo usuario creado', { userId: id, email });
         } else {

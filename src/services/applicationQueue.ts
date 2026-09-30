@@ -25,6 +25,7 @@ import { queuePolicy } from './portalHealth.js';
 import { extractApplyEmail } from './applyEmail.js';
 import { createNotification, notifyUrgentAttention } from './notifications.js';
 import { logger } from './logger.js';
+import { assertCanApply } from './abuseGuard.js';
 
 export interface TransitionRequest {
   postulationId: string;
@@ -288,6 +289,7 @@ export async function getApplyPreferences(userId: string): Promise<{ autoSendLin
  * del rango del candidato, no entra a la cola: queda esperando su autorización.
  */
 export async function queueApplication(postulationId: string, userId: string): Promise<{ from: ApplyStatus; to: ApplyStatus }> {
+  await assertCanApply(userId);
   const row = await db.queryOne<any>(`
     SELECT p.salaryAuthorized, o.title, o.company, o.salaryMin, o.salaryMax, o.salaryCurrency, o.description
     FROM postulations p
