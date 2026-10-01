@@ -13,7 +13,8 @@ export default function PrivacyPage() {
         <div>
           <h2 className="font-semibold text-white mb-1">1. Quién trata tus datos</h2>
           <p>
-            FITCV (en adelante "nosotros") es el responsable del tratamiento de tus datos personales, en
+            FITCV, operado por Empresas Fit SpA (RUT 78.524.741-8, domicilio en Antonio Bellet 193, Providencia,
+            Santiago; en adelante "nosotros"), es el responsable del tratamiento de tus datos personales, en
             conformidad con la Ley N.° 19.628 sobre protección de la vida privada y la Ley N.° 21.719, que la
             reforma y crea la Agencia de Protección de Datos Personales (vigente desde el 1 de diciembre de 2026).
             Tratamos tus datos solo con tu <strong>consentimiento expreso</strong>, que das al crear tu cuenta
