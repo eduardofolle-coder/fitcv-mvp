@@ -8,6 +8,7 @@ import { ExtensionCard } from './ExtensionCard';
 import { DailyAnalysisCard } from './DailyAnalysisCard';
 import { DiagnosisCard } from './DiagnosisCard';
 import { PlanCard } from './PlanCard';
+import { VerifyEmailCard } from './VerifyEmailCard';
 import { MailCard } from './MailCard';
 import AppShell from '@/app/components/AppShell';
 import { ExtensionInstallModal } from './ExtensionInstallModal';
@@ -147,6 +148,7 @@ export default function DashboardPage() {
         )
       )}
 
+      <VerifyEmailCard />
       <MailCard />
       <PlanCard />
       {profile && <DiagnosisCard />}

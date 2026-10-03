@@ -11,6 +11,7 @@ export const emailConfigured = (): boolean => Boolean(env.RESEND_API_KEY && env.
 export interface EmailExtras {
   from?: string;
   replyTo?: string | null;
+  html?: string; // versión con diseño; el texto plano sigue yendo de respaldo
   attachments?: Array<{ filename: string; content: string }>; // content en base64
 }
 
@@ -29,6 +30,7 @@ export async function sendEmail(to: string, subject: string, text: string, extra
         to,
         subject,
         text,
+        ...(extras.html ? { html: extras.html } : {}),
         ...(extras.replyTo ? { reply_to: extras.replyTo } : {}),
         ...(extras.attachments ? { attachments: extras.attachments } : {}),
       }),

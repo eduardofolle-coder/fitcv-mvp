@@ -142,6 +142,20 @@ router.post(
   })
 );
 
+// GET /api/auth/email-status — para mostrar el aviso de "confirma tu correo" en el dashboard
+router.get(
+  '/email-status',
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: any) => {
+    if (!req.user) throw new AppError(401, 'Unauthorized');
+    const row = await db.queryOne<{ emailVerifiedAt: string | null }>(
+      'SELECT emailVerifiedAt FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    res.json({ success: true, data: { verified: Boolean(row?.emailVerifiedAt) } });
+  })
+);
+
 // POST /api/auth/login
 router.post(
   '/login',
