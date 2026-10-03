@@ -12,7 +12,14 @@ Para las 4 plantillas:
 - **Idioma:** Spanish (es).
 - **Tipo:** Text.
 - **Variables:** `{{1}}` es el título del aviso y `{{2}}` es el enlace a fitcv.cl.
-- **Valores de ejemplo para la revisión de Meta:** `{{1}}` = "Tu tanda de 5 postulaciones sale a las 12:00" y `{{2}}` = `https://fitcv.cl/por-enviar`.
+- **Valores de ejemplo para la revisión de Meta:** uno propio por plantilla (Meta compara el ejemplo con el texto; un ejemplo que no calza lleva al rechazo). `{{2}}` es siempre `https://fitcv.cl/por-enviar`:
+
+| Plantilla | Ejemplo de `{{1}}` |
+|---|---|
+| `fitcv_te_necesitamos` | `Tu sesión en Computrabajo venció` |
+| `fitcv_tanda` | `5 postulaciones salen a las 12:00` |
+| `fitcv_respuesta` | `Analista de Logística te respondió` |
+| `fitcv_autorizacion` | `Jefe de Bodega paga menos que tu rango` |
 
 | Nombre (friendly name) | Clave en `WHATSAPP_TEMPLATES` | Cuándo se envía |
 |---|---|---|
@@ -45,12 +52,23 @@ FITCV encontró una oferta que paga menos que tu rango: {{1}}. Autorízala o des
 
 Cuando Meta las apruebe, cada una tiene un **Content SID** que empieza con `HX`.
 
+**Estado 2026-09-28: las 4 plantillas ya están creadas en Twilio (Content Template Builder), guardadas con sus Content SID reales. Todavía NO están enviadas a aprobación de WhatsApp/Meta.**
+
+**Estado 2026-10-02: la cuenta de Twilio ya es pagada, el perfil de empresa (Empresas Fit SpA) fue aprobado y el número +12183079676 quedó registrado como sender de WhatsApp con el nombre "FITCV" (estado Offline mientras Meta lo activa). Siguiente paso: cuando el sender esté Online, enviar las 4 plantillas a aprobación usando los ejemplos de la tabla de arriba.**
+
+| Clave | Content SID |
+|---|---|
+| `te_necesitamos` | `HX9205d3211b09aada7e50fc1620111822` |
+| `tanda` | `HX376d582f8fdbbb7fe219b9f55088595f` |
+| `respuesta` | `HXe0306010dd1b14496cdac1d7b4f0ccc2` |
+| `autorizacion` | `HX803d5c4893532ad9d7a328f4bdf1f136` |
+
 ## 2. Variable en Render (servicio de la API)
 
-`WHATSAPP_TEMPLATES`, en una sola línea:
+`WHATSAPP_TEMPLATES`, en una sola línea (valores reales, listos para cuando se apruebe la cuenta):
 
 ```
-{"te_necesitamos":"HX...","tanda":"HX...","respuesta":"HX...","autorizacion":"HX..."}
+{"te_necesitamos":"HX9205d3211b09aada7e50fc1620111822","tanda":"HX376d582f8fdbbb7fe219b9f55088595f","respuesta":"HXe0306010dd1b14496cdac1d7b4f0ccc2","autorizacion":"HX803d5c4893532ad9d7a328f4bdf1f136"}
 ```
 
 Si falta una plantilla, ese aviso se manda como texto libre. El texto libre solo llega si el candidato te escribió en las últimas 24 horas.
@@ -58,10 +76,10 @@ El panel /admin → "WhatsApp" muestra qué plantillas están configuradas.
 
 ## 3. Número de producción
 
-1. Pasar la cuenta de Twilio de trial a pagada.
-2. Messaging → Senders → WhatsApp senders → registrar un número propio con el nombre visible "FITCV".
-   Esto pide verificar la empresa en Meta Business Manager y puede tardar días.
-3. Poner ese número en `TWILIO_WHATSAPP_FROM` (formato `whatsapp:+56...`).
+1. ~~Pasar la cuenta de Twilio de trial a pagada.~~ Hecho (2026-10-01).
+2. ~~Registrar un número con el nombre visible "FITCV".~~ Hecho (2026-10-02): número de EE.UU. `+12183079676`,
+   portfolio de Meta "FITCV". Falta la verificación del negocio en Meta (e-RUT) para subir el límite diario.
+3. Poner ese número en `TWILIO_WHATSAPP_FROM` en Render: **`whatsapp:+12183079676`**.
 
 ## 4. Webhooks del número (en la configuración del sender)
 
