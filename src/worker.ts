@@ -35,6 +35,11 @@ async function main(): Promise<void> {
   startDailyAnalysis();
   startWatchdog(env.WATCHDOG_MINUTES, env.OFFER_SYNC_MINUTES);
   startChannelJobs();
+
+  // Los schedulers usan timers .unref() (para que no frenen un cierre limpio). En la API
+  // el servidor HTTP mantiene vivo el proceso; aquí no hay nada más, así que sin este
+  // latido el event loop se vacía entre ticks y Node sale con código 0 (Render lo reinicia).
+  setInterval(() => undefined, 60_000);
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
