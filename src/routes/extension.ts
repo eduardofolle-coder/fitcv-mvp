@@ -397,6 +397,10 @@ router.post(
     }
 
     const parsed = new URL(url);
+    // Una página de FITCV no es un aviso de empleo: sin esto, capturarla la cola y la extensión "postula" en nuestra propia web.
+    if (/(^|\.)fitcv\.cl$/i.test(parsed.hostname)) {
+      throw new AppError(400, 'That is a FITCV page, not a job posting. Open the job on a job portal and try again.');
+    }
     const source = sourceForUrl(url);
     // Una oferta de Get on Board capturada en la web es la misma que trae la API.
     const getOnBoardSlug = source === 'getonbrd' ? parsed.pathname.match(/^\/jobs\/([^/]+)/)?.[1] : undefined;

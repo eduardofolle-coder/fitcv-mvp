@@ -541,6 +541,14 @@ describe('applications sent by the extension', () => {
     expect(events.data.data.map((e: any) => e.toStatus)).toEqual(['en-cola', 'requiere-atencion', 'en-cola', 'enviada']);
   });
 
+  it('refuses to capture a FITCV page as if it were a job posting', async () => {
+    for (const url of ['https://fitcv.cl/offers', 'https://www.fitcv.cl/dashboard']) {
+      const res = await asExtension('POST', '/extension/offers', { url, title: 'Ofertas', queue: true });
+      expect(res.status).toBe(400);
+      expect(String(res.data.error)).toMatch(/FITCV page/i);
+    }
+  });
+
   it('captures an offer seen while browsing and queues it', async () => {
     const { status, data } = await asExtension('POST', '/extension/offers', {
       url: 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-analista-ABC123?utm=x',

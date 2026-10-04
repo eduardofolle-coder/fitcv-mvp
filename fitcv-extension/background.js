@@ -436,6 +436,9 @@ async function captureTab(tabId) {
   });
   const offer = injection && injection.result;
   if (!offer || !offer.title) throw new Error('No se pudo leer la oferta de esta página.');
+  if (/(^|\.)fitcv\.cl$/i.test(new URL(offer.url).hostname)) {
+    throw new Error('Esta es una página de FITCV, no un aviso de empleo. Abre el aviso en un portal y vuelve a pulsar.');
+  }
 
   const saved = await api('/extension/offers', { method: 'POST', body: { ...offer, queue: true } });
   await log(`Agregada a la cola: ${offer.title}.`);

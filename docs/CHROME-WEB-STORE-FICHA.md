@@ -1,13 +1,13 @@
 # Chrome Web Store: ficha de la extensión FITCV
 
 Todo lo que se pega en el panel de desarrollador de Chrome Web Store
-(https://chrome.google.com/webstore/devconsole). Versión de la extensión: **0.5.0**.
+(https://chrome.google.com/webstore/devconsole). Versión de la extensión: **0.5.1**.
 
 ## Antes de subir
 
 1. Crear la cuenta de desarrollador (pago único de US$5, a nombre de Empresas Fit SpA o del dueño). La crea y paga el dueño.
 2. Comprimir **el contenido** de `fitcv-extension/` en un `.zip` con `manifest.json` en la raíz, **sin** la carpeta `graphify-out/` ni este README si se quiere liviano.
-3. Probar la versión 0.5.0 en Chrome real (recargar en `chrome://extensions`): una postulación completa y una oferta que redirige al sitio de una empresa (debe quedar "Requiere tu atención", no "Error").
+3. Probar la versión 0.5.1 en Chrome real (recargar en `chrome://extensions`): una postulación completa y una oferta que redirige al sitio de una empresa (debe quedar "Requiere tu atención", no "Error").
 4. Cuenta de prueba para los revisores (ver sección 7): crearla en `/admin` e invitarla antes de enviar.
 
 ## 1. Datos de la ficha
@@ -123,7 +123,7 @@ Cuenta de prueba para los revisores: crearla en `/admin` (plan Max, para que vea
 
 | Riesgo | Mitigación |
 |---|---|
-| Permisos demasiado amplios | Resuelto en 0.5.0: ya no hay `<all_urls>`; solo `api.fitcv.cl` y 10 portales. |
+| Permisos demasiado amplios | Resuelto en 0.5.1: ya no hay `<all_urls>`; solo `api.fitcv.cl` y 10 portales. |
 | `tabs` se muestra al usuario como "leer tu historial de navegación" | Se justifica arriba. Si Google lo objeta, se puede quitar: el código funciona con permisos de sitio en los portales, pero hay que reprobar el flujo de "sitio de empresa". |
 | Automatización de LinkedIn | Apagada por defecto, aclarada en la descripción y en el aviso al usuario. Si la tienda lo objeta, se quita LinkedIn de `host_permissions` y la extensión sigue funcionando en los demás portales. |
 | Descripción que promete más de lo que hace | La descripción solo afirma lo que el código hace; revisar antes de enviar. |
