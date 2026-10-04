@@ -131,7 +131,7 @@ const TERMS =
   /((acepto|aceptar|he leido|autorizo|consiento|declaro|estoy de acuerdo).*(termino|condicion|politica|privacidad|tratamiento de (mis )?datos|proteccion de datos|uso de (mis )?datos)|terms (and|&) conditions|terms of (use|service)|privacy policy)/;
 
 const PERSONAL_DECISION =
-  /(salari|sueldo|\brenta\b|pretension|expectativa|compensation|remuneracion|disponibilidad|availability|start date|fecha de inicio|cuando podrias|cuando puedes|notice period|preaviso|reubica|relocat|traslad|viajar|to travel|turnos|shift work|fines de semana|\bvisa\b|permiso de trabajo|work permit|authoriz|autorizacion|genero|gender|discapacidad|disabilit|etnia|ethnic|nacionalidad|nationality|nacimiento|birth|\bedad\b|\bage\b|\brut\b|\brun\b|\bdni\b|cedula|pasaporte|passport|estado civil|marital|^direccion|domicilio|\baddress\b|referencia|reference|licencia de conducir|licencia clase|driver'?s? licen)/;
+  /(salari|sueldo|\brenta\b|pretension|expectativa|compensation|remuneracion|ejemplo:? ?\$?\d{1,3}(\.\d{3})+|disponibilidad|availability|start date|fecha de inicio|cuando podrias|cuando puedes|notice period|preaviso|reubica|relocat|traslad|viajar|to travel|turnos|shift work|fines de semana|\bvisa\b|permiso de trabajo|work permit|authoriz|autorizacion|genero|gender|discapacidad|disabilit|etnia|ethnic|nacionalidad|nationality|nacimiento|birth|\bedad\b|\bage\b|\brut\b|\brun\b|\bdni\b|cedula|pasaporte|passport|estado civil|marital|^direccion|domicilio|\baddress\b|referencia|reference|licencia de conducir|licencia clase|driver'?s? licen)/;
 
 const CAPABILITY_START =
   /^(tienes|posees|cuentas con|manejas|dominas|conoces|sabes usar|sabes|usas|has trabajado con|has usado|do you have|are you familiar with|are you experienced (in|with)|have you (used|worked with)|do you know|can you use)\s+/;
@@ -162,7 +162,7 @@ export function yesOption(options?: string[]): string | undefined {
 }
 
 function personalKeyFor(label: string): PersonalKey {
-  if (/(salari|sueldo|\brenta\b|pretension|expectativa|compensation|remuneracion)/.test(label)) return 'salary';
+  if (/(salari|sueldo|\brenta\b|pretension|expectativa|compensation|remuneracion|ejemplo:? ?\$?\d{1,3}(\.\d{3})+)/.test(label)) return 'salary';
   if (/(viajar|to travel)/.test(label)) return 'travel';
   if (/(turnos|shift work|fines de semana|weekends)/.test(label)) return 'shifts';
   if (/(reubica|relocat|traslad)/.test(label)) return 'relocation';
@@ -455,14 +455,14 @@ function resolveSalary(field: ApplicationField, base: Base, answers: SavedAnswer
   if (min === null || max === null) return { ...base, status: 'needs-user', reason: MISSING_ANSWER };
 
   const offer = offerPayClp(pay);
-  let amount = max;
-  let isRange = true;
-  let source = `Tu rango de renta: ${formatClp(min)} a ${formatClp(max)} líquidos.`;
+  // Un solo monto, el punto medio del rango: la renta se conversa de nuevo en la entrevista, así el envío no se detiene.
+  const mid = Math.round((min + max) / 2 / 10_000) * 10_000;
+  let amount = mid;
+  let source = `Punto medio de tu rango de renta (${formatClp(min)} a ${formatClp(max)}): ${formatClp(mid)} líquidos.`;
 
-  if (offer !== null && offer > max) {
+  if (offer !== null && offer > mid) {
     // La oferta paga más que lo declarado: se acepta su sueldo.
     amount = offer;
-    isRange = false;
     source = `La oferta paga ${formatClp(offer)}, sobre tu rango: se acepta el sueldo de la oferta.`;
   } else if (offer !== null && offer < min) {
     if (!pay?.salaryAuthorized) {
@@ -473,7 +473,6 @@ function resolveSalary(field: ApplicationField, base: Base, answers: SavedAnswer
       };
     }
     amount = offer;
-    isRange = false;
     source = `Autorizaste postular con el sueldo de la oferta (${formatClp(offer)}).`;
   }
 
@@ -484,10 +483,10 @@ function resolveSalary(field: ApplicationField, base: Base, answers: SavedAnswer
       : { ...base, status: 'needs-user', reason: 'Ningún tramo del formulario corresponde a tu renta.', suggestion: formatClp(amount) };
   }
 
-  // Un campo numérico solo acepta un monto: el "hasta" del rango o el de la oferta.
+  // Un campo numérico solo acepta un monto.
   if ((field.type ?? '') === 'number') return { ...base, status: 'filled', value: String(amount), source };
 
-  const text = isRange ? `Entre ${formatClp(min)} y ${formatClp(max)} líquidos` : `${formatClp(amount)} líquidos`;
+  const text = `${formatClp(amount)} líquidos`;
   const value = field.maxLength && text.length > field.maxLength ? String(amount) : text;
   return { ...base, status: 'filled', value, source };
 }

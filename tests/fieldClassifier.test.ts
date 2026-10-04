@@ -131,15 +131,15 @@ describe('saved answers', () => {
   };
 
   describe('salary', () => {
-    it('answers the whole range when the offer does not say what it pays', () => {
+    it('answers the midpoint of the range when the offer does not say what it pays', () => {
       expect(withAnswers('Pretensión de renta líquida')).toMatchObject({
         status: 'filled',
-        value: 'Entre $1.800.000 y $2.200.000 líquidos',
+        value: '$2.000.000 líquidos',
       });
     });
 
-    it('answers the top of the range in a numeric field', () => {
-      expect(withAnswers('Pretensión de renta', { type: 'number' })).toMatchObject({ status: 'filled', value: '2200000' });
+    it('answers the midpoint in a numeric field', () => {
+      expect(withAnswers('Pretensión de renta', { type: 'number' })).toMatchObject({ status: 'filled', value: '2000000' });
     });
 
     it('accepts the offer salary when it pays more than the range', () => {
@@ -158,13 +158,17 @@ describe('saved answers', () => {
 
     it('does not compare salaries in another currency', () => {
       const context = { answers, pay: { salaryMax: 3000, salaryCurrency: 'USD' } };
-      expect(withAnswers('Pretensión de renta', {}, context)).toMatchObject({ value: 'Entre $1.800.000 y $2.200.000 líquidos' });
+      expect(withAnswers('Pretensión de renta', {}, context)).toMatchObject({ value: '$2.000.000 líquidos' });
     });
 
     it('picks the salary bracket that contains the amount', () => {
       const options = ['Menos de $1.000.000', '$1.000.000 - $2.000.000', '$2.000.001 - $3.000.000', 'Más de $3.000.000'];
-      expect(withAnswers('Pretensión de renta', { type: 'select', options })).toMatchObject({ value: '$2.000.001 - $3.000.000' });
+      expect(withAnswers('Pretensión de renta', { type: 'select', options })).toMatchObject({ value: '$1.000.000 - $2.000.000' });
       expect(pickMoneyOption(3_500_000, options)).toBe('Más de $3.000.000');
+    });
+
+    it('treats a label with an example amount as the salary field', () => {
+      expect(withAnswers('ejemplo 600.000')).toMatchObject({ status: 'filled', value: '$2.000.000 líquidos' });
     });
 
     it('asks when there is no declared range', () => {

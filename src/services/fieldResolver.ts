@@ -161,17 +161,20 @@ async function draftAnswers(
 
   let verdicts: unknown = null;
   if (drafts.length > 0) {
-    try {
-      const invocation = await AgentInvokerService.invoke('cv-verifier', {
-        facts: hardDataForPrompt(hard),
-        offer: jobForModel(job),
-        highlights: [],
-        statements: drafts,
-      }, userId);
-      if (!invocation.success) throw new Error(invocation.error ?? 'verifier returned a failure');
-      verdicts = invocation.output;
-    } catch {
-      verdicts = null;
+    // Un reintento: una falla pasajera del proveedor no debería dejar la carta sin verificar.
+    for (let attempt = 1; attempt <= 2 && verdicts === null; attempt++) {
+      try {
+        const invocation = await AgentInvokerService.invoke('cv-verifier', {
+          facts: hardDataForPrompt(hard),
+          offer: jobForModel(job),
+          highlights: [],
+          statements: drafts,
+        }, userId);
+        if (!invocation.success) throw new Error(invocation.error ?? 'verifier returned a failure');
+        verdicts = invocation.output;
+      } catch (error) {
+        console.error(`cv-verifier falló al verificar respuestas (intento ${attempt}):`, error instanceof Error ? error.message : error);
+      }
     }
   }
 

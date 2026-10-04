@@ -27,3 +27,6 @@ srv*.log
 srv*.err.log
 data/*.corrupto-*
 tests/.tmp-*/
+
+# Graphify (mapa local del código)
+graphify-out/
