@@ -277,7 +277,7 @@ export default function Landing() {
             <span className="wa-ico" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17.6 6.32A7.85 7.85 0 0 0 12 4a7.94 7.94 0 0 0-6.9 11.9L4 20l4.2-1.1A7.9 7.9 0 0 0 12 20a7.94 7.94 0 0 0 5.6-13.68ZM12 18.5a6.6 6.6 0 0 1-3.36-.92l-.24-.14-2.5.65.67-2.43-.16-.25A6.6 6.6 0 1 1 12 18.5Zm3.6-4.95c-.2-.1-1.17-.58-1.35-.64s-.31-.1-.44.1-.5.63-.62.76-.23.15-.43.05a5.4 5.4 0 0 1-1.6-.98 6 6 0 0 1-1.1-1.37c-.12-.2 0-.3.09-.4l.3-.35c.1-.12.13-.2.2-.34a.37.37 0 0 0-.02-.35c-.05-.1-.44-1.06-.6-1.45s-.32-.33-.44-.34h-.38a.72.72 0 0 0-.52.24 2.2 2.2 0 0 0-.68 1.63 3.8 3.8 0 0 0 .8 2.02 8.7 8.7 0 0 0 3.34 2.95c.47.2.83.32 1.11.42.47.15.9.13 1.23.08.38-.06 1.17-.48 1.33-.94s.17-.86.12-.94-.18-.13-.38-.23Z" /></svg>
             </span>
-            <p><b>Automático, pero tú mandas.</b> Te avisamos en tu panel (y pronto por WhatsApp) cada vez que postulamos a una oferta que está fuera de rango —si pagan menos del rango que pediste, o si tu perfil no se ajusta dentro de los parámetros— para que tú decidas. Nunca postulamos algo importante sin tu visto bueno.</p>
+            <p><b>Automático, pero tú mandas.</b> Te avisamos por WhatsApp cada vez que postulamos a una oferta que está fuera de rango —si pagan menos del rango que pediste, o si tu perfil no se ajusta dentro de los parámetros— para que tú decidas. Nunca postulamos algo importante sin tu visto bueno.</p>
           </div>
         </section>
 
@@ -355,7 +355,7 @@ export default function Landing() {
             <div className="step">
               <div className="idx">✓</div>
               <h3>Las respuestas te llegan a ti</h3>
-              <p>Si el reclutador responde, te reenviamos el correo y te avisamos en tu panel (pronto, también por WhatsApp). Si no conectas tu correo, enviamos desde el dominio de FITCV con respuesta a ti.</p>
+              <p>Si el reclutador responde, te reenviamos el correo y te avisamos por WhatsApp. Si no conectas tu correo, enviamos desde el dominio de FITCV con respuesta a ti.</p>
             </div>
           </div>
         </section>
@@ -399,7 +399,7 @@ export default function Landing() {
                 <li><span className="ck">✓</span> Diagnóstico completo de tu CV</li>
                 <li><span className="ck">✓</span> Ofertas que calzan con tu perfil</li>
                 <li><span className="ck">✓</span> CV adaptado a cada oferta</li>
-                <li><span className="ck">✓</span> Avisos por WhatsApp (próximamente)</li>
+                <li><span className="ck">✓</span> Avisos por WhatsApp</li>
               </ul>
               <button className="btn btn-dark" onClick={register}>Probar gratis</button>
             </div>
