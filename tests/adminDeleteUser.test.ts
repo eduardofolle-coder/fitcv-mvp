@@ -51,6 +51,11 @@ beforeAll(async () => {
       DATABASE_URL: `pglite://${path.relative(process.cwd(), DB_DIR).split(path.sep).join('/')}/pg`,
       ADMIN_EMAILS: ADMIN,
       RESEND_API_KEY: '',
+      // Sin esto, el .env local trae las claves reales de Twilio y la prueba mandaría un WhatsApp de verdad.
+      TWILIO_ACCOUNT_SID: '',
+      TWILIO_AUTH_TOKEN: '',
+      TWILIO_WHATSAPP_FROM: '',
+      ADMIN_WHATSAPP: '',
     },
     stdio: 'ignore',
   });
@@ -92,5 +97,18 @@ describe('borrar una cuenta desde el panel del dueño', () => {
 
   it('responde 404 si la cuenta ya no existe', async () => {
     expect((await call('DELETE', `/admin/users/${victimId}`, adminToken)).status).toBe(404);
+  });
+});
+
+describe('WhatsApp de prueba del panel del dueño', () => {
+  it('un candidato no puede dispararlo', async () => {
+    const candidate = await call('POST', '/auth/register', '', { email: `cand-${RUN}@example.com`, password: PASSWORD, consent: true });
+    expect((await call('POST', '/admin/whatsapp-test', candidate.data.data.accessToken, {})).status).toBe(403);
+  });
+
+  it('sin Twilio configurado avisa en vez de fallar en silencio', async () => {
+    const res = await call('POST', '/admin/whatsapp-test', adminToken, {});
+    expect(res.status).toBe(503);
+    expect(String(res.data.error)).toMatch(/not configured/i);
   });
 });

@@ -36,6 +36,7 @@ export default function AdminPage() {
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [whatsapp, setWhatsapp] = useState<WhatsAppSummary | null>(null);
+  const [waTest, setWaTest] = useState<string | null>(null);
 
   useEffect(() => {
     if (!initializing && !user) router.push('/login');
@@ -206,6 +207,21 @@ export default function AdminPage() {
           <p className="aw-dim">
             Plantillas configuradas: {['te_necesitamos', 'tanda', 'respuesta', 'autorizacion'].map((k) => `${k} ${whatsapp.templatesConfigured.includes(k) ? '✓' : '✗'}`).join(' · ')}
           </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <button
+              type="button"
+              className="aw-btn-outline aw-btn-sm"
+              onClick={async () => {
+                setWaTest('Enviando…');
+                const res = await apiClient.post<{ sid: string }>('/admin/whatsapp-test', {});
+                setWaTest(res.success ? 'Enviado a tu número (ADMIN_WHATSAPP). Revisa tu WhatsApp.' : `No se envió: ${res.error ?? 'error desconocido'}`);
+                setReload((r) => r + 1);
+              }}
+            >
+              Enviar WhatsApp de prueba a mi número
+            </button>
+            {waTest && <span className="aw-muted">{waTest}</span>}
+          </div>
         </section>
       )}
 

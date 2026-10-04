@@ -11,6 +11,7 @@ import { getPortalHealth, PAUSE_RULE, setPortalOverride, clearPortalOverride } f
 import { PLAN_CONFIG } from '../services/planQuota.js';
 import { ACTIVE_OFFER } from '../services/profileOffers.js';
 import { disconnectMailAccount } from '../services/mailAccounts.js';
+import { sendWhatsApp, whatsappEnabled } from '../services/whatsapp.js';
 import { safeJsonParse } from '../utils/safeJson.js';
 
 const router = Router();
@@ -93,6 +94,24 @@ router.get('/users', asyncHandler(async (_req: any, res: any) => {
   // Una cuenta del equipo nunca cuenta como de prueba: el borrado masivo la salta.
   const isAdmin = (email: string) => env.ADMIN_EMAILS.includes(email.toLowerCase());
   res.json({ success: true, data: rows.map((r: any) => ({ ...r, isTest: r.isTest === true && !isAdmin(r.email), isTeam: isAdmin(r.email) })) });
+}));
+
+// POST /api/admin/whatsapp-test - Manda la plantilla "tanda" al número del dueño (ADMIN_WHATSAPP), nunca a un candidato
+router.post('/whatsapp-test', asyncHandler(async (_req: any, res: any) => {
+  if (!whatsappEnabled()) throw new AppError(503, 'WhatsApp is not configured (Twilio credentials or sender missing).');
+  if (!env.ADMIN_WHATSAPP) throw new AppError(503, 'ADMIN_WHATSAPP is not set.');
+  const contentSid = safeJsonParse<Record<string, string>>(env.WHATSAPP_TEMPLATES, {}).tanda;
+  if (!contentSid) throw new AppError(503, 'The "tanda" template is not configured in WHATSAPP_TEMPLATES.');
+
+  const title = 'Prueba de FITCV: WhatsApp funcionando';
+  const link = `${env.APP_URL}/dashboard`;
+  const sid = await sendWhatsApp(
+    env.ADMIN_WHATSAPP,
+    `${title}\n${link}`,
+    { contentSid, variables: { '1': title, '2': link } }
+  );
+  if (!sid) throw new AppError(502, 'Twilio did not accept the message. Check the API logs for the reason.');
+  res.json({ success: true, sid });
 }));
 
 // DELETE /api/admin/test-users - Borra las cuentas de prueba y todos sus datos (nunca una de ADMIN_EMAILS)
