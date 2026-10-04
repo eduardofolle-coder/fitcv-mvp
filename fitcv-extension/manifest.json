@@ -1,10 +1,23 @@
 {
   "manifest_version": 3,
   "name": "FITCV — Postulación con tu CV adaptado",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Envía tus postulaciones con tu CV adaptado y respuestas verificadas contra tu CV. Nunca inventa datos.",
-  "permissions": ["storage", "tabs", "scripting", "alarms"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["storage", "tabs", "scripting", "alarms", "activeTab"],
+  "host_permissions": [
+    "https://api.fitcv.cl/*",
+    "https://*.linkedin.com/*",
+    "https://*.computrabajo.com/*",
+    "https://*.chiletrabajos.cl/*",
+    "https://*.trabajando.cl/*",
+    "https://*.bne.gob.cl/*",
+    "https://*.getonbrd.com/*",
+    "https://*.trabajosdiarios.com/*",
+    "https://*.portalminero.com/*",
+    "https://*.firstjob.me/*",
+    "https://*.laborum.cl/*"
+  ],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"

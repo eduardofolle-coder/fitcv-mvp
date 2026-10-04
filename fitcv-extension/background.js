@@ -326,6 +326,15 @@ async function runStep() {
     await handleResult(current, injection && injection.result);
   } catch (error) {
     if (session !== current) return;
+    // Sin permiso sobre ese sitio = la oferta salió a la web de una empresa (la extensión solo opera en los portales).
+    if (!current.submitted && /cannot access|host permission/i.test(error.message)) {
+      await report('requiere-atencion', {
+        reason: 'sitio-empresa',
+        detail: 'La oferta redirige al sitio de la empresa.',
+        applyUrl: current.offer.applyUrl || current.offer.url,
+      });
+      return;
+    }
     await (current.submitted
       ? report('requiere-atencion', { reason: 'otro', detail: `Se envió, pero no se pudo confirmar: ${error.message}` })
       : report('error', { detail: `No se pudo operar la página: ${error.message}` }));
