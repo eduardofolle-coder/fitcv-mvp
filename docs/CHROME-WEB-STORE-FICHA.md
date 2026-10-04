@@ -1,13 +1,13 @@
 # Chrome Web Store: ficha de la extensión FITCV
 
 Todo lo que se pega en el panel de desarrollador de Chrome Web Store
-(https://chrome.google.com/webstore/devconsole). Versión de la extensión: **0.5.1**.
+(https://chrome.google.com/webstore/devconsole). Versión de la extensión: **0.5.2**.
 
 ## Antes de subir
 
 1. Crear la cuenta de desarrollador (pago único de US$5, a nombre de Empresas Fit SpA o del dueño). La crea y paga el dueño.
 2. Comprimir **el contenido** de `fitcv-extension/` en un `.zip` con `manifest.json` en la raíz, **sin** la carpeta `graphify-out/` ni este README si se quiere liviano.
-3. Probar la versión 0.5.1 en Chrome real (recargar en `chrome://extensions`): una postulación completa y una oferta que redirige al sitio de una empresa (debe quedar "Requiere tu atención", no "Error").
+3. Probar la versión 0.5.2 en Chrome real (recargar en `chrome://extensions`): una postulación completa y una oferta que redirige al sitio de una empresa (debe quedar "Requiere tu atención", no "Error").
 4. Cuenta de prueba para los revisores (ver sección 7): crearla en `/admin` e invitarla antes de enviar.
 
 ## 1. Datos de la ficha
@@ -66,7 +66,7 @@ Pegar cada texto en el campo del permiso correspondiente (pestaña "Prácticas d
 | `activeTab` | Permite el botón "Agregar esta oferta a la cola": lee el título y el texto de la oferta de la pestaña que el usuario está mirando, solo cuando pulsa el botón. | Powers the "Add this job to the queue" button: reads the title and text of the job in the tab the user is viewing, only when they press the button. |
 | Acceso a `api.fitcv.cl` | Es el servidor de FITCV: la extensión le pide las postulaciones en cola, las respuestas del formulario y el CV adaptado, y le informa el resultado. | FITCV's own server: the extension fetches the queued applications, form answers and tailored CV from it and reports the result. |
 | Acceso a los portales (LinkedIn, Computrabajo, Chiletrabajos, Trabajando.com, BNE, Get on Board, Trabajos Diarios, Portal Minero, FirstJob, Laborum) | Son los sitios donde se postula. La extensión solo opera en esos dominios; en cualquier otro se detiene y avisa al usuario. | The job portals where applications are submitted. The extension only acts on these domains; on any other site it stops and notifies the user. |
-| Acceso opcional a otros sitios (`optional_host_permissions`) | Solo se pide, con un clic del usuario, cuando vincula la extensión con un servidor de FITCV distinto del oficial (pruebas). | Requested only, on a user click, when pairing against a FITCV server other than the official one (testing). |
+| Acceso opcional a `http://localhost` (`optional_host_permissions`) | Solo se pide, con un clic del usuario, para vincular la extensión con un servidor de pruebas local. No se usa en producción. | Requested only, on a user click, to pair the extension with a local test server. Not used in production. |
 
 ## 5. Prácticas de privacidad (formulario "Privacy practices")
 
@@ -123,7 +123,7 @@ Cuenta de prueba para los revisores: crearla en `/admin` (plan Max, para que vea
 
 | Riesgo | Mitigación |
 |---|---|
-| Permisos demasiado amplios | Resuelto en 0.5.1: ya no hay `<all_urls>`; solo `api.fitcv.cl` y 10 portales. |
+| Permisos demasiado amplios | Resuelto en 0.5.2: ya no hay `<all_urls>`; solo `api.fitcv.cl` y 10 portales. |
 | `tabs` se muestra al usuario como "leer tu historial de navegación" | Se justifica arriba. Si Google lo objeta, se puede quitar: el código funciona con permisos de sitio en los portales, pero hay que reprobar el flujo de "sitio de empresa". |
 | Automatización de LinkedIn | Apagada por defecto, aclarada en la descripción y en el aviso al usuario. Si la tienda lo objeta, se quita LinkedIn de `host_permissions` y la extensión sigue funcionando en los demás portales. |
 | Descripción que promete más de lo que hace | La descripción solo afirma lo que el código hace; revisar antes de enviar. |

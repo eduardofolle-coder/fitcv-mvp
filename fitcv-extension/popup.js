@@ -55,10 +55,11 @@ const run = (id, message) => async () => {
 $('pair').addEventListener('click', async () => {
   showError('pair-error', null);
   try {
-    // La extensión solo tiene acceso a api.fitcv.cl. Un servidor distinto (pruebas) pide su permiso aquí, con un clic.
+    // La extensión solo tiene acceso a api.fitcv.cl. Para pruebas locales (http://localhost) pide su permiso aquí, con un clic.
     const origin = new URL($('api').value).origin;
-    if (origin !== 'https://api.fitcv.cl' && !(await chrome.permissions.request({ origins: [`${origin}/*`] }))) {
-      throw new Error('Sin permiso para esa dirección, no se puede vincular.');
+    if (origin !== 'https://api.fitcv.cl') {
+      if (!/^http:\/\/localhost(:\d+)?$/.test(origin)) throw new Error('Solo se puede vincular con https://api.fitcv.cl (o http://localhost para pruebas).');
+      if (!(await chrome.permissions.request({ origins: ['http://localhost/*'] }))) throw new Error('Sin permiso para localhost, no se puede vincular.');
     }
     await call({ type: 'fitcv:pair', apiBase: $('api').value, code: $('code').value });
     $('code').value = '';

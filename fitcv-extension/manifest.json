@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FITCV — Postulación con tu CV adaptado",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Envía tus postulaciones con tu CV adaptado y respuestas verificadas contra tu CV. Nunca inventa datos.",
   "permissions": ["storage", "tabs", "scripting", "alarms", "activeTab"],
   "host_permissions": [
@@ -17,7 +17,7 @@
     "https://*.firstjob.me/*",
     "https://*.laborum.cl/*"
   ],
-  "optional_host_permissions": ["https://*/*", "http://localhost/*"],
+  "optional_host_permissions": ["http://localhost/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
