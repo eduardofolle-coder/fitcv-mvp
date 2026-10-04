@@ -31,6 +31,8 @@ let postulationId = '';
 
 const unique = () => `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 const PASSWORD = 'RegressionPass123!';
+const ADMIN_EMAIL = `admin-${Date.now()}@example.com`;
+let adminToken = '';
 
 function startServer(): Promise<void> {
   server = spawn(process.execPath, ['dist/server.js'], {
@@ -42,6 +44,7 @@ function startServer(): Promise<void> {
       // Con la key real del .env el servidor envía el correo en vez de devolver el
       // enlace de recuperación en desarrollo, y la prueba no lo encuentra.
       RESEND_API_KEY: '',
+      ADMIN_EMAILS: ADMIN_EMAIL,
     },
     stdio: 'ignore',
   });
@@ -98,6 +101,23 @@ async function call(
     data = { raw: text };
   }
   return { status: res.status, data };
+}
+
+// Sube a Max al usuario del token vigente, con el panel del dueño. El plan Free exige correo verificado y un CV
+// con experiencia (anti-abuso); estos bloques ejercitan el flujo de postular, no ese control (lo cubre freeAbuseGuard.test.ts).
+async function promoteCurrentUserToMax(): Promise<void> {
+  const userId = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).sub;
+  if (!adminToken) {
+    const admin = await call('POST', '/auth/register', { email: ADMIN_EMAIL, password: PASSWORD, consent: true }, false);
+    expect(admin.status).toBe(201);
+    adminToken = admin.data.data.accessToken;
+  }
+  const res = await fetch(`${API}/admin/users/${userId}/plan`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ plan: 'max' }),
+  });
+  expect(res.status).toBe(200);
 }
 
 beforeAll(async () => {
@@ -326,6 +346,8 @@ describe('applications sent by the extension', () => {
   let extToken = '';
   let appId = '';
 
+  beforeAll(promoteCurrentUserToMax);
+
   const asExtension = async (method: string, endpoint: string, body?: unknown, bearer = extToken) => {
     const res = await fetch(`${API}${endpoint}`, {
       method,
@@ -374,6 +396,7 @@ describe('applications sent by the extension', () => {
     // El panel del dueño no se abre a un candidato cualquiera.
     expect((await call('GET', '/admin/users')).status).toBe(403);
     expect((await call('DELETE', '/admin/test-users')).status).toBe(403);
+    expect((await call('DELETE', '/admin/users/cualquier-id')).status).toBe(403);
   });
 
   it('hands queued applications to the extension exactly once', async () => {
@@ -558,6 +581,7 @@ describe('saved answers and salary authorisation', () => {
     mine = token;
     const reg = await call('POST', '/auth/register', { email: unique(), password: PASSWORD, consent: true }, false);
     token = reg.data.data.accessToken;
+    await promoteCurrentUserToMax();
   });
 
   afterAll(() => {

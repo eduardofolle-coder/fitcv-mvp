@@ -503,7 +503,11 @@ export async function initializeSchema(): Promise<void> {
   }
 
   // Las automáticas ya reservaron su cupo al crearse; solo las manuales lo gastan al encolar.
-  if (!hadQuotaCharged) await db.query(`UPDATE postulations SET quotaCharged = TRUE WHERE source = 'auto'`);
+  if (!hadQuotaCharged) {
+    // En una base nueva `source` aún no existe aquí (la agrega el bloque de planes, más abajo).
+    await db.query(`ALTER TABLE postulations ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual'`);
+    await db.query(`UPDATE postulations SET quotaCharged = TRUE WHERE source = 'auto'`);
+  }
 
   // Caché del matching por usuario. Puntuar 3.000+ ofertas por request tomaba
   // ~50s y tumbaba el servidor; ahora el ranking y el diagnóstico se calculan en

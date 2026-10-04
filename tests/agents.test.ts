@@ -76,6 +76,10 @@ function startStub(): Promise<void> {
   });
 }
 
+// Cuenta del dueño solo para subir al usuario de prueba a Max: el plan Free exige correo verificado y un CV con
+// experiencia (anti-abuso), y estas pruebas ejercitan al agente, no ese control (lo cubre freeAbuseGuard.test.ts).
+const ADMIN_EMAIL = `admin-${Date.now()}@example.com`;
+
 function startServer(): Promise<void> {
   server = spawn(process.execPath, ['dist/server.js'], {
     env: {
@@ -83,6 +87,7 @@ function startServer(): Promise<void> {
       NODE_ENV: 'development',
       PORT: String(PORT),
       DATABASE_URL: `pglite://${path.relative(process.cwd(), DB_DIR).split(path.sep).join('/')}/pg`,
+      ADMIN_EMAILS: ADMIN_EMAIL,
       CLAUDE_API_KEY: 'test-key-that-the-stub-accepts',
       CLAUDE_API_URL: `http://localhost:${STUB_PORT}/v1/messages`,
       // Sin esto, dotenv carga del .env local las claves reales de Gemini/DeepSeek
@@ -191,6 +196,14 @@ beforeAll(async () => {
     consent: true,
   });
   token = reg.data.data.accessToken;
+
+  const admin = await call('POST', '/auth/register', { email: ADMIN_EMAIL, password: 'AgentTestPass123!', consent: true });
+  const promoted = await fetch(`${API}/admin/users/${reg.data.data.userId}/plan`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.data.data.accessToken}` },
+    body: JSON.stringify({ plan: 'max' }),
+  });
+  if (promoted.status !== 200) throw new Error(`No se pudo subir al usuario de prueba a Max (${promoted.status})`);
 
   const offers = await call('GET', '/offers');
   offerId = offers.data.data[0].id;

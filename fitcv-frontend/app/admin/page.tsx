@@ -12,7 +12,7 @@ interface Health { rule: { days: number; maxErrorRate: number; confidence: numbe
 interface Invite { email: string; plan: string; createdAt: string; usedAt: string | null }
 interface SourceRow { source: string; active: string; new24h: string; new7d: string; newest: string | null }
 interface WhatsAppSummary { optedIn: number; byStatus: Record<string, number>; templatesConfigured: string[] }
-interface UserRow { id: string; email: string; plan: string; isTest: boolean; sent: string; queued: string; attention: string; interviews: string; mail: string | null }
+interface UserRow { id: string; email: string; plan: string; isTest: boolean; isTeam: boolean; sent: string; queued: string; attention: string; interviews: string; mail: string | null }
 
 const PLANS = ['free', 'pro', 'max'];
 const OUTCOMES: Array<[Outcome, string]> = [['limpia', 'Limpia'], ['asistida', 'Asistida'], ['bloqueada', 'Bloqueada'], ['atencion', 'Atención'], ['error', 'Error']];
@@ -34,6 +34,7 @@ export default function AdminPage() {
   const [pausing, setPausing] = useState<string | null>(null);
   const [pauseReason, setPauseReason] = useState('');
   const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [whatsapp, setWhatsapp] = useState<WhatsAppSummary | null>(null);
 
   useEffect(() => {
@@ -232,7 +233,7 @@ export default function AdminPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, color: '#F4F1E9', fontVariantNumeric: 'tabular-nums' }}>
             <thead>
-              <tr>{['Correo', 'Plan', 'Enviadas', 'En cola', 'Atención', 'Entrevistas', 'Correo conectado'].map((h) => <th key={h} style={cell}>{h}</th>)}</tr>
+              <tr>{['Correo', 'Plan', 'Enviadas', 'En cola', 'Atención', 'Entrevistas', 'Correo conectado', ''].map((h) => <th key={h} style={cell}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {users.map((u) => (
@@ -248,6 +249,17 @@ export default function AdminPage() {
                   <td style={cell}>{u.attention}</td>
                   <td style={cell}>{u.interviews}</td>
                   <td style={cell}>{u.mail ?? '—'}</td>
+                  <td style={cell}>
+                    {u.isTeam ? null : confirmDelete === u.id ? (
+                      <>
+                        <span className="aw-muted">Se borran para siempre sus datos. ¿Seguro? </span>
+                        <button type="button" className="aw-btn-gold aw-btn-sm" onClick={async () => { await apiClient.delete(`/admin/users/${u.id}`); setConfirmDelete(null); setReload((r) => r + 1); }}>Sí, borrar</button>{' '}
+                        <button type="button" className="aw-btn-outline aw-btn-sm" onClick={() => setConfirmDelete(null)}>Cancelar</button>
+                      </>
+                    ) : (
+                      <button type="button" className="aw-btn-outline aw-btn-sm" onClick={() => setConfirmDelete(u.id)}>Borrar</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

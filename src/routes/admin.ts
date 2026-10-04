@@ -92,7 +92,7 @@ router.get('/users', asyncHandler(async (_req: any, res: any) => {
   `)).rows;
   // Una cuenta del equipo nunca cuenta como de prueba: el borrado masivo la salta.
   const isAdmin = (email: string) => env.ADMIN_EMAILS.includes(email.toLowerCase());
-  res.json({ success: true, data: rows.map((r: any) => ({ ...r, isTest: r.isTest === true && !isAdmin(r.email) })) });
+  res.json({ success: true, data: rows.map((r: any) => ({ ...r, isTest: r.isTest === true && !isAdmin(r.email), isTeam: isAdmin(r.email) })) });
 }));
 
 // DELETE /api/admin/test-users - Borra las cuentas de prueba y todos sus datos (nunca una de ADMIN_EMAILS)
@@ -104,6 +104,16 @@ router.delete('/test-users', asyncHandler(async (_req: any, res: any) => {
     await db.query('DELETE FROM users WHERE id = $1', [u.id]); // lo del usuario cuelga con ON DELETE CASCADE
   }
   res.json({ success: true, deleted: users.length });
+}));
+
+// DELETE /api/admin/users/:id - Borra una cuenta y todos sus datos (nunca una de ADMIN_EMAILS)
+router.delete('/users/:id', asyncHandler(async (req: any, res: any) => {
+  const user = await db.queryOne<{ id: string; email: string }>('SELECT id, email FROM users WHERE id = $1', [req.params.id]);
+  if (!user) throw new AppError(404, 'User not found');
+  if (env.ADMIN_EMAILS.includes(user.email.toLowerCase())) throw new AppError(403, 'Team accounts cannot be deleted from here.');
+  await disconnectMailAccount(user.id); // revoca el permiso de envío si conectó correo
+  await db.query('DELETE FROM users WHERE id = $1', [user.id]); // lo del usuario cuelga con ON DELETE CASCADE
+  res.json({ success: true });
 }));
 
 // PUT /api/admin/users/:id/plan { plan }
