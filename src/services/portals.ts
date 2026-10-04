@@ -16,7 +16,8 @@ export interface PortalInfo {
 
 export const PORTALS: PortalInfo[] = [
   {
-    id: 'chiletrabajos', name: 'Chiletrabajos', domain: 'chiletrabajos.cl', checkUrl: null,
+    id: 'chiletrabajos', name: 'Chiletrabajos', domain: 'chiletrabajos.cl',
+    checkUrl: 'https://www.chiletrabajos.cl/dashboard', // sin sesión redirige a /chtlogin (comprobado)
     connectUrl: 'https://www.chiletrabajos.cl/chtlogin', signupUrl: 'https://www.chiletrabajos.cl/chtregister',
   },
   {
