@@ -77,9 +77,8 @@ $('capture').addEventListener('click', async () => {
   showError('action-error', null);
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const result = await call({ type: 'fitcv:extract-offers', tabId: tab.id });
-    const msg = `Capturadas ${result.saved}/${result.total} ofertas. Se agregarán a la cola automáticamente.`;
-    console.log(msg);
+    // Una sola oferta: la que estás mirando. Capturar "todos los enlaces de la página" metía el menú del portal en la cola.
+    await call({ type: 'fitcv:capture', tabId: tab.id });
   } catch (error) {
     showError('action-error', error);
   }

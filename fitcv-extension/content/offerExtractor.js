@@ -48,16 +48,6 @@ globalThis.FitcvOfferExtractor = {
       offers = this.extractLinkedInOffers();
     } else if (hostname.includes('laborum')) {
       offers = this.extractLaborumOffers();
-    } else {
-      offers = [...document.querySelectorAll('a[href*="job"], a[href*="offer"], a[href*="trabajo"]')]
-        .slice(0, 50)
-        .map(el => ({
-          url: el.href,
-          title: el.textContent.trim() || 'Oferta',
-          company: 'Empresa no informada',
-          description: '',
-        }))
-        .filter(o => o.title.length > 3);
     }
 
     return { portal: hostname, count: offers.length, offers };
